@@ -1,0 +1,40 @@
+# Firstspark default configuration.
+# Copy to $XDG_CONFIG_HOME/firstspark/config.yaml and edit.
+
+# Memory scanning defaults.
+scan:
+  # Default value type: byte, word, dword, qword, float, double, string, aob
+  value_type: dword
+  # Only scan regions that are writable.
+  writable_only: true
+  # Only report addresses aligned to this many bytes (0 disables alignment).
+  alignment: 4
+  # Maximum bytes captured by an "unknown initial value" snapshot (bytes).
+  snapshot_limit: 2147483648 # 2 GiB
+  # Absolute tolerance used when comparing floating point values.
+  float_epsilon: 0.000001
+
+# Debugger backend: ptrace (default) or gdbmi.
+debugger:
+  backend: ptrace
+  # Path to the gdb binary used by the gdbmi backend.
+  gdb_path: gdb
+
+# Speedhack defaults.
+speedhack:
+  enabled: false
+  # Time scale factor: 1.0 is real time, 2.0 is twice as fast, 0.5 half speed.
+  scale: 1.0
+
+# User interface.
+ui:
+  # Number of scan results shown at once.
+  result_limit: 1000
+  # Colour scheme: light, dark, or system (follow the desktop preference).
+  theme: light
+  # Interface scale factor (1.0 is the platform default).
+  scale: 1.0
+  # Base text size in points. Monospace data uses this size minus two.
+  font_size: 14
+  # Show per-process icons in the process list (resolved from the icon theme).
+  process_icons: true
