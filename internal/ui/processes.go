@@ -69,7 +69,7 @@ func (t *treeToggle) CreateRenderer() fyne.WidgetRenderer {
 func (a *App) openProcessList() {
 	if a.procWin == nil {
 		a.procWin = a.fapp.NewWindow("Process List")
-		a.procWin.Resize(fyne.NewSize(520, 480))
+		a.procWin.Resize(fyne.NewSize(420, 420))
 		a.buildProcessList()
 	}
 	a.refreshProcesses()

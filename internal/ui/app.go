@@ -93,7 +93,8 @@ type App struct {
 	nextBtn      *widget.Button
 	undoBtn      *widget.Button
 	stopBtn      *widget.Button
-	value2Row    *fyne.Container
+	andLabel     *widget.Label
+	valuePair    *fyne.Container
 	scanProgress *widget.ProgressBar
 	scanStatus   *widget.Label
 	scopeSelect  *widget.Select
@@ -214,7 +215,7 @@ func Run(cfg config.Config) error {
 
 func (a *App) build() {
 	a.win = a.fapp.NewWindow("Firstspark")
-	a.win.Resize(fyne.NewSize(1100, 760))
+	a.win.Resize(fyne.NewSize(780, 600))
 	a.win.CenterOnScreen()
 	a.buildWidgets()
 	a.win.SetMainMenu(a.mainMenu())
@@ -334,16 +335,23 @@ func (a *App) updateScanControls() {
 		setEnabled(a.valueEntry, modeNeedsValue(mode))
 		a.valueEntry.SetPlaceHolder(valuePlaceholder(mode))
 	}
-	if a.value2Row != nil {
-		if mode == scan.ModeBetween {
-			a.value2Row.Show()
+	between := mode == scan.ModeBetween
+	if a.andLabel != nil {
+		if between {
+			a.andLabel.Show()
 		} else {
-			a.value2Row.Hide()
+			a.andLabel.Hide()
 		}
-		a.value2Row.Refresh()
+		a.andLabel.Refresh()
 	}
 	if a.value2Entry != nil {
-		setEnabled(a.value2Entry, mode == scan.ModeBetween)
+		setEnabled(a.value2Entry, between)
+		if between {
+			a.value2Entry.Show()
+		} else {
+			a.value2Entry.Hide()
+		}
+		a.value2Entry.Refresh()
 	}
 	if a.compareEntry != nil {
 		setEnabled(a.compareEntry, mode == scan.ModeExact)

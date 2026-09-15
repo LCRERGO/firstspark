@@ -19,13 +19,77 @@ import (
 
 const scanLabelWidth float32 = 96
 
+// flexRow lays out children horizontally: children with a positive weight
+// share the space left after the rigid (weight 0) children take their MinSize.
+type flexRow struct {
+	weights []float32
+}
+
+func (f flexRow) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	size := fyne.NewSize(0, 0)
+	for _, o := range objs {
+		if !o.Visible() {
+			continue
+		}
+		m := o.MinSize()
+		size.Width += m.Width
+		if m.Height > size.Height {
+			size.Height = m.Height
+		}
+	}
+	return size
+}
+
+func (f flexRow) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	var rigid, totalWeight float32
+	for i, o := range objs {
+		if !o.Visible() {
+			continue
+		}
+		if w := f.weight(i); w > 0 {
+			totalWeight += w
+		} else {
+			rigid += o.MinSize().Width
+		}
+	}
+	leftover := size.Width - rigid
+	if leftover < 0 {
+		leftover = 0
+	}
+	x := float32(0)
+	for i, o := range objs {
+		if !o.Visible() {
+			continue
+		}
+		w := f.weight(i)
+		cw := o.MinSize().Width
+		if w > 0 && totalWeight > 0 {
+			cw = leftover * w / totalWeight
+		}
+		o.Move(fyne.NewPos(x, 0))
+		o.Resize(fyne.NewSize(cw, size.Height))
+		x += cw
+	}
+}
+
+func (f flexRow) weight(i int) float32 {
+	if i < len(f.weights) {
+		return f.weights[i]
+	}
+	return 0
+}
+
+// scanLabel is a fixed-width, right-aligned row label.
+func scanLabel(text string) fyne.CanvasObject {
+	lbl := widget.NewLabel(text)
+	lbl.Alignment = fyne.TextAlignTrailing
+	return container.NewGridWrap(fyne.NewSize(scanLabelWidth, 34), lbl)
+}
+
 // scanRow lays out a label and a control on one row, right-aligning the label
 // the way a form does.
 func scanRow(label string, w fyne.CanvasObject) *fyne.Container {
-	lbl := widget.NewLabel(label)
-	lbl.Alignment = fyne.TextAlignTrailing
-	return container.NewBorder(nil, nil,
-		container.NewGridWrap(fyne.NewSize(scanLabelWidth, 34), lbl), nil, w)
+	return container.NewBorder(nil, nil, scanLabel(label), nil, w)
 }
 
 // scanPanel mirrors Cheat Engine's scan region: the scan buttons at the top,
@@ -42,8 +106,11 @@ func (a *App) scanPanel() fyne.CanvasObject {
 	a.scanProgress.SetValue(0)
 	a.scanStatus = widget.NewLabel("")
 
-	valueRow := container.NewBorder(nil, nil, nil, a.hexBox, a.valueEntry)
-	a.value2Row = scanRow("and", a.value2Entry)
+	// Cheat Engine keeps both value boxes on one row for "Value between".
+	a.andLabel = widget.NewLabel("and")
+	a.valuePair = container.New(flexRow{weights: []float32{1, 0, 1}},
+		a.valueEntry, a.andLabel, a.value2Entry)
+	valueRow := container.NewBorder(nil, nil, scanLabel("Scan Value"), a.hexBox, a.valuePair)
 
 	a.scopeSelect = widget.NewSelect([]string{
 		"All writable", "Heap + stack + exec + BSS", "All readable",
@@ -55,8 +122,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		buttons,
 		a.scanProgress,
 		a.scanStatus,
-		scanRow("Scan Value", valueRow),
-		a.value2Row,
+		valueRow,
 		scanRow("Scan Type", a.scanType),
 		scanRow("Value Type", container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
 		scanRow("Compare", a.compareEntry),

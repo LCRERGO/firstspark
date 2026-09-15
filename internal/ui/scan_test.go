@@ -27,16 +27,19 @@ func TestScanControlsFollowState(t *testing.T) {
 		t.Fatal("Compare should be enabled for exact scans")
 	}
 
-	if a.value2Row.Visible() {
-		t.Fatal("the upper bound row should be hidden for exact scans")
+	if a.value2Entry.Visible() {
+		t.Fatal("the upper bound should be hidden for exact scans")
+	}
+	if a.andLabel.Visible() {
+		t.Fatal("the 'and' label should be hidden for exact scans")
 	}
 
 	a.scanType.SetSelected("Value between")
 	if a.value2Entry.Disabled() {
 		t.Fatal("the upper bound should be enabled for between scans")
 	}
-	if !a.value2Row.Visible() {
-		t.Fatal("the upper bound row should be shown for between scans")
+	if !a.value2Entry.Visible() || !a.andLabel.Visible() {
+		t.Fatal("the upper bound and 'and' label should be shown for between scans")
 	}
 	if !a.compareEntry.Disabled() {
 		t.Fatal("Compare should be disabled for between scans")
@@ -46,8 +49,8 @@ func TestScanControlsFollowState(t *testing.T) {
 	if !a.valueEntry.Disabled() {
 		t.Fatal("the scan value should be disabled for an unknown scan")
 	}
-	if a.value2Row.Visible() {
-		t.Fatal("the upper bound row should be hidden for unknown scans")
+	if a.value2Entry.Visible() {
+		t.Fatal("the upper bound should be hidden for unknown scans")
 	}
 }
 

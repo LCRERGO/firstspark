@@ -150,7 +150,10 @@ func (a *App) reloadMemory() {
 
 // buildHexLines renders the hex pane rows, appending a decoded value column.
 func (a *App) buildHexLines(base uint64, data []byte) []string {
-	typ := parseCEValueType(a.memType.Selected)
+	typ := scan.TypeDword
+	if a.memType != nil {
+		typ = parseCEValueType(a.memType.Selected)
+	}
 	w := typ.Size()
 	if w <= 0 {
 		w = 1
