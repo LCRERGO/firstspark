@@ -23,6 +23,7 @@ or GDB runtime dependency.
 | Hex viewer/editor | partial (viewer + byte-level read/write API) |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
 | Breakpoints, single-step, registers | implemented |
+| Debugger GUI, hardware watchpoints, find-accesses/writes | implemented |
 | GDB/MI backend | stub (same interface) |
 | Disassembler (pure Go, `x86asm`) | implemented |
 | Assembler (pure-Go Intel syntax, common subset) | implemented |

@@ -17,6 +17,7 @@ type ptraceBackend struct {
 	proc        *mem.Process
 	attached    bool
 	breakpoints map[uint64]byte
+	watchpoints map[uint64]int
 }
 
 // NewPtrace returns a ptrace based backend for pid.
@@ -25,7 +26,12 @@ func NewPtrace(pid int) (Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ptraceBackend{pid: pid, proc: p, breakpoints: map[uint64]byte{}}, nil
+	return &ptraceBackend{
+		pid:         pid,
+		proc:        p,
+		breakpoints: map[uint64]byte{},
+		watchpoints: map[uint64]int{},
+	}, nil
 }
 
 func (b *ptraceBackend) PID() int { return b.pid }
@@ -51,6 +57,9 @@ func (b *ptraceBackend) Detach() error {
 	}
 	for addr := range b.breakpoints {
 		_ = b.ClearBreakpoint(addr)
+	}
+	for addr := range b.watchpoints {
+		_ = b.ClearWatchpoint(addr)
 	}
 	if err := unix.PtraceDetach(b.pid); err != nil {
 		return translatePtrace(err)
@@ -167,6 +176,10 @@ func (b *ptraceBackend) Wait() (StopReason, error) {
 			reason.BreakpointAddr = addr
 			reason.HasBreakpoint = true
 		}
+	}
+	if slot, ok := b.hardwareSlot(); ok {
+		reason.HardwareSlot = slot
+		reason.HasHardware = true
 	}
 	return reason, nil
 }

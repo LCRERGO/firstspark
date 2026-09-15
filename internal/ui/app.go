@@ -21,6 +21,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
+	"github.com/LCRERGO/firstspark/pkg/debugger"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -82,6 +83,17 @@ type App struct {
 	writable     *widget.Check
 	speedhack    *widget.Check
 	alignEntry   *widget.Entry
+
+	dbgWin         fyne.Window
+	dbgSession     *debugger.Session
+	dbgRegs        *widget.List
+	dbgHits        *widget.List
+	dbgRegVals     []string
+	dbgHitLabels   []string
+	dbgAddrEntry   *widget.Entry
+	dbgStatus      *widget.Label
+	dbgStop        chan struct{}
+	dbgBreakpoints map[uint64]bool
 
 	memWin       fyne.Window
 	hexAddr      uint64
@@ -251,7 +263,8 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	table := fyne.NewMenu("Table", addAddr, clear, fyne.NewMenuItemSeparator(), pointer, custom)
 
 	speed := fyne.NewMenuItem("Speedhack", a.toggleSpeedhack)
-	tools := fyne.NewMenu("Tools", speed)
+	debuggerItem := fyne.NewMenuItem("Debugger", a.openDebugger)
+	tools := fyne.NewMenu("Tools", debuggerItem, speed)
 
 	about := fyne.NewMenuItem("About", a.showAbout)
 	help := fyne.NewMenu("Help", about)

@@ -252,6 +252,8 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Browse this memory region", func() { a.browseRow(row) }),
 		fyne.NewMenuItem("Disassemble this memory region", func() { a.disassembleRow(row) }),
+		fyne.NewMenuItem("Find out what writes this address", func() { a.findWhatWrites(row, true) }),
+		fyne.NewMenuItem("Find out what accesses this address", func() { a.findWhatWrites(row, false) }),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Show as decimal", func() { a.setDisplay(row, displayDefault) }),
 		fyne.NewMenuItem("Show as hexadecimal", func() { a.setDisplay(row, displayHex) }),

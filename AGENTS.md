@@ -46,7 +46,8 @@ GUI compile errors. `gofmt -l internal pkg cmd` must be empty.
 - `internal/ui` — Fyne GUI, gated behind `//go:build gui` (the `!gui` stub is
   `ui_stub.go`). Files: `app.go` (state, window, menus, shortcuts), `theme.go`
   (colours/fonts), `processes.go`, `scan.go`, `results.go`, `memory.go`,
-  `settings.go`, `files.go`, `format.go`, `icons.go`, `x11.go`.
+  `settings.go`, `files.go`, `format.go`, `icons.go`, `x11.go`,
+  `customtypes.go`, `editor.go`, `pointerscan.go`, `debugger.go`.
 - `pkg/...` — the engine: `mem`, `scan`, `asm`, `debugger`, `inject`,
   `speedhack`, `cheattable`, `config`, `combinator`, `script`, `customtype`,
   `pointerscan`. Never import `internal/ui` from here.

@@ -32,6 +32,8 @@ type StopReason struct {
 	ExitCode       int
 	BreakpointAddr uint64
 	HasBreakpoint  bool
+	HardwareSlot   int
+	HasHardware    bool
 }
 
 // Registers is a portable snapshot of the general purpose registers.
@@ -65,6 +67,19 @@ type Backend interface {
 	Wait() (StopReason, error)
 
 	Close() error
+}
+
+// WatchpointBackend is implemented by backends that support hardware data
+// watchpoints (the x86 debug registers).
+type WatchpointBackend interface {
+	// SetWatchpoint arms a watchpoint on addr for size bytes. When writeOnly
+	// is false, reads are watched as well.
+	SetWatchpoint(addr uint64, size int, writeOnly bool) error
+	// ClearWatchpoint disarms the watchpoint on addr.
+	ClearWatchpoint(addr uint64) error
+	// ClearHardwareStatus clears the sticky debug status register so the next
+	// trap is reported.
+	ClearHardwareStatus() error
 }
 
 // Options configures backend construction.
