@@ -21,6 +21,7 @@ type Definition struct {
 	Name        string `yaml:"name"`
 	Size        int    `yaml:"size"`
 	Kind        string `yaml:"kind"`
+	Mode        string `yaml:"mode,omitempty"` // "lua" (default) or "aa"
 	Script      string `yaml:"script"`
 	Alignment   int    `yaml:"alignment,omitempty"`
 	Description string `yaml:"description,omitempty"`
@@ -67,6 +68,9 @@ func Save(path string, defs []Definition) error {
 
 // Register compiles a definition and registers it as a scan type.
 func Register(def Definition) (*scan.Type, error) {
+	if strings.EqualFold(strings.TrimSpace(def.Mode), "aa") || strings.EqualFold(strings.TrimSpace(def.Mode), "autoassembler") {
+		return RegisterAA(def)
+	}
 	name := strings.TrimSpace(def.Name)
 	if name == "" {
 		return nil, fmt.Errorf("customtype: name is required")
@@ -133,6 +137,17 @@ func Register(def Definition) (*scan.Type, error) {
 	}
 	scan.RegisterType(t)
 	return t, nil
+}
+
+func validateLua(def Definition) error {
+	prog, err := script.Compile(strings.Trim(def.Script, "\n\r"))
+	if err != nil {
+		return err
+	}
+	if _, err := prog.Func("bytes_to_value"); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RegisterAll registers every definition, stopping at the first error.

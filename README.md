@@ -17,7 +17,7 @@ or GDB runtime dependency.
 | Memory scanner: byte/word/dword/qword/float/double/string/AOB/binary/all | implemented |
 | Scan modes: exact, unknown initial, changed, unchanged, increased, decreased, increased-by, decreased-by, value-between | implemented |
 | Undo scan | implemented |
-| User-defined value types (Lua 5.1 scripts) | implemented |
+| User-defined value types (Lua 5.1 scripts, or Auto Assembler via a local JIT) | implemented |
 | Cheat table: pointer records, hex/binary display, hotkeys | implemented |
 | Pointer scanner (N-level) | implemented |
 | Hex viewer/editor | partial (viewer + byte-level read/write API) |

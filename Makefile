@@ -20,10 +20,11 @@ build/gui:
 	mkdir -p $(BIN_DIR)
 	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -tags gui -o $(BIN_DIR)/$(BINARY) $(CMD)
 
-# Headless build: no CGO, no graphics libraries.
+# Headless build: no CGO, no graphics libraries (Auto Assembler custom types
+# are unavailable in this build; Lua types still work).
 build/headless:
 	mkdir -p $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -o $(BIN_DIR)/$(BINARY) $(CMD)
+	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -o $(BIN_DIR)/$(BINARY) $(CMD)
 
 # Alias for `make build/gui`.
 gui: build/gui

@@ -26,6 +26,18 @@ function value_to_bytes(value, address)
   return { value % 256 }
 end`
 
+const defaultAATypeScript = `[ENABLE]
+ConvertRoutine:
+  ; rdi = pointer to the bytes; return the value in rax
+  mov eax, [rdi]
+  ret
+
+ConvertBackRoutine:
+  ; rdi = value; rsi = pointer to the output bytes
+  mov eax, edi
+  mov [rsi], eax
+  ret`
+
 // showCustomTypes opens the custom-type manager, creating it lazily.
 func (a *App) showCustomTypes() {
 	if a.ctWin == nil {
@@ -61,6 +73,14 @@ func (a *App) buildCustomTypes() {
 	a.ctName = widget.NewEntry()
 	a.ctSize = widget.NewEntry()
 	a.ctSize.SetText("4")
+	a.ctMode = widget.NewSelect([]string{"Lua", "Auto Assembler"}, func(s string) {
+		if s == "Auto Assembler" {
+			a.ctEditor.SetLanguage(langAutoasm)
+		} else {
+			a.ctEditor.SetLanguage(langLua)
+		}
+	})
+	a.ctMode.SetSelected("Lua")
 	a.ctKind = widget.NewSelect([]string{"int", "float", "string"}, nil)
 	a.ctKind.SetSelected("int")
 	a.ctAlign = widget.NewEntry()
@@ -79,6 +99,7 @@ func (a *App) buildCustomTypes() {
 
 	form := widget.NewForm(
 		widget.NewFormItem("Name", a.ctName),
+		widget.NewFormItem("Mode", a.ctMode),
 		widget.NewFormItem("Size (bytes)", a.ctSize),
 		widget.NewFormItem("Kind", a.ctKind),
 		widget.NewFormItem("Alignment", a.ctAlign),
@@ -134,6 +155,11 @@ func (a *App) ctLoad(d customtype.Definition) {
 		a.ctAlign.SetText("")
 	}
 	a.ctDesc.SetText(d.Description)
+	if strings.EqualFold(d.Mode, "aa") {
+		a.ctMode.SetSelected("Auto Assembler")
+	} else {
+		a.ctMode.SetSelected("Lua")
+	}
 	a.ctEditor.SetText(d.Script)
 	a.ctEditor.ClearError()
 	if t, ok := scan.LookupType(d.Name); ok {
@@ -144,6 +170,7 @@ func (a *App) ctLoad(d customtype.Definition) {
 func (a *App) ctAdd() {
 	a.ctName.SetText("")
 	a.ctSize.SetText("4")
+	a.ctMode.SetSelected("Lua")
 	a.ctKind.SetSelected("int")
 	a.ctAlign.SetText("")
 	a.ctDesc.SetText("")
@@ -164,10 +191,15 @@ func (a *App) ctDefinition() (customtype.Definition, error) {
 			align = n
 		}
 	}
+	mode := "lua"
+	if a.ctMode.Selected == "Auto Assembler" {
+		mode = "aa"
+	}
 	return customtype.Definition{
 		Name:        strings.TrimSpace(a.ctName.Text),
 		Size:        size,
 		Kind:        a.ctKind.Selected,
+		Mode:        mode,
 		Alignment:   align,
 		Description: strings.TrimSpace(a.ctDesc.Text),
 		Script:      a.ctEditor.Text(),
@@ -236,13 +268,19 @@ func (a *App) ctDelete() {
 }
 
 func (a *App) ctCheck() {
-	if _, err := script.Compile(a.ctEditor.Text()); err != nil {
+	def, err := a.ctDefinition()
+	if err != nil {
+		a.ctEditor.SetError(0, err.Error())
+		a.ctStatus.SetText("error: " + err.Error())
+		return
+	}
+	if err := customtype.Validate(def); err != nil {
 		a.markScriptError(err)
-		a.ctStatus.SetText("script error")
+		a.ctStatus.SetText("error: " + err.Error())
 		return
 	}
 	a.ctEditor.ClearError()
-	a.ctStatus.SetText("script OK")
+	a.ctStatus.SetText("OK")
 }
 
 func (a *App) markScriptError(err error) {
@@ -275,6 +313,20 @@ func (a *App) ctTest() {
 			return
 		}
 		data = d
+	}
+	def, err := a.ctDefinition()
+	if err != nil {
+		a.ctTestOut.SetText("error: " + err.Error())
+		return
+	}
+	if def.Mode == "aa" {
+		value, back, err := customtype.AATest(def, data)
+		if err != nil {
+			a.ctTestOut.SetText("error: " + err.Error())
+			return
+		}
+		a.ctTestOut.SetText(fmt.Sprintf("bytes: % x\nvalue: %d\nback:  % x", data, value, back))
+		return
 	}
 	prog, err := script.Compile(a.ctEditor.Text())
 	if err != nil {

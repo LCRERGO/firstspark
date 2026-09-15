@@ -56,6 +56,34 @@ func TestAlignmentDefaultsToSize(t *testing.T) {
 	}
 }
 
+func TestRegisterAAType(t *testing.T) {
+	def := Definition{
+		Name: "AA First Dword", Size: 4, Kind: "int", Mode: "aa",
+		Script: "[ENABLE]\nConvertRoutine:\n  mov eax, [rdi]\n  ret\nConvertBackRoutine:\n  mov eax, edi\n  mov [rsi], eax\n  ret\n",
+	}
+	typ, err := RegisterAA(def)
+	if err != nil {
+		t.Fatalf("RegisterAA: %v", err)
+	}
+	v := scan.NewValue(typ.ID, []byte{7, 0, 0, 0})
+	if v.String() != "7" {
+		t.Fatalf("format = %q", v.String())
+	}
+	parsed, err := scan.ParseValue(typ.ID, "9")
+	if err != nil {
+		t.Fatalf("ParseValue: %v", err)
+	}
+	if parsed.String() != "9" {
+		t.Fatalf("round trip = %q", parsed.String())
+	}
+}
+
+func TestAATypeRejectsFloat(t *testing.T) {
+	if _, err := RegisterAA(Definition{Name: "AA Float", Size: 4, Kind: "float", Mode: "aa", Script: "[ENABLE]\nConvertRoutine:\n  ret\n"}); err == nil {
+		t.Fatal("expected float AA types to be rejected")
+	}
+}
+
 func TestReadOnlyType(t *testing.T) {
 	typ, err := Register(Definition{
 		Name: "ReadOnly", Size: 2, Kind: "int",

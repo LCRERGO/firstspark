@@ -51,7 +51,9 @@ GUI compile errors. `gofmt -l internal pkg cmd` must be empty.
   `dissect.go`, `autoasm.go`.
 - `pkg/...` — the engine: `mem`, `scan`, `asm`, `debugger`, `inject`,
   `speedhack`, `cheattable`, `config`, `combinator`, `script`, `customtype`,
-  `pointerscan`, `dissect`, `autoasm`. Never import `internal/ui` from here.
+  `pointerscan`, `dissect`, `autoasm`, `jit`. Never import `internal/ui` from
+  here. `pkg/jit` is build-tagged `cgo` (with a `!cgo` stub) so the headless
+  build stays CGO-free.
 - `pkg/combinator` — dependency-free parser combinators.
 - `pkg/script` — the in-house Lua 5.1.4-compatible subset used by custom value
   types; parses with `pkg/combinator` and compiles to Go closures. Pure Go, so

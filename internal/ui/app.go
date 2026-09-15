@@ -108,6 +108,7 @@ type App struct {
 	ctSel       int
 	ctID        scan.ValueType
 	ctName      *widget.Entry
+	ctMode      *widget.Select
 	ctSize      *widget.Entry
 	ctKind      *widget.Select
 	ctAlign     *widget.Entry

@@ -123,6 +123,54 @@ The manager's **Test** panel converts without scanning:
 
 A **Check** action compiles the script and reports parse errors.
 
+## Auto Assembler types
+
+A type can instead be defined by an **Auto Assembler** script (`mode: aa`). The
+script's `[ENABLE]` section must define a `ConvertRoutine` label and may define
+a `ConvertBackRoutine` label; the code is assembled and loaded into Firstspark
+itself (a small local JIT), so conversions run at native speed and no target
+process is required.
+
+```yaml
+  - name: Big Endian 2
+    size: 2
+    kind: int
+    mode: aa
+    script: |
+      [ENABLE]
+      ConvertRoutine:
+        ; rdi = pointer to the bytes; return the value in rax
+        movzx eax, byte ptr [rdi]
+        shl eax, 8
+        movzx ecx, byte ptr [rdi+1]
+        or eax, ecx
+        ret
+
+      ConvertBackRoutine:
+        ; rdi = value; rsi = pointer to the output bytes
+        mov eax, edi
+        mov [rsi+1], al
+        shr eax, 8
+        mov [rsi], al
+        ret
+```
+
+Conventions:
+
+- `ConvertRoutine` receives a pointer to the value's bytes in **RDI** and
+  returns the value in **RAX**.
+- `ConvertBackRoutine` receives the value in **RDI** and a pointer to the
+  output bytes in **RSI**; it writes `size` bytes.
+- Only `kind: int` is supported. Float and string Auto Assembler types are
+  rejected; use a Lua type for those.
+- The script must be self-contained (no external symbols); `alloc` directives
+  are ignored.
+
+Because the routine runs in Firstspark's process, a faulty script can crash the
+application — the same trust model as Cheat Engine's Auto Assembler. Auto
+Assembler types need the CGO build (`make`); the headless build supports Lua
+types only.
+
 ## Differences from Cheat Engine
 
 - The script dialect is Lua 5.1.4 with a 64-bit integer extension, matching
