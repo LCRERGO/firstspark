@@ -193,6 +193,7 @@ func Run(cfg config.Config) error {
 	a.refreshProcesses()
 	go a.freezeLoop()
 	a.win.Show()
+	closeParentInstance()
 	a.maybeAskElevation()
 	a.fapp.Run()
 	return a.err

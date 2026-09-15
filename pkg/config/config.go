@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -91,7 +92,23 @@ func (c Config) Save(path string) error {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("config: write %s: %w", path, err)
 	}
+	// When running elevated (pkexec), keep the files owned by the invoking
+	// user so they stay editable without root.
+	chownToOriginalUser(filepath.Dir(path))
+	chownToOriginalUser(path)
 	return nil
+}
+
+func chownToOriginalUser(path string) {
+	if os.Geteuid() != 0 {
+		return
+	}
+	uid, err := strconv.Atoi(os.Getenv("FIRSTSPARK_ORIG_UID"))
+	if err != nil {
+		return
+	}
+	gid, _ := strconv.Atoi(os.Getenv("FIRSTSPARK_ORIG_GID"))
+	_ = os.Chown(path, uid, gid)
 }
 
 // Dir returns the configuration directory ($XDG_CONFIG_HOME/firstspark).
