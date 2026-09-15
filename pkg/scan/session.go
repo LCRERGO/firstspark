@@ -22,12 +22,16 @@ type Result struct {
 	Prev Value
 }
 
+// maxHistory bounds the number of undoable scan steps.
+const maxHistory = 16
+
 // Session holds the state of a scan against one process.
 type Session struct {
 	proc          *mem.Process
 	opts          Options
 	regions       []mem.Region
 	results       []Result
+	history       [][]Result
 	started       bool
 	snapshotBytes int64
 }
@@ -64,12 +68,15 @@ func (s *Session) SetMode(m ScanMode) { s.opts.Mode = m }
 // SetValue changes the target value used by subsequent scans.
 func (s *Session) SetValue(v Value) { s.opts.Value = v }
 
+// SetValue2 changes the upper bound used by between scans.
+func (s *Session) SetValue2(v Value) { s.opts.Value2 = v }
+
 // SetCompare changes the comparison operator used by exact scans.
 func (s *Session) SetCompare(op CompareOp) { s.opts.Compare = op }
 
 // First performs the initial scan, discarding any previous results.
 func (s *Session) First() error {
-	if s.opts.Mode != ModeExact && s.opts.Mode != ModeUnknown {
+	if s.opts.Mode != ModeExact && s.opts.Mode != ModeUnknown && s.opts.Mode != ModeBetween {
 		return fmt.Errorf("scan: %s is not a valid initial scan mode", s.opts.Mode)
 	}
 	if s.opts.Type.Variable() && s.opts.Mode != ModeExact {
@@ -83,8 +90,9 @@ func (s *Session) First() error {
 	if err != nil {
 		return err
 	}
+	s.pushHistory()
 	s.regions = regions
-	s.results = s.results[:0]
+	s.results = nil
 	s.snapshotBytes = 0
 
 	for _, r := range regions {
@@ -109,7 +117,8 @@ func (s *Session) Next() error {
 		}
 	}
 
-	kept := s.results[:0]
+	s.pushHistory()
+	kept := make([]Result, 0, len(s.results))
 	for _, res := range s.results {
 		w := len(res.Prev.Raw)
 		if w == 0 {
@@ -249,6 +258,10 @@ func (s *Session) consider(addr uint64, raw []byte) error {
 		if s.matchExact(raw) {
 			s.results = append(s.results, Result{Addr: addr, Prev: NewValue(s.opts.Type, raw)})
 		}
+	case ModeBetween:
+		if s.matchBetween(raw) {
+			s.results = append(s.results, Result{Addr: addr, Prev: NewValue(s.opts.Type, raw)})
+		}
 	}
 	return nil
 }
@@ -287,10 +300,63 @@ func (s *Session) keep(cur, prev Value) bool {
 		return s.valueDelta(t, cur, prev, s.opts.Value, true)
 	case ModeDecreasedBy:
 		return s.valueDelta(t, cur, prev, s.opts.Value, false)
+	case ModeBetween:
+		return s.matchBetween(cur.Raw)
 	default:
 		return false
 	}
 }
+
+// matchBetween reports whether raw falls inside the configured range.
+func (s *Session) matchBetween(raw []byte) bool {
+	t := TypeByID(s.opts.Type)
+	if t == nil {
+		return false
+	}
+	switch t.Kind {
+	case KindString, KindBytes, KindBinary:
+		return false
+	}
+	cur := NewValue(s.opts.Type, raw)
+	if t.Kind == KindFloat {
+		lo, hi := t.Numeric(s.opts.Value), t.Numeric(s.opts.Value2)
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		x := t.Numeric(cur)
+		return x >= lo-s.opts.Epsilon && x <= hi+s.opts.Epsilon
+	}
+	lo, hi := t.Int64(s.opts.Value), t.Int64(s.opts.Value2)
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	x := t.Int64(cur)
+	return x >= lo && x <= hi
+}
+
+// pushHistory snapshots the current results so the last step can be undone.
+func (s *Session) pushHistory() {
+	snapshot := make([]Result, len(s.results))
+	copy(snapshot, s.results)
+	s.history = append(s.history, snapshot)
+	if len(s.history) > maxHistory {
+		s.history = s.history[len(s.history)-maxHistory:]
+	}
+}
+
+// Undo restores the result set from before the last scan step.
+func (s *Session) Undo() bool {
+	if len(s.history) == 0 {
+		return false
+	}
+	last := s.history[len(s.history)-1]
+	s.history = s.history[:len(s.history)-1]
+	s.results = last
+	return true
+}
+
+// CanUndo reports whether an undo step is available.
+func (s *Session) CanUndo() bool { return len(s.history) > 0 }
 
 func (s *Session) valueEqual(t *Type, a, b Value) bool {
 	switch t.Kind {

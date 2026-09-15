@@ -16,6 +16,7 @@ var scanTypeOptions = []string{
 	"Increased value by ...",
 	"Decreased value",
 	"Decreased value by ...",
+	"Value between",
 	"Changed value",
 	"Unchanged value",
 	"Unknown initial value",
@@ -42,6 +43,8 @@ func parseCEScanType(s string) scan.ScanMode {
 		return scan.ModeDecreased
 	case "Decreased value by ...":
 		return scan.ModeDecreasedBy
+	case "Value between":
+		return scan.ModeBetween
 	case "Changed value":
 		return scan.ModeChanged
 	case "Unchanged value":
@@ -77,7 +80,7 @@ func ceValueTypeLabel(t scan.ValueType) string {
 // modeNeedsValue reports whether a scan mode consumes the scan value.
 func modeNeedsValue(m scan.ScanMode) bool {
 	switch m {
-	case scan.ModeExact, scan.ModeIncreasedBy, scan.ModeDecreasedBy:
+	case scan.ModeExact, scan.ModeIncreasedBy, scan.ModeDecreasedBy, scan.ModeBetween:
 		return true
 	default:
 		return false

@@ -74,6 +74,7 @@ type App struct {
 	valueType    *widget.Select
 	hexBox       *widget.Check
 	valueEntry   *widget.Entry
+	value2Entry  *widget.Entry
 	compareEntry *widget.Entry
 	writable     *widget.Check
 	speedhack    *widget.Check
@@ -151,6 +152,10 @@ func (a *App) buildWidgets() {
 	a.valueEntry = widget.NewEntry()
 	a.valueEntry.SetPlaceHolder("value or AOB pattern")
 	a.valueEntry.OnSubmitted = func(string) { a.scanAction() }
+
+	a.value2Entry = widget.NewEntry()
+	a.value2Entry.SetPlaceHolder("upper bound (Value between)")
+	a.value2Entry.OnSubmitted = func(string) { a.scanAction() }
 
 	a.compareEntry = widget.NewEntry()
 	a.compareEntry.SetText("==")

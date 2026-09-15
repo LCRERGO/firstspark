@@ -28,6 +28,7 @@ func Run(args []string) error {
 	typ := fs.String("type", "", "value type (byte|word|dword|qword|float|double|string|aob)")
 	mode := fs.String("mode", "", "scan mode (exact|unknown)")
 	value := fs.String("value", "", "value to scan for")
+	value2 := fs.String("value2", "", "upper bound for a between scan")
 	compare := fs.String("compare", "", "comparison operator (== != > >= < <=)")
 	next := fs.String("next", "", "next scan mode (changed|unchanged|increased|decreased|...)")
 	export := fs.String("export", "", "export results to a .CT file")
@@ -52,7 +53,7 @@ func Run(args []string) error {
 		return err
 	}
 	if *pid > 0 {
-		return headlessScan(cfg, *pid, *typ, *mode, *value, *compare, *next, *export)
+		return headlessScan(cfg, *pid, *typ, *mode, *value, *value2, *compare, *next, *export)
 	}
 	return ui.Run(cfg)
 }
@@ -74,7 +75,7 @@ func listProcesses() error {
 	return w.Flush()
 }
 
-func headlessScan(cfg config.Config, pid int, typ, mode, value, compare, next, export string) error {
+func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare, next, export string) error {
 	proc, err := mem.Find(pid)
 	if err != nil {
 		return err
@@ -115,6 +116,18 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, compare, next, e
 		}
 		opts.Value = v
 	}
+	if opts.Mode == scan.ModeBetween {
+		v, err := scan.ParseValue(vt, value)
+		if err != nil {
+			return err
+		}
+		opts.Value = v
+		v2, err := scan.ParseValue(vt, value2)
+		if err != nil {
+			return err
+		}
+		opts.Value2 = v2
+	}
 
 	session := scan.NewSession(proc, opts)
 	if err := session.First(); err != nil {
@@ -134,6 +147,18 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, compare, next, e
 				return err
 			}
 			session.SetValue(v)
+		}
+		if nm == scan.ModeBetween {
+			v, err := scan.ParseValue(vt, value)
+			if err != nil {
+				return err
+			}
+			session.SetValue(v)
+			v2, err := scan.ParseValue(vt, value2)
+			if err != nil {
+				return err
+			}
+			session.SetValue2(v2)
 		}
 		if err := session.Next(); err != nil {
 			return err

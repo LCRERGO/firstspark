@@ -70,6 +70,7 @@ const (
 	ModeDecreased
 	ModeIncreasedBy
 	ModeDecreasedBy
+	ModeBetween
 )
 
 func (m ScanMode) String() string {
@@ -90,6 +91,8 @@ func (m ScanMode) String() string {
 		return "increased by"
 	case ModeDecreasedBy:
 		return "decreased by"
+	case ModeBetween:
+		return "between"
 	default:
 		return "unknown"
 	}
@@ -114,6 +117,8 @@ func ParseScanMode(s string) (ScanMode, error) {
 		return ModeIncreasedBy, nil
 	case "decreased by", "decby":
 		return ModeDecreasedBy, nil
+	case "between", "value between", "range":
+		return ModeBetween, nil
 	default:
 		return ModeExact, fmt.Errorf("scan: unknown scan mode %q", s)
 	}
@@ -123,7 +128,8 @@ func ParseScanMode(s string) (ScanMode, error) {
 type Options struct {
 	Type          ValueType
 	Mode          ScanMode
-	Value         Value // target for exact scans, delta for *By modes
+	Value         Value // target for exact scans, delta for *By modes, lower bound for between
+	Value2        Value // upper bound for ModeBetween
 	Compare       CompareOp
 	WritableOnly  bool
 	Alignment     int

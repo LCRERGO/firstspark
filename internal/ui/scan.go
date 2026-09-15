@@ -18,6 +18,7 @@ import (
 func (a *App) scanPanel() fyne.CanvasObject {
 	form := widget.NewForm(
 		widget.NewFormItem("Scan Value", a.valueEntry),
+		widget.NewFormItem("Upper Bound", a.value2Entry),
 		widget.NewFormItem("Scan Type", a.scanType),
 		widget.NewFormItem("Value Type", a.valueType),
 		widget.NewFormItem("Compare", a.compareEntry),
@@ -25,6 +26,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 	buttons := container.NewHBox(
 		widget.NewButton("First Scan", a.firstScan),
 		widget.NewButton("Next Scan", a.nextScan),
+		widget.NewButton("Undo Scan", a.undoScan),
 	)
 	options := widget.NewForm(widget.NewFormItem("Alignment", a.alignEntry))
 	body := container.NewVBox(
@@ -86,6 +88,9 @@ func (a *App) nextScan() {
 	if modeNeedsValue(opts.Mode) {
 		a.session.SetValue(opts.Value)
 	}
+	if opts.Mode == scan.ModeBetween {
+		a.session.SetValue2(opts.Value2)
+	}
 	if err := a.session.Next(); err != nil {
 		a.fail(err)
 		return
@@ -117,7 +122,50 @@ func (a *App) scanOptions() (scan.Options, error) {
 		}
 		opts.Value = v
 	}
+	if opts.Mode == scan.ModeBetween {
+		v, err := scan.ParseValue(opts.Type, a.upperText())
+		if err != nil {
+			return opts, err
+		}
+		opts.Value2 = v
+	}
 	return opts, nil
+}
+
+// upperText returns the upper bound for a Value-between scan.
+func (a *App) upperText() string {
+	s := strings.TrimSpace(a.value2Entry.Text)
+	if !a.hexBox.Checked {
+		return s
+	}
+	switch parseCEValueType(a.valueType.Selected) {
+	case scan.TypeFloat, scan.TypeDouble, scan.TypeString, scan.TypeAOB:
+		return s
+	}
+	if s == "" {
+		return s
+	}
+	neg := strings.HasPrefix(s, "-")
+	if neg {
+		s = s[1:]
+	}
+	if !strings.HasPrefix(s, "0x") && !strings.HasPrefix(s, "0X") {
+		s = "0x" + s
+	}
+	if neg {
+		s = "-" + s
+	}
+	return s
+}
+
+func (a *App) undoScan() {
+	if a.session == nil || !a.session.CanUndo() {
+		a.setStatus("nothing to undo")
+		return
+	}
+	a.session.Undo()
+	a.setResults(a.session.Results())
+	a.setStatus("undo: %d results", len(a.results))
 }
 
 // valueText returns the scan value, converting a bare hex string to 0x form
