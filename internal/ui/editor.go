@@ -4,6 +4,8 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -49,11 +51,14 @@ type codeEditor struct {
 	errorLine int
 	errorMsg  string
 
-	gutter *widget.TextGrid
-	code   *widget.TextGrid
-	box    *fyne.Container
-	scroll *container.Scroll
-	status *widget.Label
+	gutter    *widget.TextGrid
+	code      *widget.TextGrid
+	box       *fyne.Container
+	themed    *container.ThemeOverride
+	theme     *editorTheme
+	scroll    *container.Scroll
+	status    *widget.Label
+	bookmarks map[int]bool
 
 	findEntry *widget.Entry
 	replEntry *widget.Entry
@@ -67,11 +72,13 @@ type editorState struct {
 }
 
 func newCodeEditor(onChange func(string)) *codeEditor {
-	e := &codeEditor{lines: []string{""}, onChange: onChange, errorLine: -1}
+	e := &codeEditor{lines: []string{""}, onChange: onChange, errorLine: -1, bookmarks: map[int]bool{}}
 	e.gutter = widget.NewTextGrid()
 	e.code = widget.NewTextGrid()
 	e.box = container.NewHBox(e.gutter, e.code)
-	e.scroll = container.NewScroll(e.box)
+	e.theme = &editorTheme{base: currentTheme(), size: 13}
+	e.themed = container.NewThemeOverride(e.box, e.theme)
+	e.scroll = container.NewScroll(e.themed)
 	e.status = widget.NewLabel("Ln 1, Col 1")
 
 	e.findEntry = widget.NewEntry()
@@ -191,20 +198,27 @@ func (e *codeEditor) TypedRune(r rune) {
 
 // TypedKey handles navigation and editing keys.
 func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
+	ctrl := currentModifiers()&fyne.KeyModifierControl != 0
 	switch ev.Name {
 	case fyne.KeyBackspace:
 		e.snapshot()
-		if e.hasSel {
+		switch {
+		case e.hasSel:
 			e.deleteSelection()
-		} else {
+		case ctrl:
+			e.deleteWordBack()
+		default:
 			e.backspace()
 		}
 		e.clearSel()
 	case fyne.KeyDelete:
 		e.snapshot()
-		if e.hasSel {
+		switch {
+		case e.hasSel:
 			e.deleteSelection()
-		} else {
+		case ctrl:
+			e.deleteWordForward()
+		default:
 			e.deleteForward()
 		}
 		e.clearSel()
@@ -216,10 +230,25 @@ func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
 		e.moveCursor(-1, 0)
 	case fyne.KeyDown:
 		e.moveCursor(1, 0)
+	case fyne.KeyPageUp:
+		e.moveCursor(-e.pageRows(), 0)
+	case fyne.KeyPageDown:
+		e.moveCursor(e.pageRows(), 0)
 	case fyne.KeyHome:
-		e.moveCursor(0, -len([]rune(e.lines[e.row])))
+		if ctrl {
+			e.row, e.col = 0, 0
+			e.clearSel()
+		} else {
+			e.moveCursor(0, -e.col)
+		}
 	case fyne.KeyEnd:
-		e.moveCursor(0, len([]rune(e.lines[e.row]))-e.col)
+		if ctrl {
+			e.row = len(e.lines) - 1
+			e.col = len([]rune(e.lines[e.row]))
+			e.clearSel()
+		} else {
+			e.moveCursor(0, len([]rune(e.lines[e.row]))-e.col)
+		}
 	case fyne.KeyReturn, fyne.KeyEnter:
 		e.snapshot()
 		e.deleteSelection()
@@ -235,6 +264,39 @@ func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
 			e.insertString("  ")
 		}
 		e.clearSel()
+	case fyne.KeyF2:
+		if ctrl {
+			e.toggleBookmark()
+		} else {
+			e.nextBookmark()
+		}
+	case fyne.KeySpace:
+		if ctrl {
+			e.complete()
+			return
+		}
+		e.snapshot()
+		e.deleteSelection()
+		e.insertRune(' ')
+		e.clearSel()
+	case fyne.KeyEqual, fyne.KeyPlus:
+		if ctrl {
+			e.zoomBy(1)
+			return
+		}
+		return
+	case fyne.KeyMinus:
+		if ctrl {
+			e.zoomBy(-1)
+			return
+		}
+		return
+	case fyne.Key0:
+		if ctrl {
+			e.theme.size = 13
+			e.zoomBy(0)
+		}
+		return
 	default:
 		return
 	}
@@ -710,7 +772,7 @@ func (e *codeEditor) rowColAt(off int) rowCol {
 }
 
 func (e *codeEditor) refresh() {
-	e.gutter.SetText(gutterText(len(e.lines)))
+	e.gutter.SetText(gutterText(len(e.lines), e.bookmarks))
 	e.code.SetText(e.Text())
 	e.applyStyles()
 	e.code.Refresh()
@@ -724,15 +786,239 @@ func (e *codeEditor) refresh() {
 	}
 }
 
-func gutterText(n int) string {
+func gutterText(n int, marks map[int]bool) string {
 	var b strings.Builder
 	for i := 1; i <= n; i++ {
+		if marks[i-1] {
+			b.WriteString("\u25cf ")
+		} else {
+			b.WriteString("  ")
+		}
 		b.WriteString(strconv.Itoa(i))
 		if i < n {
 			b.WriteByte('\n')
 		}
 	}
 	return b.String()
+}
+
+// editorTheme overrides only the text size, which drives editor zoom.
+type editorTheme struct {
+	base fyne.Theme
+	size float32
+}
+
+func (t *editorTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
+	return t.base.Color(n, v)
+}
+
+func (t *editorTheme) Font(s fyne.TextStyle) fyne.Resource { return t.base.Font(s) }
+
+func (t *editorTheme) Icon(n fyne.ThemeIconName) fyne.Resource { return t.base.Icon(n) }
+
+func (t *editorTheme) Size(n fyne.ThemeSizeName) float32 {
+	if n == theme.SizeNameText {
+		return t.size
+	}
+	return t.base.Size(n)
+}
+
+func currentTheme() fyne.Theme {
+	if fyne.CurrentApp() != nil {
+		return fyne.CurrentApp().Settings().Theme()
+	}
+	return theme.DefaultTheme()
+}
+
+func currentModifiers() fyne.KeyModifier {
+	if fyne.CurrentApp() == nil {
+		return 0
+	}
+	if d, ok := fyne.CurrentApp().Driver().(desktop.Driver); ok {
+		return d.CurrentKeyModifiers()
+	}
+	return 0
+}
+
+func (e *codeEditor) zoomBy(delta float32) {
+	e.theme.size += delta
+	if e.theme.size < 8 {
+		e.theme.size = 8
+	}
+	if e.theme.size > 30 {
+		e.theme.size = 30
+	}
+	e.themed.Refresh()
+	e.code.Refresh()
+	e.gutter.Refresh()
+	e.status.SetText(fmt.Sprintf("zoom %.0f", e.theme.size))
+}
+
+func (e *codeEditor) pageRows() int {
+	rows := 20
+	if e.scroll != nil && e.theme.size > 0 {
+		if r := int(e.scroll.Size().Height / (e.theme.size * 1.5)); r > 1 {
+			rows = r
+		}
+	}
+	return rows
+}
+
+func (e *codeEditor) deleteWordBack() {
+	if e.col == 0 {
+		e.backspace()
+		return
+	}
+	line := []rune(e.lines[e.row])
+	i := e.col
+	for i > 0 && !isWordRune(line[i-1]) {
+		i--
+	}
+	for i > 0 && isWordRune(line[i-1]) {
+		i--
+	}
+	e.lines[e.row] = string(append(line[:i], line[e.col:]...))
+	e.col = i
+}
+
+func (e *codeEditor) deleteWordForward() {
+	line := []rune(e.lines[e.row])
+	if e.col >= len(line) {
+		e.deleteForward()
+		return
+	}
+	i := e.col
+	for i < len(line) && !isWordRune(line[i]) {
+		i++
+	}
+	for i < len(line) && isWordRune(line[i]) {
+		i++
+	}
+	e.lines[e.row] = string(append(line[:e.col], line[i:]...))
+}
+
+func (e *codeEditor) toggleBookmark() {
+	if e.bookmarks[e.row] {
+		delete(e.bookmarks, e.row)
+	} else {
+		e.bookmarks[e.row] = true
+	}
+	e.refresh()
+}
+
+func (e *codeEditor) nextBookmark() {
+	if len(e.bookmarks) == 0 {
+		return
+	}
+	for r := e.row + 1; r < len(e.lines); r++ {
+		if e.bookmarks[r] {
+			e.gotoRow(r)
+			return
+		}
+	}
+	for r := 0; r <= e.row; r++ {
+		if e.bookmarks[r] {
+			e.gotoRow(r)
+			return
+		}
+	}
+}
+
+func (e *codeEditor) gotoRow(row int) {
+	e.row = row
+	e.col = 0
+	e.clearSel()
+	e.refresh()
+}
+
+func (e *codeEditor) currentWord() string {
+	line := []rune(e.lines[e.row])
+	i := e.col
+	for i > 0 && isWordRune(line[i-1]) {
+		i--
+	}
+	return string(line[i:e.col])
+}
+
+func (e *codeEditor) candidates(prefix string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(s string) {
+		if prefix != "" && !strings.HasPrefix(s, prefix) {
+			return
+		}
+		if s == prefix || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	if e.lang == langAutoasm {
+		for _, d := range []string{"alloc", "dealloc", "label", "define", "registersymbol", "aobscan", "aobscanmodule", "db", "dw", "dd", "dq", "nop"} {
+			add(d)
+		}
+	} else {
+		for _, k := range []string{"function", "local", "if", "then", "else", "elseif", "end", "for", "while", "repeat", "until", "return", "break", "do", "in", "and", "or", "not", "nil", "true", "false"} {
+			add(k)
+		}
+		for _, b := range []string{"bytes_to_value", "value_to_bytes", "math", "string", "table", "tostring", "tonumber", "type", "pairs", "ipairs"} {
+			add(b)
+		}
+	}
+	for _, tok := range e.tokens(e.Text()) {
+		if e.lang == langAutoasm {
+			continue
+		}
+		if script.TokenKind(tok.kind) == script.TokenIdentifier {
+			add(e.Text()[tok.start:tok.end])
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (e *codeEditor) complete() {
+	prefix := e.currentWord()
+	cands := e.candidates(prefix)
+	if len(cands) == 0 {
+		return
+	}
+	canvas := fyne.CurrentApp().Driver().CanvasForObject(e)
+	if canvas == nil {
+		return
+	}
+	list := widget.NewList(
+		func() int { return len(cands) },
+		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			if id >= 0 && id < len(cands) {
+				o.(*widget.Label).SetText(cands[id])
+			}
+		},
+	)
+	pop := widget.NewPopUp(container.NewVScroll(list), canvas)
+	list.OnSelected = func(id widget.ListItemID) {
+		if id >= 0 && id < len(cands) {
+			e.applyCompletion(prefix, cands[id])
+		}
+		pop.Hide()
+	}
+	pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(e.code)
+	cell := e.code.PositionForCursorLocation(e.row, e.col)
+	pop.Resize(fyne.NewSize(200, 180))
+	pop.ShowAtPosition(pos.Add(cell).Add(fyne.NewPos(0, e.theme.size*1.5)))
+}
+
+func (e *codeEditor) applyCompletion(prefix, cand string) {
+	line := []rune(e.lines[e.row])
+	n := len([]rune(prefix))
+	if n > e.col {
+		n = e.col
+	}
+	line = append(line[:e.col-n], append([]rune(cand), line[e.col:]...)...)
+	e.lines[e.row] = string(line)
+	e.col = e.col - n + len([]rune(cand))
+	e.refresh()
 }
 
 func (e *codeEditor) applyStyles() {

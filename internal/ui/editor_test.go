@@ -54,6 +54,49 @@ func TestCodeEditorSelectionAndComment(t *testing.T) {
 	}
 }
 
+func TestCodeEditorWordDeleteAndZoom(t *testing.T) {
+	e := newCodeEditor(nil)
+	e.SetText("foo bar")
+	e.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
+	e.deleteWordBack()
+	if e.Text() != "foo " {
+		t.Fatalf("word delete = %q", e.Text())
+	}
+	before := e.theme.size
+	e.zoomBy(2)
+	if e.theme.size != before+2 {
+		t.Fatalf("zoom = %v", e.theme.size)
+	}
+}
+
+func TestCodeEditorBookmarks(t *testing.T) {
+	e := newCodeEditor(nil)
+	e.SetText("a\nb\nc")
+	e.row = 0
+	e.toggleBookmark()
+	if !e.bookmarks[0] {
+		t.Fatal("bookmark not set")
+	}
+	e.nextBookmark()
+	if e.row != 0 {
+		t.Fatalf("row = %d", e.row)
+	}
+}
+
+func TestCodeEditorCandidates(t *testing.T) {
+	e := newCodeEditor(nil)
+	e.SetText("local money = 1")
+	found := false
+	for _, c := range e.candidates("mon") {
+		if c == "money" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("candidates = %v", e.candidates("mon"))
+	}
+}
+
 func TestCodeEditorFindAndReplace(t *testing.T) {
 	e := newCodeEditor(nil)
 	e.SetText("alpha beta gamma")

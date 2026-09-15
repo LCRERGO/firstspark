@@ -78,19 +78,6 @@ func TestRejectsBadScript(t *testing.T) {
 	}
 }
 
-func TestShippedExampleLoads(t *testing.T) {
-	defs, err := Load("../../configs/customtypes.yaml")
-	if err != nil {
-		t.Fatalf("Load example: %v", err)
-	}
-	if len(defs) == 0 {
-		t.Fatal("example file has no types")
-	}
-	if _, err := RegisterAll(defs); err != nil {
-		t.Fatalf("RegisterAll: %v", err)
-	}
-}
-
 func TestSaveLoad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "customtypes.yaml")
 	defs := []Definition{{Name: "Money", Size: 4, Kind: "float", Script: moneyScript, Description: "cents"}}

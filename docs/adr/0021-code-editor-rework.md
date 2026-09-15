@@ -27,9 +27,13 @@ Rework the shared editor widget (`internal/ui/editor.go`) to add:
 - **Language modes**: the editor highlights Lua (via `pkg/script.Tokenize`) or
   Auto Assembler (via a new `pkg/autoasm.Tokenize`) depending on the script
   being edited, so one widget serves both windows.
+- **Extras**: word-wise delete, zoom (Ctrl +/− and Ctrl+0), bookmarks
+  (Ctrl+F2 to toggle, F2 to cycle, marked in the gutter) and a simple
+  completion popup (Ctrl+Space) over keywords, builtins and identifiers.
 
-Advanced features (autocomplete, code folding, multi-caret, bookmarks, zoom)
-remain out of scope.
+Code folding and multi-caret editing remain out of scope: both need a
+different editor architecture than a `TextGrid`, and the payoff for the short
+scripts these windows hold is low.
 
 ## Consequences
 
