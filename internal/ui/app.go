@@ -20,6 +20,7 @@ import (
 
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/config"
+	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -118,7 +119,14 @@ func Run(cfg config.Config) error {
 	a.fapp = app.NewWithID("com.firstspark.app")
 	a.th = newTheme(parseScheme(cfg.UI.Theme), cfg.UI.FontSize)
 	a.fapp.Settings().SetTheme(a.th)
+	loadErr := func() error {
+		_, err := customtype.LoadAndRegister(config.CustomTypesPath())
+		return err
+	}()
 	a.build()
+	if loadErr != nil {
+		a.fail(loadErr)
+	}
 	a.refreshProcesses()
 	go a.freezeLoop()
 	a.win.ShowAndRun()
@@ -149,7 +157,7 @@ func (a *App) buildWidgets() {
 
 	a.scanType = widget.NewSelect(scanTypeOptions, func(string) {})
 	a.scanType.SetSelected("Exact value")
-	a.valueType = widget.NewSelect(valueTypeOptions, func(string) {})
+	a.valueType = widget.NewSelect(valueTypeOptions(), func(string) {})
 	a.valueType.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 
 	a.hexBox = widget.NewCheck("Hex", func(bool) {})

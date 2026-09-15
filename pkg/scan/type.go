@@ -42,6 +42,18 @@ type Type struct {
 	Encode   func(n int64) []byte
 	Int64    func(v Value) int64
 	Numeric  func(v Value) float64
+	Text     func(v Value) string
+}
+
+var nextCustomID ValueType = 100
+
+// NextTypeID allocates a fresh identifier for a user-defined type.
+func NextTypeID() ValueType {
+	typeMu.Lock()
+	defer typeMu.Unlock()
+	id := nextCustomID
+	nextCustomID++
+	return id
 }
 
 var (
@@ -89,7 +101,25 @@ func Types() []*Type {
 // types support only equality; integer and float types compare numerically.
 func (t *Type) Compare(a, b Value, op CompareOp, eps float64) bool {
 	switch t.Kind {
-	case KindString, KindBytes, KindBinary:
+	case KindString:
+		x, y := t.text(a), t.text(b)
+		switch op {
+		case OpEqual:
+			return x == y
+		case OpNotEqual:
+			return x != y
+		case OpLess:
+			return x < y
+		case OpLessEqual:
+			return x <= y
+		case OpGreater:
+			return x > y
+		case OpGreaterEqual:
+			return x >= y
+		default:
+			return false
+		}
+	case KindBytes, KindBinary:
 		switch op {
 		case OpEqual:
 			return bytes.Equal(a.Raw, b.Raw)
@@ -104,6 +134,13 @@ func (t *Type) Compare(a, b Value, op CompareOp, eps float64) bool {
 		}
 		return compareInt(t.Int64(a), t.Int64(b), op)
 	}
+}
+
+func (t *Type) text(v Value) string {
+	if t.Text != nil {
+		return t.Text(v)
+	}
+	return string(v.Raw)
 }
 
 func compareInt(a, b int64, op CompareOp) bool {
@@ -192,6 +229,7 @@ func registerBuiltins() {
 		Format:  func(v Value) string { return string(v.Raw) },
 		Encode:  func(n int64) []byte { return []byte(strconv.FormatInt(n, 10)) },
 		Numeric: func(v Value) float64 { return 0 },
+		Text:    func(v Value) string { return string(v.Raw) },
 	})
 	RegisterType(&Type{
 		ID: TypeAOB, Name: "aob", Label: "Array of Bytes", Variable: true, Kind: KindBytes,

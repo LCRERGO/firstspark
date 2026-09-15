@@ -106,6 +106,9 @@ func Dir() string {
 // DefaultPath returns the default configuration file path.
 func DefaultPath() string { return filepath.Join(Dir(), "config.yaml") }
 
+// CustomTypesPath returns the default user-defined value types file path.
+func CustomTypesPath() string { return filepath.Join(Dir(), "customtypes.yaml") }
+
 // DataDir returns the data directory used for saved scan sessions
 // ($XDG_DATA_HOME/firstspark).
 func DataDir() string {

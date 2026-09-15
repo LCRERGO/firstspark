@@ -49,6 +49,18 @@ func (p *Program) Has(name string) bool {
 // Global returns a global value, or nil.
 func (p *Program) Global(name string) Value { return p.globals.get(name) }
 
+// Func returns a global function for direct (non-recovering) calls.
+func (p *Program) Func(name string) (*Function, error) {
+	v := p.globals.get(name)
+	if v.kind != KindFunction {
+		return nil, fmt.Errorf("script: %q is not a function", name)
+	}
+	return v.fn, nil
+}
+
+// Env returns the program's global environment, used with Function.Call.
+func (p *Program) Env() *Env { return p.globals }
+
 // SetGlobal defines a global value.
 func (p *Program) SetGlobal(name string, v Value) { p.globals.setLocal(name, v) }
 

@@ -21,7 +21,7 @@ func (a *App) showSettings() {
 	scale.SetText(strconv.FormatFloat(a.cfg.UI.Scale, 'g', -1, 64))
 	font := widget.NewEntry()
 	font.SetText(strconv.FormatFloat(a.cfg.UI.FontSize, 'g', -1, 64))
-	vt := widget.NewSelect(valueTypeOptions, nil)
+	vt := widget.NewSelect(valueTypeOptions(), nil)
 	vt.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 	writable := widget.NewCheck("Writable only", nil)
 	writable.SetChecked(a.cfg.Scan.WritableOnly)

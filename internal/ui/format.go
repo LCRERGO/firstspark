@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
@@ -19,16 +21,15 @@ var scanTypeOptions = []string{
 	"Unknown initial value",
 }
 
-// valueTypeOptions are Cheat Engine's value type labels.
-var valueTypeOptions = []string{
-	"Byte",
-	"2 Bytes",
-	"4 Bytes",
-	"8 Bytes",
-	"Float",
-	"Double",
-	"Text",
-	"Array of Bytes",
+// valueTypeOptions returns the display labels of every registered type:
+// built-ins first, then user-defined types.
+func valueTypeOptions() []string {
+	types := scan.Types()
+	out := make([]string, 0, len(types))
+	for _, t := range types {
+		out = append(out, t.Label)
+	}
+	return out
 }
 
 func parseCEScanType(s string) scan.ScanMode {
@@ -52,49 +53,25 @@ func parseCEScanType(s string) scan.ScanMode {
 	}
 }
 
-func parseCEValueType(s string) scan.ValueType {
-	switch s {
-	case "Byte":
-		return scan.TypeByte
-	case "2 Bytes":
-		return scan.TypeWord
-	case "8 Bytes":
-		return scan.TypeQword
-	case "Float":
-		return scan.TypeFloat
-	case "Double":
-		return scan.TypeDouble
-	case "Text":
-		return scan.TypeString
-	case "Array of Bytes":
-		return scan.TypeAOB
-	default:
-		return scan.TypeDword
+// parseCEValueType maps a display label to a registered type ID.
+func parseCEValueType(label string) scan.ValueType {
+	if t, ok := scan.LookupType(label); ok {
+		return t.ID
 	}
+	for _, t := range scan.Types() {
+		if strings.EqualFold(t.Label, label) {
+			return t.ID
+		}
+	}
+	return scan.TypeDword
 }
 
-// ceValueTypeLabel maps a value type to its Cheat Engine label.
+// ceValueTypeLabel maps a value type to its display label.
 func ceValueTypeLabel(t scan.ValueType) string {
-	switch t {
-	case scan.TypeByte:
-		return "Byte"
-	case scan.TypeWord:
-		return "2 Bytes"
-	case scan.TypeDword:
-		return "4 Bytes"
-	case scan.TypeQword:
-		return "8 Bytes"
-	case scan.TypeFloat:
-		return "Float"
-	case scan.TypeDouble:
-		return "Double"
-	case scan.TypeString:
-		return "Text"
-	case scan.TypeAOB:
-		return "Array of Bytes"
-	default:
-		return "4 Bytes"
+	if d := scan.TypeByID(t); d != nil {
+		return d.Label
 	}
+	return "4 Bytes"
 }
 
 // modeNeedsValue reports whether a scan mode consumes the scan value.

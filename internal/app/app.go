@@ -11,6 +11,7 @@ import (
 	"github.com/LCRERGO/firstspark/internal/ui"
 	"github.com/LCRERGO/firstspark/pkg/cheattable"
 	"github.com/LCRERGO/firstspark/pkg/config"
+	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -46,6 +47,9 @@ func Run(args []string) error {
 
 	if *showList {
 		return listProcesses()
+	}
+	if _, err := customtype.LoadAndRegister(config.CustomTypesPath()); err != nil {
+		return err
 	}
 	if *pid > 0 {
 		return headlessScan(cfg, *pid, *typ, *mode, *value, *compare, *next, *export)

@@ -316,7 +316,7 @@ func (a *App) writeValue(addr uint64, v scan.Value) error {
 func (a *App) addAddressDialog() {
 	addr := widget.NewEntry()
 	addr.SetPlaceHolder("0x1234 or 1234 (hex)")
-	typ := widget.NewSelect(valueTypeOptions, nil)
+	typ := widget.NewSelect(valueTypeOptions(), nil)
 	typ.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 	desc := widget.NewEntry()
 	val := widget.NewEntry()
