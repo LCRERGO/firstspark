@@ -27,11 +27,14 @@ import (
 
 // tableEntry is one row of the cheat table.
 type tableEntry struct {
-	addr  uint64
-	typ   scan.ValueType
-	desc  string
-	value scan.Value
-	orig  scan.Value
+	addr    uint64
+	typ     scan.ValueType
+	desc    string
+	value   scan.Value
+	orig    scan.Value
+	pointer *pointerChain
+	display displayFormat
+	hotkey  fyne.KeyName
 }
 
 // App is the root UI state.
@@ -320,6 +323,7 @@ func (a *App) isFrozen(addr uint64) bool {
 func (a *App) freezeLoop() {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
+	tick := 0
 	for {
 		select {
 		case <-a.stop:
@@ -333,6 +337,14 @@ func (a *App) freezeLoop() {
 				_ = a.proc.Write(addr, v.Raw)
 			}
 			a.mu.Unlock()
+			tick++
+			if tick%10 == 0 {
+				fyne.Do(func() {
+					if a.resolvePointers() && a.table != nil {
+						a.table.Refresh()
+					}
+				})
+			}
 		}
 	}
 }

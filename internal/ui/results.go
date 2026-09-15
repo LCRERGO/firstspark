@@ -15,10 +15,79 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
 var cheatHeaders = []string{"Active", "Description", "Address", "Type", "Value"}
+
+// displayFormat selects how a cheat-table value is rendered.
+type displayFormat int
+
+const (
+	displayDefault displayFormat = iota
+	displayHex
+	displayBinary
+)
+
+// pointerChain resolves an address as [[base]+off0]+off1...
+type pointerChain struct {
+	base    uint64
+	offsets []int64
+}
+
+func resolvePointer(p *mem.Process, c *pointerChain) (uint64, error) {
+	if len(c.offsets) == 0 {
+		return c.base, nil
+	}
+	addr, err := p.ReadUint64(c.base)
+	if err != nil {
+		return 0, err
+	}
+	addr += uint64(c.offsets[0])
+	for i := 1; i < len(c.offsets); i++ {
+		addr, err = p.ReadUint64(addr)
+		if err != nil {
+			return 0, err
+		}
+		addr += uint64(c.offsets[i])
+	}
+	return addr, nil
+}
+
+// formatEntryValue renders a value using the entry's display format.
+func (a *App) formatEntryValue(e tableEntry) string {
+	switch e.display {
+	case displayHex:
+		return hexOf(e.value)
+	case displayBinary:
+		return binaryOf(e.value)
+	default:
+		return e.value.String()
+	}
+}
+
+func hexOf(v scan.Value) string {
+	switch len(v.Raw) {
+	case 1, 2, 4, 8:
+		return fmt.Sprintf("0x%X", v.Uint64())
+	default:
+		parts := make([]string, len(v.Raw))
+		for i, b := range v.Raw {
+			parts[i] = fmt.Sprintf("%02X", b)
+		}
+		return strings.Join(parts, " ")
+	}
+}
+
+func binaryOf(v scan.Value) string {
+	switch len(v.Raw) {
+	case 1, 2, 4, 8:
+		return strconv.FormatUint(v.Uint64(), 2)
+	default:
+		return hexOf(v)
+	}
+}
 
 func (a *App) buildFoundList() {
 	a.foundList = widget.NewList(
@@ -153,7 +222,7 @@ func (a *App) cellText(id widget.TableCellID) string {
 	case 3:
 		return ceValueTypeLabel(e.typ)
 	case 4:
-		return e.value.String()
+		return a.formatEntryValue(e)
 	default:
 		return ""
 	}
@@ -184,6 +253,11 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 		fyne.NewMenuItem("Browse this memory region", func() { a.browseRow(row) }),
 		fyne.NewMenuItem("Disassemble this memory region", func() { a.disassembleRow(row) }),
 		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Show as decimal", func() { a.setDisplay(row, displayDefault) }),
+		fyne.NewMenuItem("Show as hexadecimal", func() { a.setDisplay(row, displayHex) }),
+		fyne.NewMenuItem("Show as binary", func() { a.setDisplay(row, displayBinary) }),
+		fyne.NewMenuItem("Assign Hotkey...", func() { a.assignHotkey(row) }),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Delete this record", func() { a.deleteRow(row) }),
 	)
 	widget.ShowPopUpMenuAtRelativePosition(menu, a.win.Canvas(), rel, anchor)
@@ -211,6 +285,105 @@ func (a *App) deleteRow(row int) {
 	a.entries = append(a.entries[:row], a.entries[row+1:]...)
 	a.tableSel = -1
 	a.table.Refresh()
+}
+
+func (a *App) setDisplay(row int, d displayFormat) {
+	if row < 0 || row >= len(a.entries) {
+		return
+	}
+	a.entries[row].display = d
+	a.table.Refresh()
+}
+
+// resolvePointers recomputes pointer-entry addresses and values. It must run
+// on the UI goroutine because it touches the entry slice.
+func (a *App) resolvePointers() bool {
+	if a.proc == nil {
+		return false
+	}
+	changed := false
+	for i := range a.entries {
+		e := &a.entries[i]
+		if e.pointer == nil {
+			continue
+		}
+		addr, err := resolvePointer(a.proc, e.pointer)
+		if err != nil {
+			continue
+		}
+		e.addr = addr
+		if w := e.typ.Size(); w > 0 {
+			if raw, err := a.proc.Read(addr, w); err == nil {
+				e.value = scan.NewValue(e.typ, raw)
+			}
+		}
+		changed = true
+	}
+	return changed
+}
+
+func (a *App) assignHotkey(row int) {
+	if row < 0 || row >= len(a.entries) {
+		a.setStatus("select a cheat table row first")
+		return
+	}
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("F1..F12 or a letter")
+	d := dialog.NewForm("Assign Hotkey", "Assign", "Cancel",
+		[]*widget.FormItem{widget.NewFormItem("Key", entry)},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			key, err := parseHotkey(entry.Text)
+			if err != nil {
+				a.fail(err)
+				return
+			}
+			a.entries[row].hotkey = key
+			r := row
+			sc := &desktop.CustomShortcut{KeyName: key}
+			if !strings.HasPrefix(string(key), "F") {
+				sc.Modifier = fyne.KeyModifierControl | fyne.KeyModifierAlt
+			}
+			a.win.Canvas().AddShortcut(sc, func(fyne.Shortcut) { a.toggleFreezeRow(r) })
+			a.setStatus("hotkey %s assigned", key)
+		}, a.win)
+	d.Resize(fyne.NewSize(340, 160))
+	d.Show()
+}
+
+func parseHotkey(s string) (fyne.KeyName, error) {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	if len(s) == 1 && s[0] >= 'A' && s[0] <= 'Z' {
+		return fyne.KeyName(s), nil
+	}
+	if strings.HasPrefix(s, "F") {
+		if n, err := strconv.Atoi(s[1:]); err == nil && n >= 1 && n <= 12 {
+			return fyne.KeyName(s), nil
+		}
+	}
+	return "", fmt.Errorf("unsupported hotkey %q (use F1..F12 or a letter)", s)
+}
+
+func parseOffsets(base uint64, s string) (*pointerChain, error) {
+	var offsets []int64
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		digits := strings.TrimPrefix(strings.TrimPrefix(part, "0x"), "0X")
+		n, err := strconv.ParseInt(digits, 16, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid pointer offset %q", part)
+		}
+		offsets = append(offsets, n)
+	}
+	if len(offsets) == 0 {
+		return nil, nil
+	}
+	return &pointerChain{base: base, offsets: offsets}, nil
 }
 
 func (a *App) addResultToTable(i int) {
@@ -321,9 +494,12 @@ func (a *App) addAddressDialog() {
 	desc := widget.NewEntry()
 	val := widget.NewEntry()
 	val.SetPlaceHolder("optional")
+	offs := widget.NewEntry()
+	offs.SetPlaceHolder("optional pointer offsets, e.g. 0x10, 0x20")
 	d := dialog.NewForm("Add Address Manually", "Add", "Cancel",
 		[]*widget.FormItem{
 			widget.NewFormItem("Address", addr),
+			widget.NewFormItem("Pointer Offsets", offs),
 			widget.NewFormItem("Type", typ),
 			widget.NewFormItem("Description", desc),
 			widget.NewFormItem("Value", val),
@@ -350,10 +526,18 @@ func (a *App) addAddressDialog() {
 					v = scan.NewValue(t, raw)
 				}
 			}
-			a.entries = append(a.entries, tableEntry{addr: target, typ: t, desc: desc.Text, value: v, orig: v})
+			var pc *pointerChain
+			if strings.TrimSpace(offs.Text) != "" {
+				pc, err = parseOffsets(target, offs.Text)
+				if err != nil {
+					a.fail(err)
+					return
+				}
+			}
+			a.entries = append(a.entries, tableEntry{addr: target, typ: t, desc: desc.Text, value: v, orig: v, pointer: pc})
 			a.table.Refresh()
 		}, a.win)
-	d.Resize(fyne.NewSize(420, 320))
+	d.Resize(fyne.NewSize(440, 420))
 	d.Show()
 }
 
