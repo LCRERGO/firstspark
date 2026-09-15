@@ -36,6 +36,9 @@ Firstspark is split into a UI-agnostic engine (`pkg/...`) and thin front-ends
   scaling handler with the assembler, and installs it through `pkg/inject`.
 - `pkg/config` — YAML configuration under the XDG directories.
 - `pkg/cheattable` — Cheat Engine `.CT` (XML) and JSON session import/export.
+- `pkg/pointerscan` — an N-level pointer scanner over a pointermap (a reverse
+  index of pointer values to their addresses, with module-backed addresses
+  tagged static). Chains can be saved as `.ptr` files (ADR 0015).
 - `pkg/combinator` — hand-rolled parser combinators, shared by `pkg/script`
   and (later) the Auto Assembler.
 - `pkg/script` — the Lua 5.1.4-compatible subset used for user-defined value

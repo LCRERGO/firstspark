@@ -2,7 +2,25 @@
 
 package ui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/LCRERGO/firstspark/pkg/pointerscan"
+)
+
+func TestChainToPointer(t *testing.T) {
+	c := pointerscan.Chain{Module: "lib.so", Base: 0x1000, Offsets: []uint64{0x10, 0, 0x10}}
+	pc, ok := chainToPointer(c)
+	if !ok {
+		t.Fatal("conversion failed")
+	}
+	if pc.base != 0x1010 || len(pc.offsets) != 2 || pc.offsets[0] != 0 || pc.offsets[1] != 0x10 {
+		t.Fatalf("pointer = %+v", pc)
+	}
+	if _, ok := chainToPointer(pointerscan.Chain{}); ok {
+		t.Fatal("expected an empty chain to be rejected")
+	}
+}
 
 func TestParseOffsets(t *testing.T) {
 	pc, err := parseOffsets(0x1000, "0x10, 0x20")

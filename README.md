@@ -19,7 +19,7 @@ or GDB runtime dependency.
 | Undo scan | implemented |
 | User-defined value types (Lua 5.1 scripts) | implemented |
 | Cheat table: pointer records, hex/binary display, hotkeys | implemented |
-| Pointer scanner (N-level) | planned |
+| Pointer scanner (N-level) | implemented |
 | Hex viewer/editor | partial (viewer + byte-level read/write API) |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
 | Breakpoints, single-step, registers | implemented |
