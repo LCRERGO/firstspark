@@ -2,6 +2,7 @@ package scan
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -63,7 +64,7 @@ func TestExactScanFindsKnownValue(t *testing.T) {
 	}
 
 	session := NewSession(proc, opts)
-	if err := session.First(); err != nil {
+	if err := session.First(context.Background(), nil); err != nil {
 		t.Fatalf("First: %v", err)
 	}
 	if session.Count() == 0 {

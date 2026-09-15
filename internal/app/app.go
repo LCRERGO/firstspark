@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -130,7 +131,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 	}
 
 	session := scan.NewSession(proc, opts)
-	if err := session.First(); err != nil {
+	if err := session.First(context.Background(), nil); err != nil {
 		return err
 	}
 	fmt.Printf("first scan: %d results\n", session.Count())
@@ -160,7 +161,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 			}
 			session.SetValue2(v2)
 		}
-		if err := session.Next(); err != nil {
+		if err := session.Next(context.Background(), nil); err != nil {
 			return err
 		}
 		fmt.Printf("next scan (%s): %d results\n", nm, session.Count())

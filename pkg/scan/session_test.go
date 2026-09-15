@@ -1,6 +1,42 @@
 package scan
 
-import "testing"
+import (
+	"sync/atomic"
+	"testing"
+
+	"github.com/LCRERGO/firstspark/pkg/mem"
+)
+
+func TestCapped(t *testing.T) {
+	s := &Session{opts: Options{MaxResults: 2}}
+	var m int64
+	if s.capped(&m) {
+		t.Fatal("should not cap at zero matches")
+	}
+	atomic.AddInt64(&m, 2)
+	if !s.capped(&m) {
+		t.Fatal("should cap at the limit")
+	}
+}
+
+func TestRegionScope(t *testing.T) {
+	s := &Session{opts: Options{Scope: ScopeHeapStackExecBSS}}
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"[heap]", true},
+		{"[stack]", true},
+		{"", true},
+		{"/usr/lib/libc.so", false},
+		{"/app/game", true},
+	}
+	for _, c := range cases {
+		if got := s.regionInScope(mem.Region{Path: c.path}, "/app/game"); got != c.want {
+			t.Errorf("regionInScope(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
 
 func TestMatchBetween(t *testing.T) {
 	s := &Session{opts: Options{

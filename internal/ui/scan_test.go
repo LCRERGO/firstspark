@@ -51,6 +51,24 @@ func TestScanControlsFollowState(t *testing.T) {
 	}
 }
 
+func TestHumanBytesAndScope(t *testing.T) {
+	if got := humanBytes(512); got != "512 B" {
+		t.Fatalf("humanBytes(512) = %q", got)
+	}
+	if got := humanBytes(2048); got != "2.0 KiB" {
+		t.Fatalf("humanBytes(2048) = %q", got)
+	}
+	if parseScope("All readable") != scan.ScopeAllReadable {
+		t.Fatal("parseScope(All readable)")
+	}
+	if parseScope("Heap + stack + exec + BSS") != scan.ScopeHeapStackExecBSS {
+		t.Fatal("parseScope(Heap...)")
+	}
+	if parseScope("All writable") != scan.ScopeAllWritable {
+		t.Fatal("parseScope(All writable)")
+	}
+}
+
 func TestValuePlaceholder(t *testing.T) {
 	cases := map[scan.ScanMode]string{
 		scan.ModeBetween:     "lower bound",

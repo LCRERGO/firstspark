@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -91,7 +92,13 @@ type App struct {
 	scanBtn      *widget.Button
 	nextBtn      *widget.Button
 	undoBtn      *widget.Button
+	stopBtn      *widget.Button
 	value2Row    *fyne.Container
+	scanProgress *widget.ProgressBar
+	scanStatus   *widget.Label
+	scopeSelect  *widget.Select
+	scanCancel   context.CancelFunc
+	scanning     bool
 
 	openProcAction *widget.ToolbarAction
 	loadAction     *widget.ToolbarAction
@@ -296,6 +303,24 @@ func (a *App) toolbar() *widget.Toolbar {
 func (a *App) updateScanControls() {
 	mode := parseCEScanType(a.scanType.Selected)
 
+	if a.scanning {
+		if a.scanBtn != nil {
+			setEnabled(a.scanBtn, false)
+		}
+		if a.nextBtn != nil {
+			setEnabled(a.nextBtn, false)
+		}
+		if a.undoBtn != nil {
+			setEnabled(a.undoBtn, false)
+		}
+		if a.stopBtn != nil {
+			setEnabled(a.stopBtn, true)
+		}
+		return
+	}
+	if a.stopBtn != nil {
+		setEnabled(a.stopBtn, false)
+	}
 	if a.scanBtn != nil {
 		setEnabled(a.scanBtn, a.proc != nil)
 	}

@@ -124,6 +124,20 @@ func ParseScanMode(s string) (ScanMode, error) {
 	}
 }
 
+// RegionScope selects which memory regions a scan covers.
+type RegionScope int
+
+const (
+	// ScopeAllWritable scans every readable writable region (Cheat Engine's
+	// default).
+	ScopeAllWritable RegionScope = iota
+	// ScopeHeapStackExecBSS scans the heap, the stack, anonymous mappings and
+	// the main executable (scanmem's default).
+	ScopeHeapStackExecBSS
+	// ScopeAllReadable scans every readable region.
+	ScopeAllReadable
+)
+
 // Options controls a scan session.
 type Options struct {
 	Type          ValueType
@@ -134,6 +148,8 @@ type Options struct {
 	WritableOnly  bool
 	Alignment     int
 	SnapshotLimit int64 // maximum bytes captured by an unknown-value snapshot
+	MaxResults    int   // stop after this many matches (0 = unlimited)
+	Scope         RegionScope
 	Epsilon       float64
 	Regions       []mem.Region // optional explicit region set
 }
@@ -147,6 +163,7 @@ func DefaultOptions() Options {
 		WritableOnly:  true,
 		Alignment:     4,
 		SnapshotLimit: 2 << 30,
+		Scope:         ScopeAllWritable,
 		Epsilon:       1e-6,
 	}
 }
