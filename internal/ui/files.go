@@ -70,6 +70,7 @@ func (a *App) applyTable(tbl *cheattable.Table) {
 	a.tableSel = -1
 	a.table.Refresh()
 	a.setStatus("loaded %d entries", len(a.entries))
+	a.updateScanControls()
 }
 
 func (a *App) saveTable() { a.saveTableAs() }

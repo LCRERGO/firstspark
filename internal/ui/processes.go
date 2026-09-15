@@ -291,4 +291,5 @@ func (a *App) selectProcess(idx int) {
 	}
 	a.foundCount.SetText("Found: 0")
 	a.setStatus("selected %s (%d)", p.Name, p.PID)
+	a.updateScanControls()
 }

@@ -15,24 +15,26 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
+// scanPanel mirrors Cheat Engine's scan region: the scan value with a Hex
+// checkbox beside it, a second value for "Value between", the scan and value
+// type dropdowns, the three scan buttons, and the memory scan options.
 func (a *App) scanPanel() fyne.CanvasObject {
+	valueRow := container.NewBorder(nil, nil, nil, a.hexBox, a.valueEntry)
 	form := widget.NewForm(
-		widget.NewFormItem("Scan Value", a.valueEntry),
-		widget.NewFormItem("Upper Bound", a.value2Entry),
+		widget.NewFormItem("Scan Value", valueRow),
+		widget.NewFormItem("and", a.value2Entry),
 		widget.NewFormItem("Scan Type", a.scanType),
 		widget.NewFormItem("Value Type", container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
 		widget.NewFormItem("Compare", a.compareEntry),
 	)
-	buttons := container.NewHBox(
-		widget.NewButton("First Scan", a.firstScan),
-		widget.NewButton("Next Scan", a.nextScan),
-		widget.NewButton("Undo Scan", a.undoScan),
-	)
+	a.scanBtn = widget.NewButton("First Scan", a.firstScan)
+	a.nextBtn = widget.NewButton("Next Scan", a.nextScan)
+	a.undoBtn = widget.NewButton("Undo Scan", a.undoScan)
+	buttons := container.NewHBox(a.scanBtn, a.nextBtn, a.undoBtn)
 	options := widget.NewForm(widget.NewFormItem("Alignment", a.alignEntry))
 	body := container.NewVBox(
 		a.th.heading("Scan", a.th.size+2, a.pal().primary),
 		form,
-		a.hexBox,
 		buttons,
 		widget.NewSeparator(),
 		a.th.heading("Memory Scan Options", a.th.size, a.pal().primary),
@@ -71,6 +73,7 @@ func (a *App) firstScan() {
 	a.session = s
 	a.setResults(s.Results())
 	a.setStatus("first scan: %d results", len(a.results))
+	a.updateScanControls()
 }
 
 func (a *App) nextScan() {
@@ -97,6 +100,7 @@ func (a *App) nextScan() {
 	}
 	a.setResults(a.session.Results())
 	a.setStatus("next scan: %d results", len(a.results))
+	a.updateScanControls()
 }
 
 func (a *App) scanOptions() (scan.Options, error) {
@@ -166,6 +170,7 @@ func (a *App) undoScan() {
 	a.session.Undo()
 	a.setResults(a.session.Results())
 	a.setStatus("undo: %d results", len(a.results))
+	a.updateScanControls()
 }
 
 // valueText returns the scan value, converting a bare hex string to 0x form

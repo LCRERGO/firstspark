@@ -287,6 +287,7 @@ func (a *App) deleteRow(row int) {
 	a.entries = append(a.entries[:row], a.entries[row+1:]...)
 	a.tableSel = -1
 	a.table.Refresh()
+	a.updateScanControls()
 }
 
 func (a *App) setDisplay(row int, d displayFormat) {
@@ -401,6 +402,7 @@ func (a *App) addResultToTable(i int) {
 	a.entries = append(a.entries, tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
 	a.table.Refresh()
 	a.setStatus("added 0x%x to the cheat table", r.Addr)
+	a.updateScanControls()
 }
 
 func (a *App) browseRow(row int) {
@@ -538,6 +540,7 @@ func (a *App) addAddressDialog() {
 			}
 			a.entries = append(a.entries, tableEntry{addr: target, typ: t, desc: desc.Text, value: v, orig: v, pointer: pc})
 			a.table.Refresh()
+			a.updateScanControls()
 		}, a.win)
 	d.Resize(fyne.NewSize(440, 420))
 	d.Show()
@@ -547,6 +550,7 @@ func (a *App) clearTable() {
 	a.entries = nil
 	a.tableSel = -1
 	a.table.Refresh()
+	a.updateScanControls()
 }
 
 func parseAddress(s string) (uint64, error) {

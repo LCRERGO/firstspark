@@ -85,6 +85,18 @@ type App struct {
 	writable     *widget.Check
 	speedhack    *widget.Check
 	alignEntry   *widget.Entry
+	scanBtn      *widget.Button
+	nextBtn      *widget.Button
+	undoBtn      *widget.Button
+
+	openProcAction *widget.ToolbarAction
+	loadAction     *widget.ToolbarAction
+	saveAction     *widget.ToolbarAction
+	saveAsAction   *widget.ToolbarAction
+	memViewAction  *widget.ToolbarAction
+	addAddrAction  *widget.ToolbarAction
+	clearAction    *widget.ToolbarAction
+	settingsAction *widget.ToolbarAction
 
 	dbgWin         fyne.Window
 	dbgSession     *debugger.Session
@@ -192,6 +204,7 @@ func (a *App) build() {
 	a.win.SetMainMenu(a.mainMenu())
 	a.win.SetContent(a.content())
 	a.installShortcuts()
+	a.updateScanControls()
 }
 
 func (a *App) buildWidgets() {
@@ -210,7 +223,7 @@ func (a *App) buildWidgets() {
 	a.compareEntry = widget.NewEntry()
 	a.compareEntry.SetText("==")
 
-	a.scanType = widget.NewSelect(scanTypeOptions, func(string) {})
+	a.scanType = widget.NewSelect(scanTypeOptions, func(string) { a.updateScanControls() })
 	a.scanType.SetSelected("Exact value")
 	a.valueType = widget.NewSelect(valueTypeOptions(), func(label string) {
 		if n := customTypeAlignment(label); n > 0 {
@@ -249,17 +262,80 @@ func (a *App) content() fyne.CanvasObject {
 }
 
 func (a *App) toolbar() *widget.Toolbar {
+	a.openProcAction = widget.NewToolbarAction(theme.ComputerIcon(), a.openProcessList)
+	a.loadAction = widget.NewToolbarAction(theme.FolderOpenIcon(), a.loadTable)
+	a.saveAction = widget.NewToolbarAction(theme.DocumentSaveIcon(), a.saveTable)
+	a.memViewAction = widget.NewToolbarAction(theme.StorageIcon(), a.openMemoryViewer)
+	a.addAddrAction = widget.NewToolbarAction(theme.ContentAddIcon(), a.addAddressDialog)
+	a.clearAction = widget.NewToolbarAction(theme.DeleteIcon(), a.clearTable)
+	a.settingsAction = widget.NewToolbarAction(theme.SettingsIcon(), a.showSettings)
 	return widget.NewToolbar(
-		widget.NewToolbarAction(theme.ComputerIcon(), a.openProcessList),
-		widget.NewToolbarAction(theme.FolderOpenIcon(), a.loadTable),
-		widget.NewToolbarAction(theme.DocumentSaveIcon(), a.saveTable),
+		a.openProcAction,
+		a.loadAction,
+		a.saveAction,
 		widget.NewToolbarSeparator(),
-		widget.NewToolbarAction(theme.StorageIcon(), a.openMemoryViewer),
-		widget.NewToolbarAction(theme.ContentAddIcon(), a.addAddressDialog),
-		widget.NewToolbarAction(theme.DeleteIcon(), a.clearTable),
+		a.memViewAction,
+		a.addAddrAction,
+		a.clearAction,
 		widget.NewToolbarSpacer(),
-		widget.NewToolbarAction(theme.SettingsIcon(), a.showSettings),
+		a.settingsAction,
 	)
+}
+
+// updateScanControls enables only the controls that apply in the current
+// state, mirroring Cheat Engine's blocked buttons.
+func (a *App) updateScanControls() {
+	mode := parseCEScanType(a.scanType.Selected)
+
+	if a.scanBtn != nil {
+		setEnabled(a.scanBtn, a.proc != nil)
+	}
+	if a.nextBtn != nil {
+		setEnabled(a.nextBtn, a.session != nil)
+	}
+	if a.undoBtn != nil {
+		setEnabled(a.undoBtn, a.session != nil && a.session.CanUndo())
+	}
+	if a.valueEntry != nil {
+		setEnabled(a.valueEntry, modeNeedsValue(mode))
+	}
+	if a.value2Entry != nil {
+		setEnabled(a.value2Entry, mode == scan.ModeBetween)
+	}
+	if a.compareEntry != nil {
+		setEnabled(a.compareEntry, mode == scan.ModeExact)
+	}
+
+	hasTable := len(a.entries) > 0
+	setActionEnabled(a.saveAction, hasTable)
+	setActionEnabled(a.saveAsAction, hasTable)
+	setActionEnabled(a.memViewAction, a.proc != nil)
+	setActionEnabled(a.addAddrAction, a.proc != nil)
+	setActionEnabled(a.clearAction, hasTable)
+}
+
+type disableable interface {
+	Disable()
+	Enable()
+}
+
+func setEnabled(w disableable, enabled bool) {
+	if enabled {
+		w.Enable()
+	} else {
+		w.Disable()
+	}
+}
+
+func setActionEnabled(action *widget.ToolbarAction, enabled bool) {
+	if action == nil {
+		return
+	}
+	if enabled {
+		action.Enable()
+	} else {
+		action.Disable()
+	}
 }
 
 func (a *App) mainMenu() *fyne.MainMenu {
