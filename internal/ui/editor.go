@@ -291,6 +291,13 @@ func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
 			return
 		}
 		return
+	case fyne.KeyY:
+		if ctrl {
+			e.snapshot()
+			e.deleteLine()
+			e.refresh()
+		}
+		return
 	case fyne.Key0:
 		if ctrl {
 			e.theme.size = 13
@@ -862,6 +869,21 @@ func (e *codeEditor) pageRows() int {
 		}
 	}
 	return rows
+}
+
+func (e *codeEditor) deleteLine() {
+	if len(e.lines) <= 1 {
+		e.lines = []string{""}
+		e.row, e.col = 0, 0
+		e.clearSel()
+		return
+	}
+	e.lines = append(e.lines[:e.row], e.lines[e.row+1:]...)
+	if e.row >= len(e.lines) {
+		e.row = len(e.lines) - 1
+	}
+	e.col = 0
+	e.clearSel()
 }
 
 func (e *codeEditor) deleteWordBack() {
