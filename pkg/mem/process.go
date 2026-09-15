@@ -14,6 +14,7 @@ import (
 // Process describes a single running process.
 type Process struct {
 	PID     int
+	PPID    int
 	Name    string
 	Cmdline string
 	UID     int
@@ -61,6 +62,9 @@ func Find(pid int) (*Process, error) {
 	if b, err := os.ReadFile(filepath.Join(base, "status")); err == nil {
 		p.UID = parseUID(string(b))
 	}
+	if b, err := os.ReadFile(filepath.Join(base, "stat")); err == nil {
+		p.PPID = parsePPID(string(b))
+	}
 	if link, err := os.Readlink(filepath.Join(base, "exe")); err == nil {
 		p.Exe = link
 	}
@@ -74,6 +78,24 @@ func (p *Process) Exists() bool {
 	}
 	_, err := os.Stat(fmt.Sprintf("/proc/%d", p.PID))
 	return err == nil
+}
+
+// parsePPID extracts the parent pid from /proc/<pid>/stat. The comm field can
+// contain spaces and parentheses, so parsing starts after the last ')'.
+func parsePPID(stat string) int {
+	i := strings.LastIndexByte(stat, ')')
+	if i < 0 {
+		return 0
+	}
+	fields := strings.Fields(stat[i+1:])
+	if len(fields) < 2 {
+		return 0
+	}
+	ppid, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0
+	}
+	return ppid
 }
 
 func parseUID(status string) int {

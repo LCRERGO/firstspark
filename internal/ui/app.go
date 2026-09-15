@@ -54,9 +54,12 @@ type App struct {
 	procSortAsc    bool
 	procHeaderBtns []*widget.Button
 	procFilter     *widget.Entry
+	procTree       *widget.Check
 	procList       *widget.List
 	procWin        fyne.Window
 	processLabel   *tapLabel
+	treeMode       bool
+	expanded       map[int]bool
 
 	users     map[int]string
 	icons     *iconResolver
@@ -178,6 +181,7 @@ func Run(cfg config.Config) error {
 		procSortCol: 0,
 		procSortAsc: true,
 		showIcons:   cfg.UI.ProcessIcons,
+		expanded:    map[int]bool{},
 	}
 	a.icons = newIconResolver()
 	a.fapp = app.NewWithID("com.firstspark.app")

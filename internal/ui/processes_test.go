@@ -5,7 +5,9 @@ package ui
 import (
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/scan"
@@ -22,6 +24,7 @@ func newTestApp(t *testing.T) *App {
 		procSortCol: 0,
 		procSortAsc: true,
 		showIcons:   false,
+		expanded:    map[int]bool{},
 	}
 	a.icons = newIconResolver()
 	a.fapp = test.NewApp()
@@ -44,10 +47,38 @@ func TestProcessListBuildsAndRenders(t *testing.T) {
 	for i := range a.procRows {
 		a.updateProcRow(i, row)
 	}
-	_, name, pid, _ := procRowCells(row)
+	name, pid := procRowLabels(row)
 	if name.Text == "" || pid.Text == "" {
 		t.Fatalf("row not populated: name=%q pid=%q", name.Text, pid.Text)
 	}
+}
+
+func procRowLabels(o fyne.CanvasObject) (*widget.Label, *widget.Label) {
+	row := o.(*fyne.Container)
+	name := row.Objects[3].(*fyne.Container).Objects[0].(*widget.Label)
+	pid := row.Objects[4].(*fyne.Container).Objects[0].(*widget.Label)
+	return name, pid
+}
+
+func TestProcessTreeCollapse(t *testing.T) {
+	a := newTestApp(t)
+	a.treeMode = true
+	a.openProcessList()
+	if len(a.procRows) == 0 {
+		t.Fatal("no tree rows were built")
+	}
+	total := len(a.procRows)
+	for i, r := range a.procRows {
+		if !r.hasKids || !r.expanded {
+			continue
+		}
+		a.toggleTreeRow(i)
+		if len(a.procRows) >= total {
+			t.Fatalf("collapsing should hide descendants: %d -> %d", total, len(a.procRows))
+		}
+		return
+	}
+	t.Skip("no expanded process with children")
 }
 
 func TestProcessSortToggles(t *testing.T) {
