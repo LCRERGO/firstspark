@@ -25,6 +25,7 @@ or GDB runtime dependency.
 | Breakpoints, single-step, registers | implemented |
 | Debugger GUI, hardware watchpoints, find-accesses/writes | implemented |
 | Structure dissect (compare instances, guess fields, follow pointers) | implemented |
+| Auto Assembler (`alloc`, labels, `db`/`dd`, `aobscan`, enable/disable) | implemented |
 | GDB/MI backend | stub (same interface) |
 | Disassembler (pure Go, `x86asm`) | implemented |
 | Assembler (pure-Go Intel syntax, common subset) | implemented |

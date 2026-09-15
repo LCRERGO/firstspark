@@ -36,6 +36,9 @@ Firstspark is split into a UI-agnostic engine (`pkg/...`) and thin front-ends
   scaling handler with the assembler, and installs it through `pkg/inject`.
 - `pkg/config` — YAML configuration under the XDG directories.
 - `pkg/cheattable` — Cheat Engine `.CT` (XML) and JSON session import/export.
+- `pkg/autoasm` — a subset of Cheat Engine's Auto Assembler (`alloc`, `label`,
+  `define`, `db`/`dd`, `aobscan`, `registersymbol`, `[enable]`/`[disable]`),
+  parsed with `pkg/combinator` and assembled with `pkg/asm` (ADR 0018).
 - `pkg/dissect` — compares a region across several instances and guesses a
   field layout, resolving pointer fields (ADR 0017).
 - `pkg/pointerscan` — an N-level pointer scanner over a pointermap (a reverse

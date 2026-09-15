@@ -19,6 +19,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/LCRERGO/firstspark/pkg/asm"
+	"github.com/LCRERGO/firstspark/pkg/autoasm"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
@@ -95,6 +96,11 @@ type App struct {
 	dbgStatus      *widget.Label
 	dbgStop        chan struct{}
 	dbgBreakpoints map[uint64]bool
+
+	asmWin    fyne.Window
+	asmEditor *codeEditor
+	asmStatus *widget.Label
+	asmExec   *autoasm.Executor
 
 	dissectWin       fyne.Window
 	dissectTable     *widget.Table
@@ -277,7 +283,8 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	speed := fyne.NewMenuItem("Speedhack", a.toggleSpeedhack)
 	debuggerItem := fyne.NewMenuItem("Debugger", a.openDebugger)
 	dissectItem := fyne.NewMenuItem("Dissect Data/Structures", a.openDissect)
-	tools := fyne.NewMenu("Tools", debuggerItem, dissectItem, speed)
+	autoasmItem := fyne.NewMenuItem("Auto Assemble", a.openAutoAssemble)
+	tools := fyne.NewMenu("Tools", debuggerItem, dissectItem, autoasmItem, speed)
 
 	about := fyne.NewMenuItem("About", a.showAbout)
 	help := fyne.NewMenu("Help", about)
