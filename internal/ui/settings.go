@@ -107,8 +107,10 @@ func (a *App) saveConfig() {
 
 func (a *App) showAbout() {
 	dialog.ShowInformation("About Firstspark",
-		fmt.Sprintf("Firstspark\n\nA Cheat Engine style memory scanner, debugger and code patcher for Linux.\n\nTheme: %s\nConfiguration: %s",
-			a.cfg.UI.Theme, config.DefaultPath()), a.win)
+		fmt.Sprintf("Firstspark\n\nA Cheat Engine style memory scanner, debugger and code patcher for Linux.\n\n"+
+			"Released under the MIT License.\nCopyright (c) 2026 Lucas Cruz dos Reis.\n\n"+
+			"Configuration: %s",
+			config.DefaultPath()), a.win)
 }
 
 func titleCase(s string) string {
