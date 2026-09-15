@@ -246,7 +246,8 @@ func (a *App) mainMenu() *fyne.MainMenu {
 
 	addAddr := fyne.NewMenuItem("Add Address Manually", a.addAddressDialog)
 	clear := fyne.NewMenuItem("Clear List", a.clearTable)
-	table := fyne.NewMenu("Table", addAddr, clear)
+	custom := fyne.NewMenuItem("Custom Types...", a.showCustomTypes)
+	table := fyne.NewMenu("Table", addAddr, clear, fyne.NewMenuItemSeparator(), custom)
 
 	speed := fyne.NewMenuItem("Speedhack", a.toggleSpeedhack)
 	tools := fyne.NewMenu("Tools", speed)

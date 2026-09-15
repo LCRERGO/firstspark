@@ -14,8 +14,11 @@ or GDB runtime dependency.
 | --- | --- |
 | Process listing and region enumeration (`/proc`) | implemented |
 | Cross-process read/write (`process_vm_readv`/`writev`) | implemented |
-| Memory scanner: byte/word/dword/qword/float/double/string/AOB | implemented |
-| Scan modes: exact, unknown initial, changed, unchanged, increased, decreased, increased-by, decreased-by | implemented |
+| Memory scanner: byte/word/dword/qword/float/double/string/AOB/binary/all | implemented |
+| Scan modes: exact, unknown initial, changed, unchanged, increased, decreased, increased-by, decreased-by, value-between | implemented |
+| Undo scan | implemented |
+| User-defined value types (Lua 5.1 scripts) | implemented |
+| Cheat table: pointer records, hex/binary display, hotkeys | implemented |
 | Pointer scanner (N-level) | planned |
 | Hex viewer/editor | partial (viewer + byte-level read/write API) |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
