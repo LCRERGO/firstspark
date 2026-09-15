@@ -182,6 +182,7 @@ func Run(cfg config.Config) error {
 		procSortAsc: true,
 		showIcons:   cfg.UI.ProcessIcons,
 		expanded:    map[int]bool{},
+		treeMode:    true,
 	}
 	a.icons = newIconResolver()
 	a.fapp = app.NewWithID("com.firstspark.app")

@@ -85,6 +85,7 @@ func (a *App) buildProcessList() {
 		a.treeMode = on
 		a.applyFilter()
 	})
+	a.procTree.SetChecked(a.treeMode)
 
 	a.procList = widget.NewList(
 		func() int { return len(a.procRows) },

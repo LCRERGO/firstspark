@@ -25,6 +25,7 @@ func newTestApp(t *testing.T) *App {
 		procSortAsc: true,
 		showIcons:   false,
 		expanded:    map[int]bool{},
+		treeMode:    true,
 	}
 	a.icons = newIconResolver()
 	a.fapp = test.NewApp()
@@ -83,6 +84,7 @@ func TestProcessTreeCollapse(t *testing.T) {
 
 func TestProcessSortToggles(t *testing.T) {
 	a := newTestApp(t)
+	a.treeMode = false // exercise the flat, globally sorted list
 	a.openProcessList()
 	if len(a.procRows) < 2 {
 		t.Skip("not enough processes to test sorting")

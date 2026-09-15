@@ -15,13 +15,14 @@ nodes.
 
 - `pkg/mem.Process` gains `PPID`, parsed from `/proc/<pid>/stat` (after the last
   `)` so the `comm` field's spaces and parentheses do not confuse the parser).
-- The Process List window gains a **Tree** checkbox. In tree mode the list is
-  the process hierarchy: children are indented under their parent and a
-  disclosure triangle (`▸`/`▾`) collapses or expands a node. Siblings sort by
-  the active column and direction; filtering keeps every match and its
-  ancestors so matches retain their context.
+- The Process List window gains a **Tree** checkbox, **checked by default**, so
+  the tree is the default view. In tree mode the list is the process hierarchy:
+  children are indented under their parent and a disclosure triangle (`▸`/`▾`)
+  collapses or expands a node. Siblings sort by the active column and
+  direction; filtering keeps every match and its ancestors so matches retain
+  their context.
 - Nodes default to expanded and expansion state is kept per session in memory;
-  it is not persisted. Flat mode is unchanged.
+  it is not persisted. Clearing the checkbox gives the flat list.
 
 ## Consequences
 
