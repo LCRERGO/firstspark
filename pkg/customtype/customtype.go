@@ -88,12 +88,17 @@ func Register(def Definition) (*scan.Type, error) {
 	}
 	writeFn, _ := prog.Func("value_to_bytes")
 
+	alignment := def.Alignment
+	if alignment <= 0 {
+		alignment = def.Size
+	}
 	t := &scan.Type{
-		ID:    scan.NextTypeID(),
-		Name:  strings.ToLower(name),
-		Label: name,
-		Size:  def.Size,
-		Kind:  kind,
+		ID:        scan.NextTypeID(),
+		Name:      strings.ToLower(name),
+		Label:     name,
+		Size:      def.Size,
+		Alignment: alignment,
+		Kind:      kind,
 	}
 	t.Format = func(v scan.Value) string { return formatValue(prog, readFn, kind, v) }
 	t.Text = func(v scan.Value) string { return readString(prog, readFn, v) }

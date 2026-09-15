@@ -102,6 +102,22 @@ type App struct {
 	asmStatus *widget.Label
 	asmExec   *autoasm.Executor
 
+	ctWin       fyne.Window
+	ctList      *widget.List
+	ctDefs      []customtype.Definition
+	ctSel       int
+	ctID        scan.ValueType
+	ctName      *widget.Entry
+	ctSize      *widget.Entry
+	ctKind      *widget.Select
+	ctAlign     *widget.Entry
+	ctDesc      *widget.Entry
+	ctEditor    *codeEditor
+	ctStatus    *widget.Label
+	ctTestBytes *widget.Entry
+	ctTestAddr  *widget.Entry
+	ctTestOut   *widget.Label
+
 	dissectWin       fyne.Window
 	dissectTable     *widget.Table
 	dissectFields    []dissect.Field
@@ -195,7 +211,11 @@ func (a *App) buildWidgets() {
 
 	a.scanType = widget.NewSelect(scanTypeOptions, func(string) {})
 	a.scanType.SetSelected("Exact value")
-	a.valueType = widget.NewSelect(valueTypeOptions(), func(string) {})
+	a.valueType = widget.NewSelect(valueTypeOptions(), func(label string) {
+		if n := customTypeAlignment(label); n > 0 {
+			a.alignEntry.SetText(strconv.Itoa(n))
+		}
+	})
 	a.valueType.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 
 	a.hexBox = widget.NewCheck("Hex", func(bool) {})

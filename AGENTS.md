@@ -82,3 +82,5 @@ high-level picture.
 - `ui.scale` is applied through `FYNE_SCALE` at startup only (Fyne has no
   runtime scale setter), so a scale change takes effect on the next launch.
 - Process icons are resolved asynchronously and cached; see ADR 0011.
+- Custom value types are documented in `docs/custom-types.md`; edit them from
+  the manager (the "…" button beside the Value Type dropdown).

@@ -92,6 +92,11 @@ Settings are read from `$XDG_CONFIG_HOME/firstspark/config.yaml`; see
 [`configs/config.yaml`](configs/config.yaml) for the defaults. Saved scan
 sessions are written to `$XDG_DATA_HOME/firstspark/`.
 
+User-defined value types live in `$XDG_CONFIG_HOME/firstspark/customtypes.yaml`
+and are edited from **Table → Custom Types** (or the "…" button beside the
+Value Type dropdown). See [`docs/custom-types.md`](docs/custom-types.md) for the
+script syntax.
+
 ## Architecture
 
 ```

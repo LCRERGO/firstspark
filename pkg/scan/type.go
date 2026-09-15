@@ -31,18 +31,19 @@ const (
 // pkg/customtype. The ValueType enum remains as the stable identifier used by
 // Cheat Engine tables.
 type Type struct {
-	ID       ValueType
-	Name     string
-	Label    string
-	Size     int
-	Variable bool
-	Kind     Kind
-	Parse    func(input string) (Value, error)
-	Format   func(v Value) string
-	Encode   func(n int64) []byte
-	Int64    func(v Value) int64
-	Numeric  func(v Value) float64
-	Text     func(v Value) string
+	ID        ValueType
+	Name      string
+	Label     string
+	Size      int
+	Variable  bool
+	Alignment int
+	Kind      Kind
+	Parse     func(input string) (Value, error)
+	Format    func(v Value) string
+	Encode    func(n int64) []byte
+	Int64     func(v Value) int64
+	Numeric   func(v Value) float64
+	Text      func(v Value) string
 }
 
 var nextCustomID ValueType = 100
@@ -75,6 +76,16 @@ func TypeByID(id ValueType) *Type {
 	typeMu.RLock()
 	defer typeMu.RUnlock()
 	return typesByID[id]
+}
+
+// UnregisterType removes a type from the registry.
+func UnregisterType(id ValueType) {
+	typeMu.Lock()
+	defer typeMu.Unlock()
+	if t, ok := typesByID[id]; ok {
+		delete(typesByName, strings.ToLower(t.Name))
+		delete(typesByID, id)
+	}
 }
 
 // LookupType finds a registered type by name (case-insensitive).

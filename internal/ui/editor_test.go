@@ -36,3 +36,41 @@ func TestCodeEditorHighlighting(t *testing.T) {
 	e.SetText("local x = 1")
 	e.applyStyles()
 }
+
+func TestCodeEditorSelectionAndComment(t *testing.T) {
+	e := newCodeEditor(nil)
+	e.SetText("local x = 1\nlocal y = 2")
+	e.selectAll()
+	if got := e.selectedText(); got != "local x = 1\nlocal y = 2" {
+		t.Fatalf("selection = %q", got)
+	}
+	e.ToggleComment()
+	if e.lines[0] != "--local x = 1" || e.lines[1] != "--local y = 2" {
+		t.Fatalf("commented = %q", e.lines)
+	}
+	e.ToggleComment()
+	if e.lines[0] != "local x = 1" {
+		t.Fatalf("uncommented = %q", e.lines[0])
+	}
+}
+
+func TestCodeEditorFindAndReplace(t *testing.T) {
+	e := newCodeEditor(nil)
+	e.SetText("alpha beta gamma")
+	e.findEntry.SetText("beta")
+	e.findNext()
+	if got := e.selectedText(); got != "beta" {
+		t.Fatalf("found %q", got)
+	}
+	e.replEntry.SetText("BETA")
+	e.replaceOne()
+	if e.Text() != "alpha BETA gamma" {
+		t.Fatalf("text = %q", e.Text())
+	}
+	e.findEntry.SetText("a")
+	e.replEntry.SetText("A")
+	e.replaceAll()
+	if e.Text() != "AlphA BETA gAmmA" {
+		t.Fatalf("replace all = %q", e.Text())
+	}
+}

@@ -43,6 +43,29 @@ dealloc(newmem)`
 	}
 }
 
+func TestTokenizeAutoAssembler(t *testing.T) {
+	toks := Tokenize("[ENABLE]\nalloc(newmem, 1024)\nlabel(x)\nnewmem:\ndb 90 // note\nmov eax, 1")
+	kinds := map[string]TokenKind{}
+	for _, tok := range toks {
+		kinds[tok.Text] = tok.Kind
+	}
+	if kinds["[ENABLE]"] != TokenSection {
+		t.Fatalf("section: %+v", kinds)
+	}
+	if kinds["alloc"] != TokenDirective || kinds["db"] != TokenDirective {
+		t.Fatalf("directives: %+v", kinds)
+	}
+	if kinds["newmem"] != TokenLabel {
+		t.Fatalf("label: %+v", kinds)
+	}
+	if kinds["// note"] != TokenComment {
+		t.Fatalf("comment: %+v", kinds)
+	}
+	if kinds["1024"] != TokenNumber {
+		t.Fatalf("number: %+v", kinds)
+	}
+}
+
 func TestAssembleDataLabelsAndInstructions(t *testing.T) {
 	s := &Section{Enable: true, Items: []Item{
 		{Kind: KindData, Data: []byte{0x90, 0x90}},

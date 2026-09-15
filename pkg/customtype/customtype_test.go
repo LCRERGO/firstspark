@@ -38,6 +38,24 @@ func TestRegisterAndRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAlignmentDefaultsToSize(t *testing.T) {
+	const firstByte = `function bytes_to_value(bytes) return bytes[1] end`
+	typ, err := Register(Definition{Name: "Aligned8", Size: 8, Kind: "int", Alignment: 8, Script: firstByte})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if got := scan.TypeByID(typ.ID).Alignment; got != 8 {
+		t.Fatalf("alignment = %d", got)
+	}
+	typ2, err := Register(Definition{Name: "AlignedDefault", Size: 3, Kind: "int", Script: firstByte})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if got := scan.TypeByID(typ2.ID).Alignment; got != 3 {
+		t.Fatalf("default alignment = %d", got)
+	}
+}
+
 func TestReadOnlyType(t *testing.T) {
 	typ, err := Register(Definition{
 		Name: "ReadOnly", Size: 2, Kind: "int",

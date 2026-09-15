@@ -20,7 +20,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		widget.NewFormItem("Scan Value", a.valueEntry),
 		widget.NewFormItem("Upper Bound", a.value2Entry),
 		widget.NewFormItem("Scan Type", a.scanType),
-		widget.NewFormItem("Value Type", a.valueType),
+		widget.NewFormItem("Value Type", container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
 		widget.NewFormItem("Compare", a.compareEntry),
 	)
 	buttons := container.NewHBox(
