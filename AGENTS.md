@@ -48,7 +48,12 @@ GUI compile errors. `gofmt -l internal pkg cmd` must be empty.
   (colours/fonts), `processes.go`, `scan.go`, `results.go`, `memory.go`,
   `settings.go`, `files.go`, `format.go`, `icons.go`, `x11.go`.
 - `pkg/...` — the engine: `mem`, `scan`, `asm`, `debugger`, `inject`,
-  `speedhack`, `cheattable`, `config`. Never import `internal/ui` from here.
+  `speedhack`, `cheattable`, `config`, `combinator`, `script`. Never import
+  `internal/ui` from here.
+- `pkg/combinator` — dependency-free parser combinators.
+- `pkg/script` — the in-house Lua 5.1.4-compatible subset used by custom value
+  types; parses with `pkg/combinator` and compiles to Go closures. Pure Go, so
+  it stays in the headless build (ADR 0012).
 
 ## Conventions
 

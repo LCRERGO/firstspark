@@ -36,6 +36,12 @@ Firstspark is split into a UI-agnostic engine (`pkg/...`) and thin front-ends
   scaling handler with the assembler, and installs it through `pkg/inject`.
 - `pkg/config` — YAML configuration under the XDG directories.
 - `pkg/cheattable` — Cheat Engine `.CT` (XML) and JSON session import/export.
+- `pkg/combinator` — hand-rolled parser combinators, shared by `pkg/script`
+  and (later) the Auto Assembler.
+- `pkg/script` — the Lua 5.1.4-compatible subset used for user-defined value
+  types. It parses with `pkg/combinator` and compiles to Go closures so a
+  conversion runs without an interpreter loop. Sandboxed: no `io`/`os`/`debug`,
+  no `require`, metatables, coroutines or `pcall` (ADR 0012).
 
 ## GUI
 
