@@ -86,6 +86,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 	opts.SnapshotLimit = cfg.Scan.SnapshotLimit
 	opts.Epsilon = cfg.Scan.FloatEpsilon
 	opts.WritableOnly = cfg.Scan.WritableOnly
+	opts.MaxResults = cfg.UI.ResultLimit
 
 	if typ == "" {
 		typ = cfg.Scan.ValueType
