@@ -47,10 +47,11 @@ GUI compile errors. `gofmt -l internal pkg cmd` must be empty.
   `ui_stub.go`). Files: `app.go` (state, window, menus, shortcuts), `theme.go`
   (colours/fonts), `processes.go`, `scan.go`, `results.go`, `memory.go`,
   `settings.go`, `files.go`, `format.go`, `icons.go`, `x11.go`,
-  `customtypes.go`, `editor.go`, `pointerscan.go`, `debugger.go`.
+  `customtypes.go`, `editor.go`, `pointerscan.go`, `debugger.go`,
+  `dissect.go`.
 - `pkg/...` — the engine: `mem`, `scan`, `asm`, `debugger`, `inject`,
   `speedhack`, `cheattable`, `config`, `combinator`, `script`, `customtype`,
-  `pointerscan`. Never import `internal/ui` from here.
+  `pointerscan`, `dissect`. Never import `internal/ui` from here.
 - `pkg/combinator` — dependency-free parser combinators.
 - `pkg/script` — the in-house Lua 5.1.4-compatible subset used by custom value
   types; parses with `pkg/combinator` and compiles to Go closures. Pure Go, so

@@ -22,6 +22,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
+	"github.com/LCRERGO/firstspark/pkg/dissect"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -94,6 +95,17 @@ type App struct {
 	dbgStatus      *widget.Label
 	dbgStop        chan struct{}
 	dbgBreakpoints map[uint64]bool
+
+	dissectWin       fyne.Window
+	dissectTable     *widget.Table
+	dissectFields    []dissect.Field
+	dissectBases     []uint64
+	dissectBase      uint64
+	dissectSel       int
+	dissectBaseEntry *widget.Entry
+	dissectSizeEntry *widget.Entry
+	dissectInstEntry *widget.Entry
+	dissectStatus    *widget.Label
 
 	memWin       fyne.Window
 	hexAddr      uint64
@@ -264,7 +276,8 @@ func (a *App) mainMenu() *fyne.MainMenu {
 
 	speed := fyne.NewMenuItem("Speedhack", a.toggleSpeedhack)
 	debuggerItem := fyne.NewMenuItem("Debugger", a.openDebugger)
-	tools := fyne.NewMenu("Tools", debuggerItem, speed)
+	dissectItem := fyne.NewMenuItem("Dissect Data/Structures", a.openDissect)
+	tools := fyne.NewMenu("Tools", debuggerItem, dissectItem, speed)
 
 	about := fyne.NewMenuItem("About", a.showAbout)
 	help := fyne.NewMenu("Help", about)

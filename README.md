@@ -24,6 +24,7 @@ or GDB runtime dependency.
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
 | Breakpoints, single-step, registers | implemented |
 | Debugger GUI, hardware watchpoints, find-accesses/writes | implemented |
+| Structure dissect (compare instances, guess fields, follow pointers) | implemented |
 | GDB/MI backend | stub (same interface) |
 | Disassembler (pure Go, `x86asm`) | implemented |
 | Assembler (pure-Go Intel syntax, common subset) | implemented |
