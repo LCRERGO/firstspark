@@ -139,7 +139,7 @@ func (a *App) upperText() string {
 		return s
 	}
 	switch parseCEValueType(a.valueType.Selected) {
-	case scan.TypeFloat, scan.TypeDouble, scan.TypeString, scan.TypeAOB:
+	case scan.TypeFloat, scan.TypeDouble, scan.TypeString, scan.TypeAOB, scan.TypeBinary:
 		return s
 	}
 	if s == "" {
@@ -176,7 +176,7 @@ func (a *App) valueText() string {
 		return s
 	}
 	switch parseCEValueType(a.valueType.Selected) {
-	case scan.TypeFloat, scan.TypeDouble, scan.TypeString, scan.TypeAOB:
+	case scan.TypeFloat, scan.TypeDouble, scan.TypeString, scan.TypeAOB, scan.TypeBinary:
 		return s
 	}
 	if s == "" {

@@ -154,9 +154,7 @@ func DefaultOptions() Options {
 // width returns the number of bytes a single candidate occupies.
 func (o Options) width() int {
 	switch o.Type {
-	case TypeString:
-		return len(o.Value.Raw)
-	case TypeAOB:
+	case TypeString, TypeAOB, TypeBinary:
 		return len(o.Value.Raw)
 	default:
 		return o.Type.Size()

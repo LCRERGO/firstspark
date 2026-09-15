@@ -255,7 +255,11 @@ func (s *Session) consider(addr uint64, raw []byte) error {
 			return fmt.Errorf("scan: snapshot exceeded limit of %d bytes", s.opts.SnapshotLimit)
 		}
 	case ModeExact:
-		if s.matchExact(raw) {
+		if s.opts.Type == TypeAll {
+			for _, v := range s.matchAll(raw) {
+				s.results = append(s.results, Result{Addr: addr, Prev: v})
+			}
+		} else if s.matchExact(raw) {
 			s.results = append(s.results, Result{Addr: addr, Prev: NewValue(s.opts.Type, raw)})
 		}
 	case ModeBetween:
@@ -272,9 +276,13 @@ func (s *Session) matchExact(raw []byte) bool {
 		return false
 	}
 	switch t.Kind {
-	case KindString, KindBytes:
+	case KindString, KindBytes, KindBinary:
 		if s.opts.Type == TypeAOB {
 			p := &AOBPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask}
+			return p.Match(raw)
+		}
+		if s.opts.Type == TypeBinary {
+			p := &BinaryPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask, Bits: s.opts.Value.Bits}
 			return p.Match(raw)
 		}
 		return bytes.Equal(raw, s.opts.Value.Raw)
@@ -305,6 +313,28 @@ func (s *Session) keep(cur, prev Value) bool {
 	default:
 		return false
 	}
+}
+
+// matchAll tests the integer widths at one address. It records a match for
+// every width whose decoded value equals the target (float and double are not
+// covered by this first cut).
+func (s *Session) matchAll(raw []byte) []Value {
+	target := s.opts.Value.Uint64()
+	widths := []struct {
+		t ValueType
+		n int
+	}{{TypeByte, 1}, {TypeWord, 2}, {TypeDword, 4}, {TypeQword, 8}}
+	var out []Value
+	for _, w := range widths {
+		if len(raw) < w.n {
+			continue
+		}
+		v := NewValue(w.t, raw[:w.n])
+		if v.Uint64() == target {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // matchBetween reports whether raw falls inside the configured range.

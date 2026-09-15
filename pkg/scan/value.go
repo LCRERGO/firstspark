@@ -23,6 +23,8 @@ const (
 	TypeDouble
 	TypeString
 	TypeAOB
+	TypeBinary
+	TypeAll
 )
 
 // Size returns the width in bytes for fixed-width types and 0 for the
@@ -84,6 +86,7 @@ type Value struct {
 	Type ValueType
 	Raw  []byte
 	Mask []byte
+	Bits int
 }
 
 // NewValue builds a value by copying raw.

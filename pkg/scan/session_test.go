@@ -34,6 +34,21 @@ func TestMatchBetweenReversedBounds(t *testing.T) {
 	}
 }
 
+func TestMatchAll(t *testing.T) {
+	s := &Session{opts: Options{
+		Type:  TypeAll,
+		Value: Value{Type: TypeAll, Raw: encodeInteger(TypeQword, 0x4240)},
+	}}
+	raw := []byte{0x40, 0x42, 0, 0, 0, 0, 0, 0}
+	got := s.matchAll(raw)
+	if len(got) != 3 {
+		t.Fatalf("matches = %d, want 3 (word, dword, qword)", len(got))
+	}
+	if got[0].Type != TypeWord || got[2].Type != TypeQword {
+		t.Fatalf("unexpected types: %v, %v", got[0].Type, got[2].Type)
+	}
+}
+
 func TestUndoRestoresResults(t *testing.T) {
 	s := &Session{}
 	s.results = []Result{{Addr: 1}, {Addr: 2}}

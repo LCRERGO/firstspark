@@ -244,6 +244,33 @@ func registerBuiltins() {
 		Encode:  func(n int64) []byte { return []byte{byte(n)} },
 		Numeric: func(v Value) float64 { return 0 },
 	})
+	RegisterType(&Type{
+		ID: TypeBinary, Name: "binary", Label: "Binary", Variable: true, Kind: KindBinary,
+		Parse: func(input string) (Value, error) {
+			p, err := ParseBinary(input)
+			if err != nil {
+				return Value{}, err
+			}
+			return Value{Type: TypeBinary, Raw: p.Bytes, Mask: p.Mask, Bits: p.Bits}, nil
+		},
+		Format:  FormatBinary,
+		Encode:  func(n int64) []byte { return []byte{byte(n)} },
+		Numeric: func(v Value) float64 { return 0 },
+	})
+	RegisterType(&Type{
+		ID: TypeAll, Name: "all", Label: "All", Size: 8, Kind: KindInt,
+		Parse: func(input string) (Value, error) {
+			n, err := parseInteger(input)
+			if err != nil {
+				return Value{}, err
+			}
+			return Value{Type: TypeAll, Raw: encodeInteger(TypeQword, n)}, nil
+		},
+		Format:  func(v Value) string { return strconv.FormatInt(v.Int64(), 10) },
+		Encode:  func(n int64) []byte { return encodeInteger(TypeQword, n) },
+		Int64:   func(v Value) int64 { return v.Int64() },
+		Numeric: func(v Value) float64 { return float64(v.Int64()) },
+	})
 }
 
 func init() { registerBuiltins() }
