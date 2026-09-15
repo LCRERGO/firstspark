@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 
@@ -103,19 +104,31 @@ func chownToOriginalUser(path string) {
 	if os.Geteuid() != 0 {
 		return
 	}
-	uid, err := strconv.Atoi(os.Getenv("FIRSTSPARK_ORIG_UID"))
-	if err != nil {
+	uid, ok := firstEnvInt("FIRSTSPARK_ORIG_UID", "SUDO_UID")
+	if !ok {
 		return
 	}
-	gid, _ := strconv.Atoi(os.Getenv("FIRSTSPARK_ORIG_GID"))
+	gid, _ := firstEnvInt("FIRSTSPARK_ORIG_GID", "SUDO_GID")
 	_ = os.Chown(path, uid, gid)
 }
 
-// Dir returns the configuration directory ($XDG_CONFIG_HOME/firstspark).
+func firstEnvInt(keys ...string) (int, bool) {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				return n, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// Dir returns the configuration directory ($XDG_CONFIG_HOME/firstspark). When
+// run elevated it uses the invoking user's directory, not root's.
 func Dir() string {
-	base, err := os.UserConfigDir()
-	if err != nil {
-		base = filepath.Join(os.Getenv("HOME"), ".config")
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		base = filepath.Join(homeDir(), ".config")
 	}
 	return filepath.Join(base, "firstspark")
 }
@@ -131,7 +144,23 @@ func CustomTypesPath() string { return filepath.Join(Dir(), "customtypes.yaml") 
 func DataDir() string {
 	base := os.Getenv("XDG_DATA_HOME")
 	if base == "" {
-		base = filepath.Join(os.Getenv("HOME"), ".local", "share")
+		base = filepath.Join(homeDir(), ".local", "share")
 	}
 	return filepath.Join(base, "firstspark")
+}
+
+// homeDir returns the invoking user's home directory, resolving sudo's
+// SUDO_USER when running as root so configuration stays the user's.
+func homeDir() string {
+	if os.Geteuid() == 0 {
+		if name := os.Getenv("SUDO_USER"); name != "" && name != "root" {
+			if u, err := user.Lookup(name); err == nil && u.HomeDir != "" {
+				return u.HomeDir
+			}
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return os.Getenv("HOME")
 }

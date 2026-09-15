@@ -15,35 +15,59 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
-// scanPanel mirrors Cheat Engine's scan region: the scan value with a Hex
-// checkbox beside it, a second value for "Value between", the scan and value
-// type dropdowns, the three scan buttons, and the memory scan options.
+const scanLabelWidth float32 = 96
+
+// scanRow lays out a label and a control on one row, right-aligning the label
+// the way a form does.
+func scanRow(label string, w fyne.CanvasObject) *fyne.Container {
+	lbl := widget.NewLabel(label)
+	lbl.Alignment = fyne.TextAlignTrailing
+	return container.NewBorder(nil, nil,
+		container.NewGridWrap(fyne.NewSize(scanLabelWidth, 34), lbl), nil, w)
+}
+
+// scanPanel mirrors Cheat Engine's scan region: the three scan buttons at the
+// top, then the scan value with a Hex checkbox beside it, a second value for
+// "Value between", and the scan and value type dropdowns.
 func (a *App) scanPanel() fyne.CanvasObject {
-	valueRow := container.NewBorder(nil, nil, nil, a.hexBox, a.valueEntry)
-	form := widget.NewForm(
-		widget.NewFormItem("Scan Value", valueRow),
-		widget.NewFormItem("and", a.value2Entry),
-		widget.NewFormItem("Scan Type", a.scanType),
-		widget.NewFormItem("Value Type", container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
-		widget.NewFormItem("Compare", a.compareEntry),
-	)
 	a.scanBtn = widget.NewButton("First Scan", a.firstScan)
 	a.nextBtn = widget.NewButton("Next Scan", a.nextScan)
 	a.undoBtn = widget.NewButton("Undo Scan", a.undoScan)
 	buttons := container.NewHBox(a.scanBtn, a.nextBtn, a.undoBtn)
-	options := widget.NewForm(widget.NewFormItem("Alignment", a.alignEntry))
+
+	valueRow := container.NewBorder(nil, nil, nil, a.hexBox, a.valueEntry)
+	a.value2Row = scanRow("and", a.value2Entry)
+
 	body := container.NewVBox(
 		a.th.heading("Scan", a.th.size+2, a.pal().primary),
-		form,
 		buttons,
+		scanRow("Scan Value", valueRow),
+		a.value2Row,
+		scanRow("Scan Type", a.scanType),
+		scanRow("Value Type", container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
+		scanRow("Compare", a.compareEntry),
 		widget.NewSeparator(),
 		a.th.heading("Memory Scan Options", a.th.size, a.pal().primary),
 		a.writable,
-		options,
+		scanRow("Alignment", a.alignEntry),
 		widget.NewSeparator(),
 		a.speedhack,
 	)
 	return container.NewVScroll(container.NewPadded(body))
+}
+
+// valuePlaceholder describes what the scan value box expects for a scan type.
+func valuePlaceholder(mode scan.ScanMode) string {
+	switch mode {
+	case scan.ModeBetween:
+		return "lower bound"
+	case scan.ModeIncreasedBy, scan.ModeDecreasedBy:
+		return "delta"
+	case scan.ModeUnknown:
+		return "not used"
+	default:
+		return "value or AOB pattern"
+	}
 }
 
 // scanAction runs a first scan when no session exists, otherwise a next scan.

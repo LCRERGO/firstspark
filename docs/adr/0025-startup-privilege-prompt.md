@@ -35,6 +35,11 @@ once its window is up, and does not prompt again. `pkexec` is waited on in the
 background so an authentication failure is reported on the original window
 instead of closing it. Declining continues unprivileged.
 
+The same rule applies when the CLI is launched directly with `sudo`: while
+root, `config.Dir`/`DataDir` resolve `SUDO_USER`'s home so the invoking user's
+configuration is used, and saved files are chowned back via `SUDO_UID`/
+`SUDO_GID`.
+
 The prompt is shown at every startup (as requested) and there is no persistent
 "don't ask again". No setuid binary or privileged helper is introduced.
 

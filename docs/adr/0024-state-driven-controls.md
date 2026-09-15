@@ -30,9 +30,12 @@ application state in one place (`App.updateScanControls`):
 The function runs after every state change (process selected, scan, undo,
 scan-type change, table edit/load/clear).
 
-The scan region is also laid out as in Cheat Engine: the scan value with the
-Hex checkbox beside it, the second value on an "and" row, the Scan Type and
-Value Type dropdowns, the three scan buttons, then the Memory Scan Options.
+The scan region is also laid out as in Cheat Engine: the three scan buttons
+(First Scan / Next Scan / Undo Scan) at the top, then the scan value with the
+Hex checkbox beside it, the Scan Type and Value Type dropdowns, then the
+Memory Scan Options. The value box is **dynamic**: its placeholder describes
+what the selected scan type expects (`value`, `lower bound`, `delta`,
+`not used`), and the second "and" value row only appears for "Value between".
 
 ## Consequences
 

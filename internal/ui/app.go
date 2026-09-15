@@ -88,6 +88,7 @@ type App struct {
 	scanBtn      *widget.Button
 	nextBtn      *widget.Button
 	undoBtn      *widget.Button
+	value2Row    *fyne.Container
 
 	openProcAction *widget.ToolbarAction
 	loadAction     *widget.ToolbarAction
@@ -301,6 +302,15 @@ func (a *App) updateScanControls() {
 	}
 	if a.valueEntry != nil {
 		setEnabled(a.valueEntry, modeNeedsValue(mode))
+		a.valueEntry.SetPlaceHolder(valuePlaceholder(mode))
+	}
+	if a.value2Row != nil {
+		if mode == scan.ModeBetween {
+			a.value2Row.Show()
+		} else {
+			a.value2Row.Hide()
+		}
+		a.value2Row.Refresh()
 	}
 	if a.value2Entry != nil {
 		setEnabled(a.value2Entry, mode == scan.ModeBetween)
