@@ -16,10 +16,39 @@ const (
 	dr7Offset = 904
 )
 
+// Offsets of the general purpose registers within struct user (user_regs_struct
+// starts at offset 0; each field is 8 bytes).
+const (
+	userRegR15    = 0
+	userRegR14    = 8
+	userRegR13    = 16
+	userRegR12    = 24
+	userRegRBP    = 32
+	userRegRBX    = 40
+	userRegR11    = 48
+	userRegR10    = 56
+	userRegR9     = 64
+	userRegR8     = 72
+	userRegRAX    = 80
+	userRegRCX    = 88
+	userRegRDX    = 96
+	userRegRSI    = 104
+	userRegRDI    = 112
+	userRegRIP    = 128
+	userRegRFLAGS = 144
+	userRegRSP    = 152
+)
+
 func drOffset(slot int) uintptr { return dr0Offset + uintptr(slot)*8 }
 
 // SetWatchpoint arms one of the four hardware watchpoints on addr.
 func (b *ptraceBackend) SetWatchpoint(addr uint64, size int, writeOnly bool) error {
+	var err error
+	b.do(func() { err = b.setWatchpoint(addr, size, writeOnly) })
+	return err
+}
+
+func (b *ptraceBackend) setWatchpoint(addr uint64, size int, writeOnly bool) error {
 	if !b.attached {
 		return ErrNotAttached
 	}
@@ -56,6 +85,12 @@ func (b *ptraceBackend) SetWatchpoint(addr uint64, size int, writeOnly bool) err
 
 // ClearWatchpoint disarms the watchpoint on addr.
 func (b *ptraceBackend) ClearWatchpoint(addr uint64) error {
+	var err error
+	b.do(func() { err = b.clearWatchpoint(addr) })
+	return err
+}
+
+func (b *ptraceBackend) clearWatchpoint(addr uint64) error {
 	slot, ok := b.watchpoints[addr]
 	if !ok {
 		return nil
@@ -76,6 +111,12 @@ func (b *ptraceBackend) ClearWatchpoint(addr uint64) error {
 
 // ClearHardwareStatus clears the sticky debug status register.
 func (b *ptraceBackend) ClearHardwareStatus() error {
+	var err error
+	b.do(func() { err = b.clearHardwareStatus() })
+	return err
+}
+
+func (b *ptraceBackend) clearHardwareStatus() error {
 	return b.pokeUser(dr6Offset, 0)
 }
 

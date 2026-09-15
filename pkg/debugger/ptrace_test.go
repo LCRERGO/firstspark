@@ -11,6 +11,15 @@ import (
 
 func TestMain(m *testing.M) {
 	if os.Getenv("FIRSTSPARK_DEBUG_HELPER") == "1" {
+		if os.Getenv("FIRSTSPARK_DEBUG_SPIN") == "1" {
+			x := 0
+			for {
+				x++
+				if x < 0 {
+					x = 0
+				}
+			}
+		}
 		for {
 			time.Sleep(time.Hour)
 		}

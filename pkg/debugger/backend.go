@@ -69,6 +69,13 @@ type Backend interface {
 	Close() error
 }
 
+// RemoteCaller is implemented by backends that can invoke a function inside
+// the target process.
+type RemoteCaller interface {
+	// Call invokes fn with up to six integer arguments and returns RAX.
+	Call(fn uint64, args []uint64) (uint64, error)
+}
+
 // WatchpointBackend is implemented by backends that support hardware data
 // watchpoints (the x86 debug registers).
 type WatchpointBackend interface {

@@ -5,6 +5,8 @@ package debugger
 import (
 	"errors"
 	"fmt"
+	"runtime"
+	"sync"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -12,12 +14,22 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
+// ptrace operations are performed by the specific thread that attached to the
+// tracee, and Go migrates goroutines between OS threads. Every operation is
+// therefore funnelled through a single worker goroutine pinned to one OS
+// thread, which owns the ptrace relationship.
 type ptraceBackend struct {
 	pid         int
 	proc        *mem.Process
 	attached    bool
 	breakpoints map[uint64]byte
 	watchpoints map[uint64]int
+	scratch     uint64
+
+	mu            sync.Mutex
+	ops           chan func()
+	workerStarted bool
+	workerStop    chan struct{}
 }
 
 // NewPtrace returns a ptrace based backend for pid.
@@ -34,9 +46,51 @@ func NewPtrace(pid int) (Backend, error) {
 	}, nil
 }
 
+// do runs f on the dedicated ptrace worker thread.
+func (b *ptraceBackend) do(f func()) {
+	b.mu.Lock()
+	if !b.workerStarted {
+		b.ops = make(chan func())
+		b.workerStop = make(chan struct{})
+		b.workerStarted = true
+		go b.worker()
+	}
+	ops := b.ops
+	b.mu.Unlock()
+
+	done := make(chan struct{})
+	select {
+	case ops <- func() {
+		defer close(done)
+		f()
+	}:
+		<-done
+	case <-b.workerStop:
+	}
+}
+
+func (b *ptraceBackend) worker() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	for {
+		select {
+		case f := <-b.ops:
+			f()
+		case <-b.workerStop:
+			return
+		}
+	}
+}
+
 func (b *ptraceBackend) PID() int { return b.pid }
 
 func (b *ptraceBackend) Attach() error {
+	var err error
+	b.do(func() { err = b.attach() })
+	return err
+}
+
+func (b *ptraceBackend) attach() error {
 	if b.attached {
 		return nil
 	}
@@ -52,14 +106,20 @@ func (b *ptraceBackend) Attach() error {
 }
 
 func (b *ptraceBackend) Detach() error {
+	var err error
+	b.do(func() { err = b.detach() })
+	return err
+}
+
+func (b *ptraceBackend) detach() error {
 	if !b.attached {
 		return nil
 	}
 	for addr := range b.breakpoints {
-		_ = b.ClearBreakpoint(addr)
+		_ = b.clearBreakpoint(addr)
 	}
 	for addr := range b.watchpoints {
-		_ = b.ClearWatchpoint(addr)
+		_ = b.clearWatchpoint(addr)
 	}
 	if err := unix.PtraceDetach(b.pid); err != nil {
 		return translatePtrace(err)
@@ -68,45 +128,77 @@ func (b *ptraceBackend) Detach() error {
 	return nil
 }
 
+// Read reads target memory (process_vm_readv, not ptrace).
 func (b *ptraceBackend) Read(addr uint64, size int) ([]byte, error) {
 	return b.proc.Read(addr, size)
 }
 
+// Write writes target memory (process_vm_writev, not ptrace).
 func (b *ptraceBackend) Write(addr uint64, data []byte) error {
 	return b.proc.Write(addr, data)
 }
 
 func (b *ptraceBackend) Registers() (Registers, error) {
-	var r unix.PtraceRegs
-	if err := unix.PtraceGetRegs(b.pid, &r); err != nil {
-		return Registers{}, translatePtrace(err)
+	var regs Registers
+	var err error
+	b.do(func() { regs, err = b.registers() })
+	return regs, err
+}
+
+// registers reads the general purpose registers through PTRACE_PEEKUSER.
+func (b *ptraceBackend) registers() (Registers, error) {
+	rip, err := b.peekUser(userRegRIP)
+	if err != nil {
+		return Registers{}, err
+	}
+	get := func(off uintptr) uint64 {
+		v, _ := b.peekUser(off)
+		return v
 	}
 	return Registers{
-		RIP: r.Rip, RSP: r.Rsp, RBP: r.Rbp,
-		RAX: r.Rax, RBX: r.Rbx, RCX: r.Rcx,
-		RDX: r.Rdx, RSI: r.Rsi, RDI: r.Rdi,
-		R8: r.R8, R9: r.R9, R10: r.R10,
-		R11: r.R11, R12: r.R12, R13: r.R13,
-		R14: r.R14, R15: r.R15, RFLAGS: r.Eflags,
+		RIP: rip,
+		RSP: get(userRegRSP), RBP: get(userRegRBP),
+		RAX: get(userRegRAX), RBX: get(userRegRBX), RCX: get(userRegRCX),
+		RDX: get(userRegRDX), RSI: get(userRegRSI), RDI: get(userRegRDI),
+		R8: get(userRegR8), R9: get(userRegR9), R10: get(userRegR10),
+		R11: get(userRegR11), R12: get(userRegR12), R13: get(userRegR13),
+		R14: get(userRegR14), R15: get(userRegR15), RFLAGS: get(userRegRFLAGS),
 	}, nil
 }
 
 func (b *ptraceBackend) SetRegisters(reg Registers) error {
-	r := unix.PtraceRegs{
-		Rip: reg.RIP, Rsp: reg.RSP, Rbp: reg.RBP,
-		Rax: reg.RAX, Rbx: reg.RBX, Rcx: reg.RCX,
-		Rdx: reg.RDX, Rsi: reg.RSI, Rdi: reg.RDI,
-		R8: reg.R8, R9: reg.R9, R10: reg.R10,
-		R11: reg.R11, R12: reg.R12, R13: reg.R13,
-		R14: reg.R14, R15: reg.R15, Eflags: reg.RFLAGS,
+	var err error
+	b.do(func() { err = b.setRegisters(reg) })
+	return err
+}
+
+// setRegisters writes the general purpose registers through PTRACE_POKEUSER.
+func (b *ptraceBackend) setRegisters(reg Registers) error {
+	writes := []struct {
+		off uintptr
+		val uint64
+	}{
+		{userRegR15, reg.R15}, {userRegR14, reg.R14}, {userRegR13, reg.R13}, {userRegR12, reg.R12},
+		{userRegRBP, reg.RBP}, {userRegRBX, reg.RBX}, {userRegR11, reg.R11}, {userRegR10, reg.R10},
+		{userRegR9, reg.R9}, {userRegR8, reg.R8}, {userRegRAX, reg.RAX}, {userRegRCX, reg.RCX},
+		{userRegRDX, reg.RDX}, {userRegRSI, reg.RSI}, {userRegRDI, reg.RDI},
+		{userRegRIP, reg.RIP}, {userRegRFLAGS, reg.RFLAGS}, {userRegRSP, reg.RSP},
 	}
-	if err := unix.PtraceSetRegs(b.pid, &r); err != nil {
-		return translatePtrace(err)
+	for _, w := range writes {
+		if err := b.pokeUser(w.off, w.val); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (b *ptraceBackend) SetBreakpoint(addr uint64) error {
+	var err error
+	b.do(func() { err = b.setBreakpoint(addr) })
+	return err
+}
+
+func (b *ptraceBackend) setBreakpoint(addr uint64) error {
 	if _, ok := b.breakpoints[addr]; ok {
 		return nil
 	}
@@ -122,6 +214,12 @@ func (b *ptraceBackend) SetBreakpoint(addr uint64) error {
 }
 
 func (b *ptraceBackend) ClearBreakpoint(addr uint64) error {
+	var err error
+	b.do(func() { err = b.clearBreakpoint(addr) })
+	return err
+}
+
+func (b *ptraceBackend) clearBreakpoint(addr uint64) error {
 	orig, ok := b.breakpoints[addr]
 	if !ok {
 		return nil
@@ -140,37 +238,60 @@ func (b *ptraceBackend) writeText(addr uint64, data []byte) error {
 		return nil
 	}
 	page := addr &^ 0xFFF
-	if err := b.Mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC); err != nil {
+	if err := b.mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC); err != nil {
 		return fmt.Errorf("debugger: make page writable: %w", err)
 	}
 	if err := b.proc.Write(addr, data); err != nil {
 		return err
 	}
-	return b.Mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_EXEC)
+	return b.mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_EXEC)
 }
 
 func (b *ptraceBackend) Step() error {
+	var err error
+	b.do(func() { err = b.step() })
+	return err
+}
+
+func (b *ptraceBackend) step() error {
 	return translatePtrace(unix.PtraceSingleStep(b.pid))
 }
 
 func (b *ptraceBackend) Continue() error {
+	var err error
+	b.do(func() { err = b.cont() })
+	return err
+}
+
+func (b *ptraceBackend) cont() error {
 	return translatePtrace(unix.PtraceCont(b.pid, 0))
 }
 
 func (b *ptraceBackend) Wait() (StopReason, error) {
+	var reason StopReason
+	var err error
+	b.do(func() { reason, err = b.wait() })
+	return reason, err
+}
+
+func (b *ptraceBackend) wait() (StopReason, error) {
 	var ws unix.WaitStatus
 	_, err := unix.Wait4(b.pid, &ws, 0, nil)
 	if err != nil {
 		return StopReason{}, fmt.Errorf("debugger: wait: %w", err)
 	}
+	return b.reason(ws), nil
+}
+
+func (b *ptraceBackend) reason(ws unix.WaitStatus) StopReason {
 	switch {
 	case ws.Exited():
-		return StopReason{Event: EventExited, ExitCode: ws.ExitStatus()}, nil
+		return StopReason{Event: EventExited, ExitCode: ws.ExitStatus()}
 	case ws.Signaled():
-		return StopReason{Event: EventSignaled, Signal: ws.Signal()}, nil
+		return StopReason{Event: EventSignaled, Signal: ws.Signal()}
 	}
 	reason := StopReason{Event: EventStopped, Signal: ws.StopSignal()}
-	if regs, err := b.Registers(); err == nil {
+	if regs, err := b.registers(); err == nil {
 		addr := regs.RIP - 1
 		if _, ok := b.breakpoints[addr]; ok {
 			reason.BreakpointAddr = addr
@@ -181,7 +302,7 @@ func (b *ptraceBackend) Wait() (StopReason, error) {
 		reason.HardwareSlot = slot
 		reason.HasHardware = true
 	}
-	return reason, nil
+	return reason
 }
 
 func (b *ptraceBackend) Close() error { return b.Detach() }
@@ -189,37 +310,44 @@ func (b *ptraceBackend) Close() error { return b.Detach() }
 // RemoteSyscall executes a single syscall inside the traced process. The
 // process must be attached and stopped. It returns the value left in RAX.
 func (b *ptraceBackend) RemoteSyscall(num uint64, args [6]uint64) (uint64, error) {
+	var ret uint64
+	var err error
+	b.do(func() { ret, err = b.remoteSyscall(num, args) })
+	return ret, err
+}
+
+func (b *ptraceBackend) remoteSyscall(num uint64, args [6]uint64) (uint64, error) {
 	if !b.attached {
 		return 0, ErrNotAttached
 	}
 	gadget, err := b.findSyscallGadget()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("remote syscall: %w", err)
 	}
-	saved, err := b.Registers()
+	saved, err := b.registers()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("remote syscall: read registers: %w", err)
 	}
 	call := saved
 	call.RAX = num
 	call.RDI, call.RSI, call.RDX = args[0], args[1], args[2]
 	call.R10, call.R8, call.R9 = args[3], args[4], args[5]
 	call.RIP = gadget
-	if err := b.SetRegisters(call); err != nil {
-		return 0, err
+	if err := b.setRegisters(call); err != nil {
+		return 0, fmt.Errorf("remote syscall: set registers: %w", err)
 	}
-	if err := b.Step(); err != nil {
-		return 0, err
+	if err := b.step(); err != nil {
+		return 0, fmt.Errorf("remote syscall: step: %w", err)
 	}
-	if _, err := b.Wait(); err != nil {
-		return 0, err
+	if _, err := b.wait(); err != nil {
+		return 0, fmt.Errorf("remote syscall: wait: %w", err)
 	}
-	after, err := b.Registers()
+	after, err := b.registers()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("remote syscall: read result: %w", err)
 	}
-	if err := b.SetRegisters(saved); err != nil {
-		return 0, err
+	if err := b.setRegisters(saved); err != nil {
+		return 0, fmt.Errorf("remote syscall: restore registers: %w", err)
 	}
 	if int64(after.RAX) < 0 && after.RAX >= 0xFFFFFFFFFFFFF000 {
 		return after.RAX, fmt.Errorf("debugger: remote syscall %d failed: %w", num, syscall.Errno(-int64(after.RAX)))
@@ -233,9 +361,21 @@ func (b *ptraceBackend) Mprotect(addr, length uint64, prot int) error {
 	return err
 }
 
+func (b *ptraceBackend) mprotect(addr, length uint64, prot int) error {
+	_, err := b.remoteSyscall(unix.SYS_MPROTECT, [6]uint64{addr, length, uint64(prot), 0, 0, 0})
+	return err
+}
+
 // Mmap maps memory in the traced process and returns the resulting address.
 func (b *ptraceBackend) Mmap(length uint64, prot, flags int) (uint64, error) {
-	addr, err := b.RemoteSyscall(unix.SYS_MMAP, [6]uint64{0, length, uint64(prot), uint64(flags), ^uint64(0), 0})
+	var addr uint64
+	var err error
+	b.do(func() { addr, err = b.mmap(length, prot, flags) })
+	return addr, err
+}
+
+func (b *ptraceBackend) mmap(length uint64, prot, flags int) (uint64, error) {
+	addr, err := b.remoteSyscall(unix.SYS_MMAP, [6]uint64{0, length, uint64(prot), uint64(flags), ^uint64(0), 0})
 	if err != nil {
 		return 0, err
 	}
