@@ -192,7 +192,9 @@ func Run(cfg config.Config) error {
 	}
 	a.refreshProcesses()
 	go a.freezeLoop()
-	a.win.ShowAndRun()
+	a.win.Show()
+	a.maybeAskElevation()
+	a.fapp.Run()
 	return a.err
 }
 

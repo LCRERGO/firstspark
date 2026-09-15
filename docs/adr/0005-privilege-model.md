@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Accepted. Amended by ADR 0025 (GUI startup prompt).
 
 ## Context
 
