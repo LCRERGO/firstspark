@@ -28,66 +28,50 @@ const (
 // Size returns the width in bytes for fixed-width types and 0 for the
 // variable-length types (string and AOB).
 func (t ValueType) Size() int {
-	switch t {
-	case TypeByte:
-		return 1
-	case TypeWord:
-		return 2
-	case TypeDword:
-		return 4
-	case TypeQword, TypeDouble:
-		return 8
-	case TypeFloat:
-		return 4
-	default:
-		return 0
+	if d := TypeByID(t); d != nil {
+		return d.Size
 	}
+	return 0
 }
 
 // Variable reports whether the type has a length supplied by the user.
-func (t ValueType) Variable() bool { return t == TypeString || t == TypeAOB }
-
-func (t ValueType) String() string {
-	switch t {
-	case TypeByte:
-		return "byte"
-	case TypeWord:
-		return "word"
-	case TypeDword:
-		return "dword"
-	case TypeQword:
-		return "qword"
-	case TypeFloat:
-		return "float"
-	case TypeDouble:
-		return "double"
-	case TypeString:
-		return "string"
-	case TypeAOB:
-		return "aob"
-	default:
-		return "unknown"
+func (t ValueType) Variable() bool {
+	if d := TypeByID(t); d != nil {
+		return d.Variable
 	}
+	return false
 }
 
-// ParseValueType maps a user supplied name to a ValueType.
+// String returns the canonical engine name of the type.
+func (t ValueType) String() string {
+	if d := TypeByID(t); d != nil {
+		return d.Name
+	}
+	return "unknown"
+}
+
+// ParseValueType maps a user supplied name to a ValueType. Registered types
+// (including user-defined ones) are matched by name first.
 func ParseValueType(s string) (ValueType, error) {
+	if t, ok := LookupType(s); ok {
+		return t.ID, nil
+	}
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "byte", "int8", "1":
+	case "int8", "1":
 		return TypeByte, nil
-	case "word", "int16", "short", "2":
+	case "int16", "short", "2":
 		return TypeWord, nil
-	case "dword", "int32", "int", "4":
+	case "int32", "int", "4":
 		return TypeDword, nil
-	case "qword", "int64", "long", "8":
+	case "int64", "long", "8":
 		return TypeQword, nil
-	case "float", "float32":
+	case "float32":
 		return TypeFloat, nil
-	case "double", "float64":
+	case "float64":
 		return TypeDouble, nil
-	case "string", "str":
+	case "str":
 		return TypeString, nil
-	case "aob", "bytes", "array":
+	case "bytes", "array":
 		return TypeAOB, nil
 	default:
 		return 0, fmt.Errorf("scan: unknown value type %q", s)
@@ -162,20 +146,21 @@ func (v Value) Float64() float64 {
 
 // String returns the value rendered for display.
 func (v Value) String() string {
-	switch v.Type {
-	case TypeString:
-		return string(v.Raw)
-	case TypeAOB:
-		return formatBytes(v.Raw)
-	case TypeFloat, TypeDouble:
-		return strconv.FormatFloat(v.Float64(), 'g', -1, 64)
-	default:
-		return strconv.FormatInt(v.Int64(), 10)
+	if d := TypeByID(v.Type); d != nil && d.Format != nil {
+		return d.Format(v)
 	}
+	return formatBytes(v.Raw)
 }
 
 // EncodeValue converts a Go value into raw little-endian bytes for the type.
 func EncodeValue(t ValueType, n int64) []byte {
+	if d := TypeByID(t); d != nil && d.Encode != nil {
+		return d.Encode(n)
+	}
+	return encodeInteger(t, n)
+}
+
+func encodeInteger(t ValueType, n int64) []byte {
 	switch t {
 	case TypeByte:
 		return []byte{byte(n)}
@@ -198,30 +183,11 @@ func EncodeValue(t ValueType, n int64) []byte {
 
 // ParseValue converts user input into a Value of the requested type.
 func ParseValue(t ValueType, input string) (Value, error) {
-	input = strings.TrimSpace(input)
-	switch t {
-	case TypeString:
-		input = strings.Trim(input, `"`)
-		return NewValue(TypeString, []byte(input)), nil
-	case TypeAOB:
-		p, err := ParseAOB(input)
-		if err != nil {
-			return Value{}, err
-		}
-		return Value{Type: TypeAOB, Raw: p.Bytes, Mask: p.Mask}, nil
-	case TypeFloat, TypeDouble:
-		f, err := strconv.ParseFloat(input, 64)
-		if err != nil {
-			return Value{}, fmt.Errorf("scan: parse float %q: %w", input, err)
-		}
-		return encodeFloat(t, f), nil
-	default:
-		n, err := parseInteger(input)
-		if err != nil {
-			return Value{}, err
-		}
-		return Value{Type: t, Raw: EncodeValue(t, n)}, nil
+	d := TypeByID(t)
+	if d == nil || d.Parse == nil {
+		return Value{}, fmt.Errorf("scan: unknown value type %d", t)
 	}
+	return d.Parse(input)
 }
 
 func encodeFloat(t ValueType, f float64) Value {

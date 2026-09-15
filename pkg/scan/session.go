@@ -254,119 +254,84 @@ func (s *Session) consider(addr uint64, raw []byte) error {
 }
 
 func (s *Session) matchExact(raw []byte) bool {
-	switch s.opts.Type {
-	case TypeString:
+	t := TypeByID(s.opts.Type)
+	if t == nil {
+		return false
+	}
+	switch t.Kind {
+	case KindString, KindBytes:
+		if s.opts.Type == TypeAOB {
+			p := &AOBPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask}
+			return p.Match(raw)
+		}
 		return bytes.Equal(raw, s.opts.Value.Raw)
-	case TypeAOB:
-		p := &AOBPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask}
-		return p.Match(raw)
 	default:
-		return compareExact(NewValue(s.opts.Type, raw), s.opts.Value, s.opts.Compare, s.opts.Epsilon)
+		return t.Compare(NewValue(s.opts.Type, raw), s.opts.Value, s.opts.Compare, s.opts.Epsilon)
 	}
 }
 
 func (s *Session) keep(cur, prev Value) bool {
+	t := TypeByID(s.opts.Type)
 	switch s.opts.Mode {
 	case ModeExact:
 		return s.matchExact(cur.Raw)
 	case ModeChanged:
-		return !valueEqual(cur, prev, s.opts.Epsilon)
+		return !s.valueEqual(t, cur, prev)
 	case ModeUnchanged:
-		return valueEqual(cur, prev, s.opts.Epsilon)
+		return s.valueEqual(t, cur, prev)
 	case ModeIncreased:
-		return valueGreater(cur, prev, s.opts.Epsilon)
+		return s.valueGreater(t, cur, prev)
 	case ModeDecreased:
-		return valueLess(cur, prev, s.opts.Epsilon)
+		return s.valueLess(t, cur, prev)
 	case ModeIncreasedBy:
-		return valueDelta(cur, prev, s.opts.Value, true, s.opts.Epsilon)
+		return s.valueDelta(t, cur, prev, s.opts.Value, true)
 	case ModeDecreasedBy:
-		return valueDelta(cur, prev, s.opts.Value, false, s.opts.Epsilon)
+		return s.valueDelta(t, cur, prev, s.opts.Value, false)
 	default:
 		return false
 	}
 }
 
-func compareExact(cur, target Value, op CompareOp, eps float64) bool {
-	if cur.Type == TypeFloat || cur.Type == TypeDouble {
-		return compareFloat(cur.Float64(), target.Float64(), op, eps)
-	}
-	return compareInt(cur.Int64(), target.Int64(), op)
-}
-
-func compareInt(a, b int64, op CompareOp) bool {
-	switch op {
-	case OpEqual:
-		return a == b
-	case OpNotEqual:
-		return a != b
-	case OpGreater:
-		return a > b
-	case OpGreaterEqual:
-		return a >= b
-	case OpLess:
-		return a < b
-	case OpLessEqual:
-		return a <= b
-	default:
-		return false
-	}
-}
-
-func compareFloat(a, b float64, op CompareOp, eps float64) bool {
-	switch op {
-	case OpEqual:
-		return math.Abs(a-b) <= eps
-	case OpNotEqual:
-		return math.Abs(a-b) > eps
-	case OpGreater:
-		return a > b+eps
-	case OpGreaterEqual:
-		return a >= b-eps
-	case OpLess:
-		return a < b-eps
-	case OpLessEqual:
-		return a <= b+eps
-	default:
-		return false
-	}
-}
-
-func valueEqual(a, b Value, eps float64) bool {
-	switch {
-	case a.Type == TypeString || a.Type == TypeAOB:
+func (s *Session) valueEqual(t *Type, a, b Value) bool {
+	switch t.Kind {
+	case KindString, KindBytes, KindBinary:
 		return bytes.Equal(a.Raw, b.Raw)
-	case a.Type == TypeFloat || a.Type == TypeDouble:
-		return math.Abs(a.Float64()-b.Float64()) <= eps
+	case KindFloat:
+		return math.Abs(t.Numeric(a)-t.Numeric(b)) <= s.opts.Epsilon
 	default:
-		return a.Int64() == b.Int64()
+		return t.Int64(a) == t.Int64(b)
 	}
 }
 
-func valueGreater(a, b Value, eps float64) bool {
-	if a.Type == TypeFloat || a.Type == TypeDouble {
-		return a.Float64() > b.Float64()+eps
+func (s *Session) valueGreater(t *Type, a, b Value) bool {
+	if t.Kind == KindFloat {
+		return t.Numeric(a) > t.Numeric(b)+s.opts.Epsilon
 	}
-	return a.Int64() > b.Int64()
+	return t.Int64(a) > t.Int64(b)
 }
 
-func valueLess(a, b Value, eps float64) bool {
-	if a.Type == TypeFloat || a.Type == TypeDouble {
-		return a.Float64() < b.Float64()-eps
+func (s *Session) valueLess(t *Type, a, b Value) bool {
+	if t.Kind == KindFloat {
+		return t.Numeric(a) < t.Numeric(b)-s.opts.Epsilon
 	}
-	return a.Int64() < b.Int64()
+	return t.Int64(a) < t.Int64(b)
 }
 
-func valueDelta(cur, prev, delta Value, increased bool, eps float64) bool {
-	if cur.Type == TypeFloat || cur.Type == TypeDouble {
-		d := cur.Float64() - prev.Float64()
+func (s *Session) valueDelta(t *Type, cur, prev, delta Value, increased bool) bool {
+	return valueDelta(t, cur, prev, delta, increased, s.opts.Epsilon)
+}
+
+func valueDelta(t *Type, cur, prev, delta Value, increased bool, eps float64) bool {
+	if t.Kind == KindFloat {
+		d := t.Numeric(cur) - t.Numeric(prev)
 		if !increased {
 			d = -d
 		}
-		return math.Abs(d-delta.Float64()) <= eps
+		return math.Abs(d-t.Numeric(delta)) <= eps
 	}
-	d := cur.Int64() - prev.Int64()
+	d := t.Int64(cur) - t.Int64(prev)
 	if !increased {
 		d = -d
 	}
-	return d == delta.Int64()
+	return d == t.Int64(delta)
 }

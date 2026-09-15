@@ -71,10 +71,11 @@ func TestValueDelta(t *testing.T) {
 	cur := Value{Type: TypeDword, Raw: EncodeValue(TypeDword, 15)}
 	prev := Value{Type: TypeDword, Raw: EncodeValue(TypeDword, 10)}
 	delta := Value{Type: TypeDword, Raw: EncodeValue(TypeDword, 5)}
-	if !valueDelta(cur, prev, delta, true, 1e-6) {
+	dword := TypeByID(TypeDword)
+	if !valueDelta(dword, cur, prev, delta, true, 1e-6) {
 		t.Error("expected increased-by match")
 	}
-	if valueDelta(cur, prev, delta, false, 1e-6) {
+	if valueDelta(dword, cur, prev, delta, false, 1e-6) {
 		t.Error("did not expect decreased-by match")
 	}
 }
