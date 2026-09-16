@@ -39,7 +39,6 @@ func (a *App) loadTable() {
 		a.applyTable(tbl)
 	}, a.win)
 	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json"}))
-	d.Resize(fyne.NewSize(720, 520))
 	d.Show()
 }
 
@@ -116,7 +115,6 @@ func (a *App) saveTableDialog(name string, tbl *cheattable.Table) {
 	}, a.win)
 	d.SetFileName(name)
 	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json"}))
-	d.Resize(fyne.NewSize(720, 520))
 	d.Show()
 }
 

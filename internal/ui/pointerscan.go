@@ -204,6 +204,5 @@ func (a *App) saveChains(chains []pointerscan.Chain) {
 		a.setStatus("saved %s", path)
 	}, a.win)
 	d.SetFileName("scan.ptr")
-	d.Resize(fyne.NewSize(640, 480))
 	d.Show()
 }

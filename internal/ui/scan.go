@@ -79,6 +79,18 @@ func (f flexRow) weight(i int) float32 {
 	return 0
 }
 
+// fixedHeight gives a child a fixed height while filling the available width.
+type fixedHeight struct{ h float32 }
+
+func (f fixedHeight) MinSize([]fyne.CanvasObject) fyne.Size { return fyne.NewSize(0, f.h) }
+
+func (f fixedHeight) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	for _, o := range objs {
+		o.Move(fyne.NewPos(0, 0))
+		o.Resize(fyne.NewSize(size.Width, f.h))
+	}
+}
+
 // scanLabel is a fixed-width, right-aligned row label.
 func scanLabel(text string) fyne.CanvasObject {
 	lbl := widget.NewLabel(text)
@@ -104,6 +116,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 
 	a.scanProgress = widget.NewProgressBar()
 	a.scanProgress.SetValue(0)
+	progressRow := container.New(fixedHeight{h: 8}, a.scanProgress)
 	a.scanStatus = widget.NewLabel("")
 
 	// Cheat Engine keeps both value boxes on one row for "Value between".
@@ -120,7 +133,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 	body := container.NewVBox(
 		a.th.heading("Scan", a.th.size+2, a.pal().primary),
 		buttons,
-		a.scanProgress,
+		progressRow,
 		a.scanStatus,
 		valueRow,
 		scanRow("Scan Type", a.scanType),
