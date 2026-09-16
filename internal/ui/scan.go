@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/LCRERGO/firstspark/pkg/config"
@@ -79,17 +81,69 @@ func (f flexRow) weight(i int) float32 {
 	return 0
 }
 
-// fixedHeight gives a child a fixed height while filling the available width.
-type fixedHeight struct{ h float32 }
+// progressLine is a minimal progress indicator: a thin track with a filled
+// portion, without the chrome of widget.ProgressBar.
+type progressLine struct {
+	widget.BaseWidget
+	fraction float32
+}
 
-func (f fixedHeight) MinSize([]fyne.CanvasObject) fyne.Size { return fyne.NewSize(0, f.h) }
+func newProgressLine() *progressLine {
+	p := &progressLine{}
+	p.ExtendBaseWidget(p)
+	return p
+}
 
-func (f fixedHeight) Layout(objs []fyne.CanvasObject, size fyne.Size) {
-	for _, o := range objs {
-		o.Move(fyne.NewPos(0, 0))
-		o.Resize(fyne.NewSize(size.Width, f.h))
+// SetValue sets the progress as a fraction between 0 and 1.
+func (p *progressLine) SetValue(f float32) {
+	if f < 0 {
+		f = 0
+	}
+	if f > 1 {
+		f = 1
+	}
+	if f == p.fraction {
+		return
+	}
+	p.fraction = f
+	p.Refresh()
+}
+
+func (p *progressLine) CreateRenderer() fyne.WidgetRenderer {
+	return &progressLineRenderer{
+		track: canvas.NewRectangle(theme.Color(theme.ColorNameSeparator)),
+		fill:  canvas.NewRectangle(theme.Color(theme.ColorNamePrimary)),
+		line:  p,
 	}
 }
+
+type progressLineRenderer struct {
+	track *canvas.Rectangle
+	fill  *canvas.Rectangle
+	line  *progressLine
+}
+
+func (r *progressLineRenderer) Layout(size fyne.Size) {
+	r.track.Move(fyne.NewPos(0, 0))
+	r.track.Resize(size)
+	r.fill.Move(fyne.NewPos(0, 0))
+	r.fill.Resize(fyne.NewSize(size.Width*r.line.fraction, size.Height))
+}
+
+func (r *progressLineRenderer) MinSize() fyne.Size { return fyne.NewSize(0, 4) }
+
+func (r *progressLineRenderer) Refresh() {
+	r.track.FillColor = theme.Color(theme.ColorNameSeparator)
+	r.fill.FillColor = theme.Color(theme.ColorNamePrimary)
+	r.track.Refresh()
+	r.fill.Refresh()
+}
+
+func (r *progressLineRenderer) Objects() []fyne.CanvasObject {
+	return []fyne.CanvasObject{r.track, r.fill}
+}
+
+func (r *progressLineRenderer) Destroy() {}
 
 // scanLabel is a fixed-width, right-aligned row label.
 func scanLabel(text string) fyne.CanvasObject {
@@ -114,9 +168,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 	a.stopBtn = widget.NewButton("Stop", a.stopScan)
 	buttons := container.NewHBox(a.scanBtn, a.nextBtn, a.undoBtn, a.stopBtn)
 
-	a.scanProgress = widget.NewProgressBar()
-	a.scanProgress.SetValue(0)
-	progressRow := container.New(fixedHeight{h: 8}, a.scanProgress)
+	a.scanProgress = newProgressLine()
 	a.scanStatus = widget.NewLabel("")
 
 	// Cheat Engine keeps both value boxes on one row for "Value between".
@@ -133,7 +185,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 	body := container.NewVBox(
 		a.th.heading("Scan", a.th.size+2, a.pal().primary),
 		buttons,
-		progressRow,
+		a.scanProgress,
 		a.scanStatus,
 		valueRow,
 		scanRow("Scan Type", a.scanType),
@@ -253,7 +305,7 @@ func (a *App) runScan(s *scan.Session, first bool) {
 func (a *App) updateScanProgress(p scan.Progress) {
 	if a.scanProgress != nil {
 		if p.TotalBytes > 0 {
-			a.scanProgress.SetValue(float64(p.ScannedBytes) / float64(p.TotalBytes))
+			a.scanProgress.SetValue(float32(float64(p.ScannedBytes) / float64(p.TotalBytes)))
 		} else {
 			a.scanProgress.SetValue(0)
 		}

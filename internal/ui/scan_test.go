@@ -54,6 +54,22 @@ func TestScanControlsFollowState(t *testing.T) {
 	}
 }
 
+func TestProgressLineClamps(t *testing.T) {
+	p := newProgressLine()
+	p.SetValue(-1)
+	if p.fraction != 0 {
+		t.Fatalf("negative fraction = %v", p.fraction)
+	}
+	p.SetValue(2)
+	if p.fraction != 1 {
+		t.Fatalf("fraction above one = %v", p.fraction)
+	}
+	p.SetValue(0.5)
+	if p.fraction != 0.5 {
+		t.Fatalf("fraction = %v", p.fraction)
+	}
+}
+
 func TestHumanBytesAndScope(t *testing.T) {
 	if got := humanBytes(512); got != "512 B" {
 		t.Fatalf("humanBytes(512) = %q", got)

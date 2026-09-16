@@ -95,7 +95,7 @@ type App struct {
 	stopBtn      *widget.Button
 	andLabel     *widget.Label
 	valuePair    *fyne.Container
-	scanProgress *widget.ProgressBar
+	scanProgress *progressLine
 	scanStatus   *widget.Label
 	scopeSelect  *widget.Select
 	scanCancel   context.CancelFunc
