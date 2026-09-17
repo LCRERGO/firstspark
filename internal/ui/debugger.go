@@ -20,6 +20,7 @@ import (
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
+	"github.com/LCRERGO/firstspark/pkg/log"
 )
 
 var dbgRegNames = []string{
@@ -144,6 +145,7 @@ func (a *App) debuggerAttach() {
 		a.fail(err)
 		return
 	}
+	log.Info("debugger attached", "pid", a.proc.PID)
 	a.dbgStatus.SetText(i18n.Tf("debugger.attached_to", map[string]any{"PID": a.proc.PID}))
 	a.debuggerRefresh()
 }
@@ -156,6 +158,7 @@ func (a *App) debuggerDetach() {
 		a.fail(err)
 		return
 	}
+	log.Info("debugger detached", "pid", a.proc.PID)
 	a.dbgStatus.SetText(i18n.T("debugger.detached"))
 }
 
@@ -164,6 +167,7 @@ func (a *App) debuggerContinue() {
 		a.fail(fmt.Errorf("%s", i18n.T("error.attach_first")))
 		return
 	}
+	pid := a.proc.PID
 	go func() {
 		if err := a.dbgSession.Continue(); err != nil {
 			fyne.Do(func() { a.fail(err) })
@@ -174,8 +178,18 @@ func (a *App) debuggerContinue() {
 			fyne.Do(func() { a.fail(err) })
 			return
 		}
+		switch reason.Event {
+		case debugger.EventExited:
+			log.Warn("target exited while debugging", "pid", pid, "code", reason.ExitCode)
+		case debugger.EventSignaled:
+			log.Warn("target killed by signal while debugging", "pid", pid, "signal", reason.Signal)
+		}
 		fyne.Do(func() {
 			a.dbgStatus.SetText(describeStop(reason))
+			if reason.Event != debugger.EventStopped {
+				a.processGone(pid)
+				return
+			}
 			a.debuggerRefresh()
 		})
 	}()

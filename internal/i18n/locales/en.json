@@ -53,6 +53,7 @@
   "status.theme": "theme: {{.Theme}}",
   "status.process_count": "{{.Count}} processes",
   "status.selected_process": "selected {{.Name}} ({{.PID}})",
+  "status.process_exited": "target {{.Name}} ({{.PID}}) exited",
   "status.scan_cancelled": "scan cancelled",
   "status.first_scan": "first scan: {{.Count}} results",
   "status.next_scan": "next scan: {{.Count}} results",

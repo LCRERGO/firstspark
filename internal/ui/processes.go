@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"image/color"
 	"os"
 	"sort"
@@ -19,6 +20,7 @@ import (
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/LCRERGO/firstspark/internal/i18n"
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
@@ -487,10 +489,18 @@ func (a *App) selectProcess(idx int) {
 		a.removeSpeedhack()
 		a.speedApplied = false
 	}
+	a.stopProcessWatch()
+	if a.dbgSession != nil {
+		_ = a.dbgSession.Detach()
+		_ = a.dbgSession.Close()
+		a.dbgSession = nil
+	}
 	p := a.procs[idx]
 	a.mu.Lock()
 	a.proc = &p
 	a.mu.Unlock()
+	a.watchProcess(p.PID)
+	log.Info("process selected", "pid", p.PID, "name", p.Name)
 	if a.speedhack != nil && a.speedhack.Checked {
 		a.setSpeedhack(true)
 	}
@@ -504,5 +514,68 @@ func (a *App) selectProcess(idx int) {
 	}
 	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.setStatusText(i18n.Tf("status.selected_process", map[string]any{"Name": p.Name, "PID": p.PID}))
+	a.updateScanControls()
+}
+
+// watchProcess starts a background watcher that reports when the selected
+// process exits.
+func (a *App) watchProcess(pid int) {
+	proc := a.proc
+	if proc == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.procWatchCancel = cancel
+	done := proc.NotifyExit(ctx)
+	go func() {
+		select {
+		case <-done:
+			fyne.Do(func() {
+				if a.proc != nil && a.proc.PID == pid {
+					a.processGone(pid)
+				}
+			})
+		case <-ctx.Done():
+		case <-a.stop:
+		}
+	}()
+}
+
+// stopProcessWatch cancels the current process watcher, if any.
+func (a *App) stopProcessWatch() {
+	if a.procWatchCancel != nil {
+		a.procWatchCancel()
+		a.procWatchCancel = nil
+	}
+}
+
+// processGone reacts to the target exiting: it tears down anything bound to the
+// dead pid and makes the state visible to the user.
+func (a *App) processGone(pid int) {
+	if a.proc == nil || a.proc.PID != pid {
+		return
+	}
+	name := a.proc.Name
+	log.Warn("target process exited", "pid", pid, "name", name)
+	a.stopProcessWatch()
+	a.mu.Lock()
+	a.proc = nil
+	a.mu.Unlock()
+	if a.dbgSession != nil {
+		if err := a.dbgSession.Detach(); err != nil {
+			log.Debug("detach after process exit failed", "pid", pid, "err", err)
+		}
+		_ = a.dbgSession.Close()
+		a.dbgSession = nil
+	}
+	if a.speedApplied {
+		a.removeSpeedhack()
+		a.speedApplied = false
+		if a.speedhack != nil {
+			a.speedhack.SetChecked(false)
+		}
+	}
+	a.processLabel.SetText(i18n.T("app.no_process"))
+	a.setStatusText(i18n.Tf("status.process_exited", map[string]any{"PID": pid, "Name": name}))
 	a.updateScanControls()
 }

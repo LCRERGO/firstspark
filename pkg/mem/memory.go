@@ -11,8 +11,9 @@ import (
 
 // Errors returned by cross-process memory operations.
 var (
-	ErrUnmapped   = errors.New("mem: address not mapped")
-	ErrPermission = errors.New("mem: permission denied (check ptrace_scope / CAP_SYS_PTRACE)")
+	ErrUnmapped      = errors.New("mem: address not mapped")
+	ErrPermission    = errors.New("mem: permission denied (check ptrace_scope / CAP_SYS_PTRACE)")
+	ErrNoSuchProcess = errors.New("mem: process no longer exists")
 )
 
 // maxChunk bounds a single process_vm_readv/writev call.
@@ -102,6 +103,8 @@ func translate(err error) error {
 		return ErrUnmapped
 	case errors.Is(err, unix.EPERM):
 		return ErrPermission
+	case errors.Is(err, unix.ESRCH):
+		return ErrNoSuchProcess
 	default:
 		return fmt.Errorf("mem: %w", err)
 	}

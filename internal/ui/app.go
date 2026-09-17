@@ -30,6 +30,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/debugger"
 	"github.com/LCRERGO/firstspark/pkg/dissect"
 	"github.com/LCRERGO/firstspark/pkg/inject"
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -182,10 +183,11 @@ type App struct {
 	searchMask   []byte
 	searchNext   uint64
 
-	mu     sync.Mutex
-	frozen map[uint64]scan.Value
-	stop   chan struct{}
-	err    error
+	mu              sync.Mutex
+	frozen          map[uint64]scan.Value
+	stop            chan struct{}
+	err             error
+	procWatchCancel context.CancelFunc
 }
 
 // Run opens the application window and blocks until it is closed.
@@ -219,6 +221,7 @@ func Run(cfg config.Config) error {
 	if loadErr != nil {
 		a.fail(loadErr)
 	}
+	a.fapp.Lifecycle().SetOnStopped(a.shutdown)
 	a.refreshProcesses()
 	go a.freezeLoop()
 	a.win.Show()
@@ -528,10 +531,29 @@ func (a *App) isFrozen(addr uint64) bool {
 	return ok
 }
 
+// shutdown releases everything bound to the target and stops the background
+// loops when the application quits.
+func (a *App) shutdown() {
+	a.stopProcessWatch()
+	if a.stop != nil {
+		close(a.stop)
+		a.stop = nil
+	}
+	if a.dbgSession != nil {
+		if err := a.dbgSession.Detach(); err != nil {
+			log.Debug("detach on shutdown failed", "err", err)
+		}
+		_ = a.dbgSession.Close()
+		a.dbgSession = nil
+	}
+	log.Info("firstspark stopped")
+}
+
 func (a *App) freezeLoop() {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	tick := 0
+	var lastWriteErr time.Time
 	for {
 		select {
 		case <-a.stop:
@@ -541,7 +563,12 @@ func (a *App) freezeLoop() {
 			proc := a.proc
 			if proc != nil {
 				for addr, v := range a.frozen {
-					_ = proc.Write(addr, v.Raw)
+					if err := proc.Write(addr, v.Raw); err != nil {
+						if time.Since(lastWriteErr) > 5*time.Second {
+							log.Warn("freeze write failed", "pid", proc.PID, "addr", fmt.Sprintf("0x%x", addr), "err", err)
+							lastWriteErr = time.Now()
+						}
+					}
 				}
 			}
 			a.mu.Unlock()

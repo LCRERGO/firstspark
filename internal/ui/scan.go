@@ -18,6 +18,7 @@ import (
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 	"github.com/LCRERGO/firstspark/pkg/speedhack"
 )
@@ -534,7 +535,9 @@ func (a *App) setSpeedhack(on bool) {
 			a.cfg.Speedhack.Scale = f
 		}
 	}
-	_ = a.cfg.Save(config.DefaultPath())
+	if err := a.cfg.Save(config.DefaultPath()); err != nil {
+		log.Warn("saving speedhack config failed", "err", err)
+	}
 }
 
 // installSpeedhack attaches, hooks the time functions and detaches.
@@ -565,6 +568,7 @@ func (a *App) installSpeedhack() error {
 		}
 		a.speedHooks = append(a.speedHooks, h)
 	}
+	log.Info("speedhack installed", "pid", a.proc.PID, "scale", scale, "hooks", len(a.speedHooks))
 	return nil
 }
 
@@ -573,16 +577,27 @@ func (a *App) removeSpeedhack() {
 	if len(a.speedHooks) == 0 {
 		return
 	}
+	pid := 0
 	if a.proc != nil {
+		pid = a.proc.PID
 		if be, err := debugger.NewPtrace(a.proc.PID); err == nil {
 			if err := be.Attach(); err == nil {
 				for _, h := range a.speedHooks {
-					_ = h.Remove()
+					if err := h.Remove(); err != nil {
+						log.Warn("speedhack hook removal failed", "pid", pid, "err", err)
+					}
 				}
-				_ = be.Detach()
+				if err := be.Detach(); err != nil {
+					log.Debug("speedhack detach failed", "pid", pid, "err", err)
+				}
+			} else {
+				log.Warn("speedhack cleanup re-attach failed", "pid", pid, "err", err)
 			}
 			_ = be.Close()
+		} else {
+			log.Warn("speedhack cleanup skipped, target gone", "pid", pid, "err", err)
 		}
 	}
+	log.Info("speedhack removed", "pid", pid)
 	a.speedHooks = nil
 }
