@@ -32,8 +32,10 @@ speedhack:
 ui:
   # Number of scan results shown at once.
   result_limit: 1000
-  # Colour scheme: light, dark, or system (follow the desktop preference).
-  theme: light
+  # Palette family: cyberpunk, nord, dracula or tokyo-night.
+  theme: cyberpunk
+  # Palette variant: light, dark, or system (follow the desktop preference).
+  theme_variant: light
   # Interface language code (catalogs live in internal/i18n/locales).
   language: en
   # Interface scale factor (1.0 is the platform default).

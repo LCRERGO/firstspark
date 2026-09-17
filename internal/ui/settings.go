@@ -15,9 +15,15 @@ import (
 )
 
 func (a *App) showSettings() {
-	themeSel := widget.NewSelect(
-		[]string{i18n.T("menu.view.light"), i18n.T("menu.view.dark"), i18n.T("menu.view.system")}, nil)
-	themeSel.SetSelected(themeLabel(a.cfg.UI.Theme))
+	famSel := widget.NewSelect([]string{
+		familyLabel(familyCyberpunk), familyLabel(familyNord),
+		familyLabel(familyDracula), familyLabel(familyTokyoNight),
+	}, nil)
+	famSel.SetSelected(familyLabel(parseFamily(a.cfg.UI.Theme)))
+	varSel := widget.NewSelect([]string{
+		variantLabel(variantLight), variantLabel(variantDark), variantLabel(variantSystem),
+	}, nil)
+	varSel.SetSelected(variantLabel(parseVariant(a.cfg.UI.ThemeVariant)))
 	langSel := widget.NewSelect(i18n.Supported(), nil)
 	langSel.SetSelected(i18n.Language())
 	scale := widget.NewEntry()
@@ -36,7 +42,8 @@ func (a *App) showSettings() {
 	icons.SetChecked(a.cfg.UI.ProcessIcons)
 
 	form := widget.NewForm(
-		widget.NewFormItem(i18n.T("settings.theme"), themeSel),
+		widget.NewFormItem(i18n.T("settings.theme"), famSel),
+		widget.NewFormItem(i18n.T("settings.theme_variant"), varSel),
 		widget.NewFormItem(i18n.T("settings.language"), langSel),
 		widget.NewFormItem(i18n.T("settings.ui_scale"), scale),
 		widget.NewFormItem(i18n.T("settings.font_size"), font),
@@ -50,7 +57,8 @@ func (a *App) showSettings() {
 		if !ok {
 			return
 		}
-		a.cfg.UI.Theme = parseThemeLabel(themeSel.Selected)
+		a.cfg.UI.Theme = string(parseFamilyLabel(famSel.Selected))
+		a.cfg.UI.ThemeVariant = parseVariantLabel(varSel.Selected).String()
 		langChanged := langSel.Selected != "" && langSel.Selected != a.cfg.UI.Language
 		if langSel.Selected != "" {
 			a.cfg.UI.Language = langSel.Selected
@@ -91,7 +99,7 @@ func (a *App) showSettings() {
 
 // applyTheme rebuilds the theme from the config and refreshes the widgets.
 func (a *App) applyTheme() {
-	a.th = newTheme(parseScheme(a.cfg.UI.Theme), a.cfg.UI.FontSize)
+	a.th = newTheme(parseFamily(a.cfg.UI.Theme), parseVariant(a.cfg.UI.ThemeVariant), a.cfg.UI.FontSize)
 	a.fapp.Settings().SetTheme(a.th)
 	if a.foundList != nil {
 		a.foundList.Refresh()
@@ -118,28 +126,4 @@ func (a *App) saveConfig() {
 
 func (a *App) showAbout() {
 	dialog.ShowInformation(i18n.T("about.title"), i18n.T("about.body"), a.win)
-}
-
-// themeLabel maps a stored theme name to its translated menu label.
-func themeLabel(s string) string {
-	switch s {
-	case "dark":
-		return i18n.T("menu.view.dark")
-	case "system":
-		return i18n.T("menu.view.system")
-	default:
-		return i18n.T("menu.view.light")
-	}
-}
-
-// parseThemeLabel maps a translated menu label back to the stored name.
-func parseThemeLabel(s string) string {
-	switch s {
-	case i18n.T("menu.view.dark"):
-		return "dark"
-	case i18n.T("menu.view.system"):
-		return "system"
-	default:
-		return "light"
-	}
 }

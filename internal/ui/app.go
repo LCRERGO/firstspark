@@ -74,8 +74,8 @@ type App struct {
 	icons     *iconResolver
 	showIcons bool
 
-	viewMenu   *fyne.Menu
-	themeItems []*fyne.MenuItem
+	viewMenu     *fyne.Menu
+	themeChoices []themeChoice
 
 	session    *scan.Session
 	regionSel  []mem.Region
@@ -220,7 +220,7 @@ func Run(cfg config.Config) error {
 	}
 	a.icons = newIconResolver()
 	a.fapp = app.NewWithID("com.firstspark.app")
-	a.th = newTheme(parseScheme(cfg.UI.Theme), cfg.UI.FontSize)
+	a.th = newTheme(parseFamily(cfg.UI.Theme), parseVariant(cfg.UI.ThemeVariant), cfg.UI.FontSize)
 	a.fapp.Settings().SetTheme(a.th)
 	loadErr := func() error {
 		_, err := customtype.LoadAndRegister(config.CustomTypesPath())
@@ -446,12 +446,23 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	settings := fyne.NewMenuItem(i18n.T("menu.edit.settings"), a.showSettings)
 	edit := fyne.NewMenu(i18n.T("menu.edit"), settings)
 
-	a.themeItems = []*fyne.MenuItem{
-		fyne.NewMenuItem(i18n.T("menu.view.light"), func() { a.setTheme(schemeLight) }),
-		fyne.NewMenuItem(i18n.T("menu.view.dark"), func() { a.setTheme(schemeDark) }),
-		fyne.NewMenuItem(i18n.T("menu.view.system"), func() { a.setTheme(schemeSystem) }),
+	var familyItems []*fyne.MenuItem
+	for _, fam := range families {
+		fam := fam
+		var variantItems []*fyne.MenuItem
+		for _, vr := range []variant{variantLight, variantDark, variantSystem} {
+			vr := vr
+			item := fyne.NewMenuItem(variantLabel(vr), func() { a.setTheme(fam, vr) })
+			a.themeChoices = append(a.themeChoices, themeChoice{fam: fam, variant: vr, item: item})
+			variantItems = append(variantItems, item)
+		}
+		famItem := fyne.NewMenuItem(familyLabel(fam), nil)
+		famItem.ChildMenu = fyne.NewMenu("", variantItems...)
+		familyItems = append(familyItems, famItem)
 	}
-	a.viewMenu = fyne.NewMenu(i18n.T("menu.view"), a.themeItems...)
+	themeItem := fyne.NewMenuItem(i18n.T("menu.view.theme"), nil)
+	themeItem.ChildMenu = fyne.NewMenu("", familyItems...)
+	a.viewMenu = fyne.NewMenu(i18n.T("menu.view"), themeItem)
 	a.updateThemeChecks()
 
 	addAddr := fyne.NewMenuItem(i18n.T("menu.table.add_address"), a.addAddressDialog)
@@ -476,21 +487,33 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	return fyne.NewMainMenu(file, edit, a.viewMenu, table, tools, help)
 }
 
-// setTheme applies and persists a colour scheme, keeping the View menu in sync.
-func (a *App) setTheme(m scheme) {
-	a.cfg.UI.Theme = m.String()
+// themeChoice ties a View menu item to a family and variant.
+type themeChoice struct {
+	fam     family
+	variant variant
+	item    *fyne.MenuItem
+}
+
+// setTheme applies and persists a palette family and variant, keeping the View
+// menu in sync.
+func (a *App) setTheme(fam family, vr variant) {
+	a.cfg.UI.Theme = string(fam)
+	a.cfg.UI.ThemeVariant = vr.String()
 	a.applyTheme()
 	a.updateThemeChecks()
 	a.saveConfig()
-	a.setStatusText(i18n.Tf("status.theme", map[string]any{"Theme": m.String()}))
+	a.setStatusText(i18n.Tf("status.theme", map[string]any{
+		"Theme": familyLabel(fam) + " " + variantLabel(vr),
+	}))
 }
 
-// updateThemeChecks marks the active scheme in the View > Theme menu.
+// updateThemeChecks marks the active family and variant in the View > Theme
+// menu.
 func (a *App) updateThemeChecks() {
-	active := parseScheme(a.cfg.UI.Theme)
-	modes := []scheme{schemeLight, schemeDark, schemeSystem}
-	for i, item := range a.themeItems {
-		item.Checked = active == modes[i]
+	activeFam := parseFamily(a.cfg.UI.Theme)
+	activeVariant := parseVariant(a.cfg.UI.ThemeVariant)
+	for _, c := range a.themeChoices {
+		c.item.Checked = c.fam == activeFam && c.variant == activeVariant
 	}
 	if a.viewMenu != nil {
 		a.viewMenu.Refresh()

@@ -5,10 +5,13 @@ package ui
 import (
 	_ "embed"
 	"image/color"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/theme"
+
+	"github.com/LCRERGO/firstspark/internal/i18n"
 )
 
 //go:embed assets/fonts/Rajdhani-SemiBold.ttf
@@ -17,49 +20,129 @@ var rajdhaniTTF []byte
 // displayFont is the embedded OFL display face used for headings and titles.
 var displayFont = fyne.NewStaticResource("Rajdhani-SemiBold.ttf", rajdhaniTTF)
 
-// scheme selects which colour variant the theme renders.
-type scheme int
+// family selects the palette pair a theme renders.
+type family string
 
 const (
-	schemeSystem scheme = iota
-	schemeLight
-	schemeDark
+	familyCyberpunk  family = "cyberpunk"
+	familyNord       family = "nord"
+	familyDracula    family = "dracula"
+	familyTokyoNight family = "tokyo-night"
 )
 
-// parseScheme maps a config value to a scheme, defaulting to system.
-func parseScheme(s string) scheme {
-	switch s {
-	case "light":
-		return schemeLight
-	case "dark":
-		return schemeDark
+// families is the display order of the palette families.
+var families = []family{familyCyberpunk, familyNord, familyDracula, familyTokyoNight}
+
+// parseFamily maps a config value to a family, defaulting to cyberpunk.
+func parseFamily(s string) family {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "nord":
+		return familyNord
+	case "dracula":
+		return familyDracula
+	case "tokyo-night", "tokyonight", "tokyo_night":
+		return familyTokyoNight
 	default:
-		return schemeSystem
+		return familyCyberpunk
 	}
 }
 
-func (s scheme) String() string {
+// familyLabel returns the translated family name.
+func familyLabel(f family) string {
+	switch f {
+	case familyNord:
+		return i18n.T("theme.family.nord")
+	case familyDracula:
+		return i18n.T("theme.family.dracula")
+	case familyTokyoNight:
+		return i18n.T("theme.family.tokyo_night")
+	default:
+		return i18n.T("theme.family.cyberpunk")
+	}
+}
+
+// parseFamilyLabel maps a translated family name back to a family.
+func parseFamilyLabel(s string) family {
 	switch s {
-	case schemeLight:
+	case i18n.T("theme.family.nord"):
+		return familyNord
+	case i18n.T("theme.family.dracula"):
+		return familyDracula
+	case i18n.T("theme.family.tokyo_night"):
+		return familyTokyoNight
+	default:
+		return familyCyberpunk
+	}
+}
+
+// variant selects light, dark or the operating system preference.
+type variant int
+
+const (
+	variantSystem variant = iota
+	variantLight
+	variantDark
+)
+
+// parseVariant maps a config value to a variant, defaulting to system.
+func parseVariant(s string) variant {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "light":
+		return variantLight
+	case "dark":
+		return variantDark
+	default:
+		return variantSystem
+	}
+}
+
+func (v variant) String() string {
+	switch v {
+	case variantLight:
 		return "light"
-	case schemeDark:
+	case variantDark:
 		return "dark"
 	default:
 		return "system"
 	}
 }
 
-// palette is a flat cyberpunk colour set. Body colours keep a high contrast
-// ratio; neon is reserved for accents, borders, separators and headings.
+// variantLabel returns the translated variant name.
+func variantLabel(v variant) string {
+	switch v {
+	case variantLight:
+		return i18n.T("menu.view.light")
+	case variantDark:
+		return i18n.T("menu.view.dark")
+	default:
+		return i18n.T("menu.view.system")
+	}
+}
+
+// parseVariantLabel maps a translated variant name back to a variant.
+func parseVariantLabel(s string) variant {
+	switch s {
+	case i18n.T("menu.view.light"):
+		return variantLight
+	case i18n.T("menu.view.dark"):
+		return variantDark
+	default:
+		return variantSystem
+	}
+}
+
+// palette is a flat colour set. Body colours keep a high contrast ratio;
+// accents are reserved for primary controls, borders, separators and headings.
 type palette struct {
 	background, surface, dialogSurface, input, inputBorder color.Color
 	text, subtle, innerBorder, separator                   color.Color
 	primary, onPrimary, secondary                          color.Color
 	selection, focus, header, hover, scrim                 color.Color
 	warning, errColor, success                             color.Color
+	onWarning, onError, onSuccess                          color.Color
 }
 
-func darkPalette() palette {
+func cyberpunkDark() palette {
 	return palette{
 		background:    color.NRGBA{R: 0x0A, G: 0x0B, B: 0x12, A: 0xFF},
 		surface:       color.NRGBA{R: 0x14, G: 0x16, B: 0x1F, A: 0xFF},
@@ -77,14 +160,17 @@ func darkPalette() palette {
 		focus:         color.NRGBA{R: 0x00, G: 0xE5, B: 0xFF, A: 0xFF},
 		header:        color.NRGBA{R: 0x14, G: 0x16, B: 0x1F, A: 0xFF},
 		hover:         color.NRGBA{R: 0x1B, G: 0x21, B: 0x30, A: 0xFF},
-		scrim:         color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0x99},
+		scrim:         color.NRGBA{A: 0x99},
 		warning:       color.NRGBA{R: 0xFF, G: 0xE6, B: 0x00, A: 0xFF},
 		errColor:      color.NRGBA{R: 0xFF, G: 0x4D, B: 0x6D, A: 0xFF},
 		success:       color.NRGBA{R: 0x39, G: 0xD9, B: 0x8A, A: 0xFF},
+		onWarning:     color.NRGBA{A: 0xFF},
+		onError:       color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
 	}
 }
 
-func lightPalette() palette {
+func cyberpunkLight() palette {
 	return palette{
 		background:    color.NRGBA{R: 0xF4, G: 0xF6, B: 0xFB, A: 0xFF},
 		surface:       color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
@@ -102,14 +188,218 @@ func lightPalette() palette {
 		focus:         color.NRGBA{R: 0x00, G: 0x89, B: 0xA8, A: 0xFF},
 		header:        color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
 		hover:         color.NRGBA{R: 0xE8, G: 0xED, B: 0xF7, A: 0xFF},
-		scrim:         color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0x55},
+		scrim:         color.NRGBA{A: 0x55},
 		warning:       color.NRGBA{R: 0xB5, G: 0x89, B: 0x00, A: 0xFF},
 		errColor:      color.NRGBA{R: 0xD6, G: 0x33, B: 0x6C, A: 0xFF},
 		success:       color.NRGBA{R: 0x12, G: 0xA1, B: 0x50, A: 0xFF},
+		onWarning:     color.NRGBA{A: 0xFF},
+		onError:       color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
 	}
 }
 
-func (p palette) color(n fyne.ThemeColorName) color.Color {
+// nordDark uses the Nord Polar Night and Frost colours.
+func nordDark() palette {
+	return palette{
+		background:    color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+		surface:       color.NRGBA{R: 0x3B, G: 0x42, B: 0x52, A: 0xFF},
+		dialogSurface: color.NRGBA{R: 0x3B, G: 0x42, B: 0x52, A: 0xFF},
+		input:         color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+		inputBorder:   color.NRGBA{R: 0x4C, G: 0x56, B: 0x6A, A: 0xFF},
+		text:          color.NRGBA{R: 0xEC, G: 0xEF, B: 0xF4, A: 0xFF},
+		subtle:        color.NRGBA{R: 0xD8, G: 0xDE, B: 0xE9, A: 0xFF},
+		innerBorder:   color.NRGBA{R: 0x4C, G: 0x56, B: 0x6A, A: 0xFF},
+		separator:     color.NRGBA{R: 0x4C, G: 0x56, B: 0x6A, A: 0xFF},
+		primary:       color.NRGBA{R: 0x88, G: 0xC0, B: 0xD0, A: 0xFF},
+		onPrimary:     color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+		secondary:     color.NRGBA{R: 0xB4, G: 0x8E, B: 0xAD, A: 0xFF},
+		selection:     color.NRGBA{R: 0x3B, G: 0x51, B: 0x62, A: 0xFF},
+		focus:         color.NRGBA{R: 0x88, G: 0xC0, B: 0xD0, A: 0xFF},
+		header:        color.NRGBA{R: 0x3B, G: 0x42, B: 0x52, A: 0xFF},
+		hover:         color.NRGBA{R: 0x43, G: 0x4C, B: 0x5E, A: 0xFF},
+		scrim:         color.NRGBA{A: 0x99},
+		warning:       color.NRGBA{R: 0xEB, G: 0xCB, B: 0x8B, A: 0xFF},
+		errColor:      color.NRGBA{R: 0xBF, G: 0x61, B: 0x6A, A: 0xFF},
+		success:       color.NRGBA{R: 0xA3, G: 0xBE, B: 0x8C, A: 0xFF},
+		onWarning:     color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+		onError:       color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+	}
+}
+
+// nordLight uses the Nord Snow Storm colours.
+func nordLight() palette {
+	return palette{
+		background:    color.NRGBA{R: 0xEC, G: 0xEF, B: 0xF4, A: 0xFF},
+		surface:       color.NRGBA{R: 0xE5, G: 0xE9, B: 0xF0, A: 0xFF},
+		dialogSurface: color.NRGBA{R: 0xEC, G: 0xEF, B: 0xF4, A: 0xFF},
+		input:         color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		inputBorder:   color.NRGBA{R: 0x81, G: 0xA1, B: 0xC1, A: 0xFF},
+		text:          color.NRGBA{R: 0x2E, G: 0x34, B: 0x40, A: 0xFF},
+		subtle:        color.NRGBA{R: 0x4C, G: 0x56, B: 0x6A, A: 0xFF},
+		innerBorder:   color.NRGBA{R: 0xD8, G: 0xDE, B: 0xE9, A: 0xFF},
+		separator:     color.NRGBA{R: 0xD8, G: 0xDE, B: 0xE9, A: 0xFF},
+		primary:       color.NRGBA{R: 0x5E, G: 0x81, B: 0xAC, A: 0xFF},
+		onPrimary:     color.NRGBA{R: 0xEC, G: 0xEF, B: 0xF4, A: 0xFF},
+		secondary:     color.NRGBA{R: 0xB4, G: 0x8E, B: 0xAD, A: 0xFF},
+		selection:     color.NRGBA{R: 0xD8, G: 0xDE, B: 0xE9, A: 0xFF},
+		focus:         color.NRGBA{R: 0x5E, G: 0x81, B: 0xAC, A: 0xFF},
+		header:        color.NRGBA{R: 0xE5, G: 0xE9, B: 0xF0, A: 0xFF},
+		hover:         color.NRGBA{R: 0xD8, G: 0xDE, B: 0xE9, A: 0xFF},
+		scrim:         color.NRGBA{A: 0x55},
+		warning:       color.NRGBA{R: 0xA5, G: 0x6A, B: 0x00, A: 0xFF},
+		errColor:      color.NRGBA{R: 0xBF, G: 0x61, B: 0x6A, A: 0xFF},
+		success:       color.NRGBA{R: 0x4F, G: 0x8A, B: 0x4C, A: 0xFF},
+		onWarning:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		onError:       color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+	}
+}
+
+// draculaDark uses the Dracula colours.
+func draculaDark() palette {
+	return palette{
+		background:    color.NRGBA{R: 0x28, G: 0x2A, B: 0x36, A: 0xFF},
+		surface:       color.NRGBA{R: 0x44, G: 0x47, B: 0x5A, A: 0xFF},
+		dialogSurface: color.NRGBA{R: 0x34, G: 0x37, B: 0x46, A: 0xFF},
+		input:         color.NRGBA{R: 0x21, G: 0x22, B: 0x2C, A: 0xFF},
+		inputBorder:   color.NRGBA{R: 0x62, G: 0x72, B: 0xA4, A: 0xFF},
+		text:          color.NRGBA{R: 0xF8, G: 0xF8, B: 0xF2, A: 0xFF},
+		subtle:        color.NRGBA{R: 0x62, G: 0x72, B: 0xA4, A: 0xFF},
+		innerBorder:   color.NRGBA{R: 0x44, G: 0x47, B: 0x5A, A: 0xFF},
+		separator:     color.NRGBA{R: 0x44, G: 0x47, B: 0x5A, A: 0xFF},
+		primary:       color.NRGBA{R: 0xBD, G: 0x93, B: 0xF9, A: 0xFF},
+		onPrimary:     color.NRGBA{R: 0x28, G: 0x2A, B: 0x36, A: 0xFF},
+		secondary:     color.NRGBA{R: 0xFF, G: 0x79, B: 0xC6, A: 0xFF},
+		selection:     color.NRGBA{R: 0x44, G: 0x47, B: 0x5A, A: 0xFF},
+		focus:         color.NRGBA{R: 0xBD, G: 0x93, B: 0xF9, A: 0xFF},
+		header:        color.NRGBA{R: 0x34, G: 0x37, B: 0x46, A: 0xFF},
+		hover:         color.NRGBA{R: 0x44, G: 0x47, B: 0x5A, A: 0xFF},
+		scrim:         color.NRGBA{A: 0x99},
+		warning:       color.NRGBA{R: 0xF1, G: 0xFA, B: 0x8C, A: 0xFF},
+		errColor:      color.NRGBA{R: 0xFF, G: 0x55, B: 0x55, A: 0xFF},
+		success:       color.NRGBA{R: 0x50, G: 0xFA, B: 0x7B, A: 0xFF},
+		onWarning:     color.NRGBA{R: 0x28, G: 0x2A, B: 0x36, A: 0xFF},
+		onError:       color.NRGBA{R: 0x28, G: 0x2A, B: 0x36, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0x28, G: 0x2A, B: 0x36, A: 0xFF},
+	}
+}
+
+// draculaLight uses Dracula's Alucard light colours.
+func draculaLight() palette {
+	return palette{
+		background:    color.NRGBA{R: 0xFF, G: 0xFB, B: 0xEB, A: 0xFF},
+		surface:       color.NRGBA{R: 0xF0, G: 0xEA, B: 0xD2, A: 0xFF},
+		dialogSurface: color.NRGBA{R: 0xFF, G: 0xFB, B: 0xEB, A: 0xFF},
+		input:         color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		inputBorder:   color.NRGBA{R: 0x6C, G: 0x66, B: 0x4B, A: 0xFF},
+		text:          color.NRGBA{R: 0x1F, G: 0x1F, B: 0x1F, A: 0xFF},
+		subtle:        color.NRGBA{R: 0x6C, G: 0x66, B: 0x4B, A: 0xFF},
+		innerBorder:   color.NRGBA{R: 0xDD, G: 0xD6, B: 0xB8, A: 0xFF},
+		separator:     color.NRGBA{R: 0xDD, G: 0xD6, B: 0xB8, A: 0xFF},
+		primary:       color.NRGBA{R: 0x64, G: 0x4A, B: 0xC9, A: 0xFF},
+		onPrimary:     color.NRGBA{R: 0xFF, G: 0xFB, B: 0xEB, A: 0xFF},
+		secondary:     color.NRGBA{R: 0xA3, G: 0x14, B: 0x4D, A: 0xFF},
+		selection:     color.NRGBA{R: 0xE8, G: 0xE0, B: 0xC4, A: 0xFF},
+		focus:         color.NRGBA{R: 0x64, G: 0x4A, B: 0xC9, A: 0xFF},
+		header:        color.NRGBA{R: 0xF0, G: 0xEA, B: 0xD2, A: 0xFF},
+		hover:         color.NRGBA{R: 0xF0, G: 0xEA, B: 0xD2, A: 0xFF},
+		scrim:         color.NRGBA{A: 0x55},
+		warning:       color.NRGBA{R: 0x84, G: 0x6E, B: 0x15, A: 0xFF},
+		errColor:      color.NRGBA{R: 0xCB, G: 0x3A, B: 0x2A, A: 0xFF},
+		success:       color.NRGBA{R: 0x14, G: 0x71, B: 0x0A, A: 0xFF},
+		onWarning:     color.NRGBA{R: 0xFF, G: 0xFB, B: 0xEB, A: 0xFF},
+		onError:       color.NRGBA{R: 0xFF, G: 0xFB, B: 0xEB, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0xFF, G: 0xFB, B: 0xEB, A: 0xFF},
+	}
+}
+
+// tokyoNightDark uses Tokyo Night's night colours.
+func tokyoNightDark() palette {
+	return palette{
+		background:    color.NRGBA{R: 0x1A, G: 0x1B, B: 0x26, A: 0xFF},
+		surface:       color.NRGBA{R: 0x29, G: 0x2E, B: 0x42, A: 0xFF},
+		dialogSurface: color.NRGBA{R: 0x1F, G: 0x23, B: 0x35, A: 0xFF},
+		input:         color.NRGBA{R: 0x16, G: 0x16, B: 0x1E, A: 0xFF},
+		inputBorder:   color.NRGBA{R: 0x41, G: 0x48, B: 0x68, A: 0xFF},
+		text:          color.NRGBA{R: 0xC0, G: 0xCA, B: 0xF5, A: 0xFF},
+		subtle:        color.NRGBA{R: 0x56, G: 0x5F, B: 0x89, A: 0xFF},
+		innerBorder:   color.NRGBA{R: 0x29, G: 0x2E, B: 0x42, A: 0xFF},
+		separator:     color.NRGBA{R: 0x29, G: 0x2E, B: 0x42, A: 0xFF},
+		primary:       color.NRGBA{R: 0x7A, G: 0xA2, B: 0xF7, A: 0xFF},
+		onPrimary:     color.NRGBA{R: 0x1A, G: 0x1B, B: 0x26, A: 0xFF},
+		secondary:     color.NRGBA{R: 0xBB, G: 0x9A, B: 0xF7, A: 0xFF},
+		selection:     color.NRGBA{R: 0x24, G: 0x30, B: 0x4D, A: 0xFF},
+		focus:         color.NRGBA{R: 0x7A, G: 0xA2, B: 0xF7, A: 0xFF},
+		header:        color.NRGBA{R: 0x1F, G: 0x23, B: 0x35, A: 0xFF},
+		hover:         color.NRGBA{R: 0x29, G: 0x2E, B: 0x42, A: 0xFF},
+		scrim:         color.NRGBA{A: 0x99},
+		warning:       color.NRGBA{R: 0xE0, G: 0xAF, B: 0x68, A: 0xFF},
+		errColor:      color.NRGBA{R: 0xF7, G: 0x76, B: 0x8E, A: 0xFF},
+		success:       color.NRGBA{R: 0x9E, G: 0xCE, B: 0x6A, A: 0xFF},
+		onWarning:     color.NRGBA{R: 0x1A, G: 0x1B, B: 0x26, A: 0xFF},
+		onError:       color.NRGBA{R: 0x1A, G: 0x1B, B: 0x26, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0x1A, G: 0x1B, B: 0x26, A: 0xFF},
+	}
+}
+
+// tokyoNightLight uses Tokyo Night's day colours.
+func tokyoNightLight() palette {
+	return palette{
+		background:    color.NRGBA{R: 0xE1, G: 0xE2, B: 0xE7, A: 0xFF},
+		surface:       color.NRGBA{R: 0xD0, G: 0xD5, B: 0xE3, A: 0xFF},
+		dialogSurface: color.NRGBA{R: 0xE1, G: 0xE2, B: 0xE7, A: 0xFF},
+		input:         color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		inputBorder:   color.NRGBA{R: 0x84, G: 0x8C, B: 0xB5, A: 0xFF},
+		text:          color.NRGBA{R: 0x34, G: 0x3B, B: 0x58, A: 0xFF},
+		subtle:        color.NRGBA{R: 0x84, G: 0x8C, B: 0xB5, A: 0xFF},
+		innerBorder:   color.NRGBA{R: 0xC4, G: 0xC8, B: 0xDA, A: 0xFF},
+		separator:     color.NRGBA{R: 0xC4, G: 0xC8, B: 0xDA, A: 0xFF},
+		primary:       color.NRGBA{R: 0x2E, G: 0x7D, B: 0xE9, A: 0xFF},
+		onPrimary:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		secondary:     color.NRGBA{R: 0x98, G: 0x54, B: 0xF1, A: 0xFF},
+		selection:     color.NRGBA{R: 0xC4, G: 0xC8, B: 0xDA, A: 0xFF},
+		focus:         color.NRGBA{R: 0x2E, G: 0x7D, B: 0xE9, A: 0xFF},
+		header:        color.NRGBA{R: 0xD0, G: 0xD5, B: 0xE3, A: 0xFF},
+		hover:         color.NRGBA{R: 0xC4, G: 0xC8, B: 0xDA, A: 0xFF},
+		scrim:         color.NRGBA{A: 0x55},
+		warning:       color.NRGBA{R: 0x8C, G: 0x6C, B: 0x3E, A: 0xFF},
+		errColor:      color.NRGBA{R: 0xF5, G: 0x2A, B: 0x65, A: 0xFF},
+		success:       color.NRGBA{R: 0x58, G: 0x75, B: 0x39, A: 0xFF},
+		onWarning:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		onError:       color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+		onSuccess:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+	}
+}
+
+// familyPalette returns the palette of a family for a resolved variant.
+func familyPalette(f family, v fyne.ThemeVariant) palette {
+	dark := v == theme.VariantDark
+	switch f {
+	case familyNord:
+		if dark {
+			return nordDark()
+		}
+		return nordLight()
+	case familyDracula:
+		if dark {
+			return draculaDark()
+		}
+		return draculaLight()
+	case familyTokyoNight:
+		if dark {
+			return tokyoNightDark()
+		}
+		return tokyoNightLight()
+	default:
+		if dark {
+			return cyberpunkDark()
+		}
+		return cyberpunkLight()
+	}
+}
+
+func (p palette) color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 	switch n {
 	case theme.ColorNameBackground:
 		return p.background
@@ -124,19 +414,19 @@ func (p palette) color(n fyne.ThemeColorName) color.Color {
 	case theme.ColorNameForeground:
 		return p.text
 	case theme.ColorNameForegroundOnError:
-		return color.White
+		return p.onError
 	case theme.ColorNameForegroundOnPrimary:
 		return p.onPrimary
 	case theme.ColorNameForegroundOnSuccess:
-		return color.White
+		return p.onSuccess
 	case theme.ColorNameForegroundOnWarning:
-		return color.Black
+		return p.onWarning
 	case theme.ColorNameHeaderBackground:
 		return p.header
 	case theme.ColorNameHover:
 		return p.hover
 	case theme.ColorNameHyperlink:
-		return p.primary
+		return p.secondary
 	case theme.ColorNameInnerWindowBorder, theme.ColorNameInnerWindowBorderInactive:
 		return p.innerBorder
 	case theme.ColorNameInputBackground:
@@ -170,41 +460,46 @@ func (p palette) color(n fyne.ThemeColorName) color.Color {
 	case theme.ColorNameFocus:
 		return p.focus
 	default:
-		return theme.DefaultTheme().Color(n, theme.VariantDark)
+		return theme.DefaultTheme().Color(n, v)
 	}
 }
 
-// cyberTheme is a flat theme with a cyan/magenta palette.
+// cyberTheme is a flat theme with a selectable palette family and variant.
 type cyberTheme struct {
-	mode scheme
-	size float32
-	mono float32
+	fam     family
+	variant variant
+	size    float32
+	mono    float32
 }
 
-func newTheme(mode scheme, fontSize float64) *cyberTheme {
+var _ fyne.Theme = (*cyberTheme)(nil)
+
+func newTheme(fam family, vr variant, fontSize float64) *cyberTheme {
 	if fontSize < 8 || fontSize > 40 {
 		fontSize = 14
 	}
-	return &cyberTheme{mode: mode, size: float32(fontSize), mono: float32(fontSize) - 2}
+	return &cyberTheme{fam: fam, variant: vr, size: float32(fontSize), mono: float32(fontSize) - 2}
 }
 
-func (t *cyberTheme) setMode(m scheme) { t.mode = m }
+// resolvedVariant applies the configured variant to the one Fyne supplies.
+func (t *cyberTheme) resolvedVariant(v fyne.ThemeVariant) fyne.ThemeVariant {
+	switch t.variant {
+	case variantLight:
+		return theme.VariantLight
+	case variantDark:
+		return theme.VariantDark
+	default:
+		return v
+	}
+}
 
 func (t *cyberTheme) pal(v fyne.ThemeVariant) palette {
-	switch t.mode {
-	case schemeLight:
-		v = theme.VariantLight
-	case schemeDark:
-		v = theme.VariantDark
-	}
-	if v == theme.VariantDark {
-		return darkPalette()
-	}
-	return lightPalette()
+	return familyPalette(t.fam, t.resolvedVariant(v))
 }
 
 func (t *cyberTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
-	return t.pal(v).color(n)
+	rv := t.resolvedVariant(v)
+	return familyPalette(t.fam, rv).color(n, rv)
 }
 
 func (t *cyberTheme) Font(s fyne.TextStyle) fyne.Resource {

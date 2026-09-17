@@ -29,7 +29,7 @@ func newTestApp(t *testing.T) *App {
 	}
 	a.icons = newIconResolver()
 	a.fapp = test.NewApp()
-	a.th = newTheme(schemeLight, 14)
+	a.th = newTheme(familyCyberpunk, variantLight, 14)
 	a.fapp.Settings().SetTheme(a.th)
 	a.build()
 	return a

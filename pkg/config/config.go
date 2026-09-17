@@ -56,8 +56,11 @@ type SpeedhackConfig struct {
 
 // UIConfig holds presentation defaults.
 type UIConfig struct {
-	ResultLimit  int     `yaml:"result_limit"`
-	Theme        string  `yaml:"theme"`
+	ResultLimit int `yaml:"result_limit"`
+	// Theme is the palette family: cyberpunk, nord, dracula or tokyo-night.
+	Theme string `yaml:"theme"`
+	// ThemeVariant is light, dark or system.
+	ThemeVariant string  `yaml:"theme_variant"`
 	Language     string  `yaml:"language"`
 	Scale        float64 `yaml:"scale"`
 	FontSize     float64 `yaml:"font_size"`
@@ -76,8 +79,11 @@ func Default() Config {
 		},
 		Debugger:  DebuggerConfig{Backend: "ptrace", GDBPath: "gdb"},
 		Speedhack: SpeedhackConfig{Enabled: false, Scale: 1.0, Delta: 0.5},
-		UI:        UIConfig{ResultLimit: 1000, Theme: "light", Language: "en", Scale: 1.0, FontSize: 14, ProcessIcons: true},
-		Log:       LogConfig{Level: "info"},
+		UI: UIConfig{
+			ResultLimit: 1000, Theme: "cyberpunk", ThemeVariant: "light",
+			Language: "en", Scale: 1.0, FontSize: 14, ProcessIcons: true,
+		},
+		Log: LogConfig{Level: "info"},
 	}
 }
 
@@ -94,7 +100,23 @@ func Load(path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("config: parse %s: %w", path, err)
 	}
+	migrateUI(&cfg.UI)
 	return cfg, nil
+}
+
+// migrateUI upgrades the pre-family ui.theme values (light, dark, system) to
+// the cyberpunk family plus a variant, and fills in empty fields.
+func migrateUI(ui *UIConfig) {
+	switch ui.Theme {
+	case "light", "dark", "system":
+		ui.ThemeVariant = ui.Theme
+		ui.Theme = "cyberpunk"
+	case "":
+		ui.Theme = "cyberpunk"
+	}
+	if ui.ThemeVariant == "" {
+		ui.ThemeVariant = "light"
+	}
 }
 
 // Save writes the configuration as YAML, creating parent directories.
