@@ -78,6 +78,37 @@ func TestHyperlinkUsesSecondaryAccent(t *testing.T) {
 	}
 }
 
+func TestThemeMenuHasSingleSystemOption(t *testing.T) {
+	a := newTestApp(t)
+	systemLabel := variantLabel(variantSystem)
+	systems, checked := 0, 0
+	var walk func(items []*fyne.MenuItem)
+	walk = func(items []*fyne.MenuItem) {
+		for _, it := range items {
+			if it.Label == systemLabel {
+				systems++
+			}
+			if it.Checked {
+				checked++
+			}
+			if it.ChildMenu != nil {
+				walk(it.ChildMenu.Items)
+			}
+		}
+	}
+	for _, it := range a.viewMenu.Items {
+		if it.ChildMenu != nil {
+			walk(it.ChildMenu.Items)
+		}
+	}
+	if systems != 1 {
+		t.Errorf("found %d System entries, want 1", systems)
+	}
+	if checked != 1 {
+		t.Errorf("found %d checked theme entries, want 1", checked)
+	}
+}
+
 // resolveVariant mirrors cyberTheme.resolvedVariant for tests.
 func resolveVariant(vr variant) fyne.ThemeVariant {
 	if vr == variantDark {

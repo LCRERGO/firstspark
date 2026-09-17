@@ -74,8 +74,9 @@ type App struct {
 	icons     *iconResolver
 	showIcons bool
 
-	viewMenu     *fyne.Menu
-	themeChoices []themeChoice
+	viewMenu        *fyne.Menu
+	themeChoices    []themeChoice
+	themeSystemItem *fyne.MenuItem
 
 	session    *scan.Session
 	regionSel  []mem.Region
@@ -446,11 +447,11 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	settings := fyne.NewMenuItem(i18n.T("menu.edit.settings"), a.showSettings)
 	edit := fyne.NewMenu(i18n.T("menu.edit"), settings)
 
-	var familyItems []*fyne.MenuItem
+	var themeItems []*fyne.MenuItem
 	for _, fam := range families {
 		fam := fam
 		var variantItems []*fyne.MenuItem
-		for _, vr := range []variant{variantLight, variantDark, variantSystem} {
+		for _, vr := range []variant{variantLight, variantDark} {
 			vr := vr
 			item := fyne.NewMenuItem(variantLabel(vr), func() { a.setTheme(fam, vr) })
 			a.themeChoices = append(a.themeChoices, themeChoice{fam: fam, variant: vr, item: item})
@@ -458,10 +459,15 @@ func (a *App) mainMenu() *fyne.MainMenu {
 		}
 		famItem := fyne.NewMenuItem(familyLabel(fam), nil)
 		famItem.ChildMenu = fyne.NewMenu("", variantItems...)
-		familyItems = append(familyItems, famItem)
+		themeItems = append(themeItems, famItem)
 	}
+	// System is a single option that keeps the current family and follows the
+	// desktop light/dark preference.
+	a.themeSystemItem = fyne.NewMenuItem(variantLabel(variantSystem),
+		func() { a.setTheme(parseFamily(a.cfg.UI.Theme), variantSystem) })
+	themeItems = append(themeItems, fyne.NewMenuItemSeparator(), a.themeSystemItem)
 	themeItem := fyne.NewMenuItem(i18n.T("menu.view.theme"), nil)
-	themeItem.ChildMenu = fyne.NewMenu("", familyItems...)
+	themeItem.ChildMenu = fyne.NewMenu("", themeItems...)
 	a.viewMenu = fyne.NewMenu(i18n.T("menu.view"), themeItem)
 	a.updateThemeChecks()
 
@@ -512,8 +518,12 @@ func (a *App) setTheme(fam family, vr variant) {
 func (a *App) updateThemeChecks() {
 	activeFam := parseFamily(a.cfg.UI.Theme)
 	activeVariant := parseVariant(a.cfg.UI.ThemeVariant)
+	system := activeVariant == variantSystem
 	for _, c := range a.themeChoices {
-		c.item.Checked = c.fam == activeFam && c.variant == activeVariant
+		c.item.Checked = !system && c.fam == activeFam && c.variant == activeVariant
+	}
+	if a.themeSystemItem != nil {
+		a.themeSystemItem.Checked = system
 	}
 	if a.viewMenu != nil {
 		a.viewMenu.Refresh()

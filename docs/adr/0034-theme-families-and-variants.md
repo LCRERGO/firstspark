@@ -34,8 +34,11 @@ palette's `selection` kept as its own accent tint).
 Config gains `ui.theme` (family slug, default `cyberpunk`) and
 `ui.theme_variant` (`light`/`dark`/`system`, default `light`). An old
 `ui.theme: light|dark|system` is migrated on load to `cyberpunk` plus that
-variant. The View menu becomes **Theme ▸ \<Family\> ▸ Light/Dark/System**, and
-Settings shows two dropdowns (family and variant).
+variant. The View menu becomes **Theme ▸ \<Family\> ▸ Light/Dark** with a single
+**System** entry at the end (System is a variant, not a family, so repeating it
+under every family would be redundant); the entry keeps the current family and
+follows the desktop preference. Settings shows two dropdowns (family and
+variant), the variant one already listing a single System.
 
 ## Consequences
 
