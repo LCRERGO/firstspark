@@ -51,6 +51,12 @@ encodings. Custom types loaded from `customtypes.yaml` also appear here.
 AOB patterns accept spaces or compact hex and `??` wildcards, e.g.
 `48 8B ?? E5` or `488B??E5`.
 
+Numeric scan values may be a single Lua expression (the `pkg/script` subset),
+e.g. `360 * (10 ^ 6)` or `math.floor(10 / 3)`. Integer types require an
+integral result; power is `^`. Hovering the Scan Value, Compare, Scan Type and
+Value Type controls in the GUI shows a hint describing the accepted syntax,
+including the AOB wildcard pattern.
+
 ## Scan modes
 
 `exact`, `unknown`, `changed`, `unchanged`, `increased`, `decreased`,
