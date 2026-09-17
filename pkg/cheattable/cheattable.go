@@ -9,7 +9,11 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
+
+// SchemaVersion identifies the firstspark cheat-table schema revision.
+const SchemaVersion = "2"
 
 // Entry is a single cheat table entry.
 type Entry struct {
@@ -18,16 +22,110 @@ type Entry struct {
 	Address     string `xml:"Address,attr" json:"address"`
 	Type        string `xml:"Type,attr" json:"type"`
 	Value       string `xml:",chardata" json:"value"`
+	// Hotkey is the freeze toggle key (F1..F12 or a letter).
+	Hotkey string `xml:"Hotkey,attr,omitempty" json:"hotkey,omitempty"`
+	// Display is the value format: "decimal", "hex" or "binary".
+	Display string `xml:"Display,attr,omitempty" json:"display,omitempty"`
+	// Frozen marks a locked value.
+	Frozen bool `xml:"Frozen,attr,omitempty" json:"frozen,omitempty"`
+	// Encoding is the string encoding for string types (e.g. "utf16le").
+	Encoding string `xml:"Encoding,attr,omitempty" json:"encoding,omitempty"`
+	// Pointer is a pointer chain, see FormatPointerChain.
+	Pointer string `xml:"Pointer,attr,omitempty" json:"pointer,omitempty"`
+	// BitSize, BitOffset, BitWidth and BitSigned describe a bitfield entry.
+	BitSize   int  `xml:"BitSize,attr,omitempty" json:"bit_size,omitempty"`
+	BitOffset int  `xml:"BitOffset,attr,omitempty" json:"bit_offset,omitempty"`
+	BitWidth  int  `xml:"BitWidth,attr,omitempty" json:"bit_width,omitempty"`
+	BitSigned bool `xml:"BitSigned,attr,omitempty" json:"bit_signed,omitempty"`
 }
 
 // Table is a flat list of cheat entries.
 type Table struct {
 	XMLName xml.Name `xml:"CheatTable" json:"-"`
+	Version string   `xml:"Version,attr,omitempty" json:"version,omitempty"`
 	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries"`
+}
+
+// PointerChain is a parsed pointer path. When Module is set, Offset is relative
+// to that module's load base; otherwise Base is an absolute address.
+type PointerChain struct {
+	Module  string
+	Base    uint64
+	Offset  uint64
+	Offsets []int64
+}
+
+// FormatPointerChain renders a chain as "module+0xoffset:+0x10,-0x8" or
+// "0xbase:+0x10". It returns "" when there is nothing to store.
+func FormatPointerChain(c PointerChain) string {
+	if c.Module == "" && c.Base == 0 && c.Offset == 0 && len(c.Offsets) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	if c.Module != "" {
+		fmt.Fprintf(&b, "%s+0x%x", c.Module, c.Offset)
+	} else {
+		fmt.Fprintf(&b, "0x%x", c.Base)
+	}
+	for _, off := range c.Offsets {
+		if off < 0 {
+			fmt.Fprintf(&b, ":-0x%x", uint64(-off))
+		} else {
+			fmt.Fprintf(&b, ":+0x%x", uint64(off))
+		}
+	}
+	return b.String()
+}
+
+// ParsePointerChain parses a Pointer attribute written by FormatPointerChain.
+func ParsePointerChain(s string) (PointerChain, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return PointerChain{}, false
+	}
+	head, rest, _ := strings.Cut(s, ":")
+	var c PointerChain
+	if i := strings.LastIndex(head, "+0x"); i > 0 {
+		c.Module = head[:i]
+		v, err := strconv.ParseUint(head[i+3:], 16, 64)
+		if err != nil {
+			return PointerChain{}, false
+		}
+		c.Offset = v
+	} else {
+		v, err := strconv.ParseUint(strings.TrimPrefix(head, "0x"), 16, 64)
+		if err != nil {
+			return PointerChain{}, false
+		}
+		c.Base = v
+	}
+	if rest != "" {
+		for _, part := range strings.Split(rest, ":") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			neg := strings.HasPrefix(part, "-")
+			part = strings.TrimPrefix(strings.TrimPrefix(part, "-"), "+")
+			part = strings.TrimPrefix(strings.TrimPrefix(part, "0x"), "0X")
+			v, err := strconv.ParseInt(part, 16, 64)
+			if err != nil {
+				return PointerChain{}, false
+			}
+			if neg {
+				v = -v
+			}
+			c.Offsets = append(c.Offsets, v)
+		}
+	}
+	return c, true
 }
 
 // Add appends an entry, assigning the next ID.
 func (t *Table) Add(description, address, typ, value string) {
+	if t.Version == "" {
+		t.Version = SchemaVersion
+	}
 	id := 1
 	if len(t.Entries) > 0 {
 		id = t.Entries[len(t.Entries)-1].ID + 1

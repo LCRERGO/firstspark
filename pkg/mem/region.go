@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -123,6 +124,26 @@ func parseRange(s string) (uint64, uint64, error) {
 		return 0, 0, fmt.Errorf("mem: bad range end %q: %w", hi, err)
 	}
 	return start, end, nil
+}
+
+// ModuleBase returns the load base of the named module, matched by base name
+// (e.g. "libc.so.6"). It uses the lowest file-backed region mapped at offset 0.
+func ModuleBase(regions []Region, name string) (uint64, bool) {
+	var base uint64
+	found := false
+	for _, r := range regions {
+		if r.Offset != 0 {
+			continue
+		}
+		if filepath.Base(strings.TrimSuffix(r.Path, " (deleted)")) != name {
+			continue
+		}
+		if !found || r.Start < base {
+			base = r.Start
+			found = true
+		}
+	}
+	return base, found
 }
 
 // RegionFor returns the region containing addr, if any.
