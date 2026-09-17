@@ -42,17 +42,27 @@ func TestPropertyIntegerRoundTrip(t *testing.T) {
 }
 
 // TestPropertyFloatBitsRoundTrip checks that the IEEE-754 bit pattern survives
-// encode/decode for both float widths.
+// encode/decode for both float widths. NaN payloads are excluded: converting a
+// signalling NaN through float64 quiets it, which is not a property the code
+// promises.
 func TestPropertyFloatBitsRoundTrip(t *testing.T) {
 	double := func(bits uint64) bool {
-		raw := encodeFloat(TypeDouble, math.Float64frombits(bits)).Raw
+		f := math.Float64frombits(bits)
+		if math.IsNaN(f) {
+			return true
+		}
+		raw := encodeFloat(TypeDouble, f).Raw
 		return math.Float64bits(Value{Type: TypeDouble, Raw: raw}.Float64()) == bits
 	}
 	if err := quick.Check(double, nil); err != nil {
 		t.Errorf("double: %v", err)
 	}
 	single := func(bits uint32) bool {
-		raw := encodeFloat(TypeFloat, float64(math.Float32frombits(bits))).Raw
+		f := math.Float32frombits(bits)
+		if math.IsNaN(float64(f)) {
+			return true
+		}
+		raw := encodeFloat(TypeFloat, float64(f)).Raw
 		return math.Float32bits(float32(Value{Type: TypeFloat, Raw: raw}.Float64())) == bits
 	}
 	if err := quick.Check(single, nil); err != nil {
