@@ -259,6 +259,13 @@ func (c *keyCapture) FocusGained()            {}
 func (c *keyCapture) FocusLost()              {}
 func (c *keyCapture) TypedRune(rune)          {}
 func (c *keyCapture) TypedKey(*fyne.KeyEvent) {}
+func (c *keyCapture) KeyUp(*fyne.KeyEvent)    {}
+
+var (
+	_ fyne.Focusable  = (*keyCapture)(nil)
+	_ desktop.Keyable = (*keyCapture)(nil)
+	_ fyne.Tappable   = (*keyCapture)(nil)
+)
 
 func (c *keyCapture) KeyDown(ev *fyne.KeyEvent) {
 	switch ev.Name {
