@@ -9,6 +9,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/internal/ui"
 	"github.com/LCRERGO/firstspark/pkg/cheattable"
 	"github.com/LCRERGO/firstspark/pkg/config"
@@ -18,7 +19,7 @@ import (
 )
 
 // Version is the application version.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 // Run parses args and dispatches to the GUI or a headless command.
 func Run(args []string) error {
@@ -44,6 +45,9 @@ func Run(args []string) error {
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
+		return err
+	}
+	if err := i18n.Init(cfg.UI.Language); err != nil {
 		return err
 	}
 
@@ -135,7 +139,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 	if err := session.First(context.Background(), nil); err != nil {
 		return err
 	}
-	fmt.Printf("first scan: %d results\n", session.Count())
+	fmt.Println(i18n.Tf("cli.first_scan", map[string]any{"Count": session.Count()}))
 
 	if next != "" {
 		nm, err := scan.ParseScanMode(next)
@@ -165,7 +169,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 		if err := session.Next(context.Background(), nil); err != nil {
 			return err
 		}
-		fmt.Printf("next scan (%s): %d results\n", nm, session.Count())
+		fmt.Println(i18n.Tf("cli.next_scan", map[string]any{"Mode": nm, "Count": session.Count()}))
 	}
 
 	results := session.Results()
@@ -185,7 +189,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 		if err := tbl.Save(export); err != nil {
 			return err
 		}
-		fmt.Printf("exported %d entries to %s\n", len(results), export)
+		fmt.Println(i18n.Tf("cli.exported", map[string]any{"Count": len(results), "Path": export}))
 	}
 	return nil
 }

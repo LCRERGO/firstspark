@@ -10,42 +10,51 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/config"
 )
 
 func (a *App) showSettings() {
-	themeSel := widget.NewSelect([]string{"Light", "Dark", "System"}, nil)
-	themeSel.SetSelected(titleCase(a.cfg.UI.Theme))
+	themeSel := widget.NewSelect(
+		[]string{i18n.T("menu.view.light"), i18n.T("menu.view.dark"), i18n.T("menu.view.system")}, nil)
+	themeSel.SetSelected(themeLabel(a.cfg.UI.Theme))
+	langSel := widget.NewSelect(i18n.Supported(), nil)
+	langSel.SetSelected(i18n.Language())
 	scale := widget.NewEntry()
 	scale.SetText(strconv.FormatFloat(a.cfg.UI.Scale, 'g', -1, 64))
 	font := widget.NewEntry()
 	font.SetText(strconv.FormatFloat(a.cfg.UI.FontSize, 'g', -1, 64))
 	vt := widget.NewSelect(valueTypeOptions(), nil)
 	vt.SetSelected(ceValueTypeLabel(a.defaultValueType()))
-	writable := widget.NewCheck("Writable only", nil)
+	writable := widget.NewCheck(i18n.T("settings.writable_only"), nil)
 	writable.SetChecked(a.cfg.Scan.WritableOnly)
 	align := widget.NewEntry()
 	align.SetText(strconv.Itoa(a.cfg.Scan.Alignment))
 	limit := widget.NewEntry()
 	limit.SetText(strconv.Itoa(a.cfg.UI.ResultLimit))
-	icons := widget.NewCheck("Show process icons", nil)
+	icons := widget.NewCheck(i18n.T("settings.show_process_icons"), nil)
 	icons.SetChecked(a.cfg.UI.ProcessIcons)
 
 	form := widget.NewForm(
-		widget.NewFormItem("Theme", themeSel),
-		widget.NewFormItem("UI scale", scale),
-		widget.NewFormItem("Font size", font),
-		widget.NewFormItem("Default value type", vt),
-		widget.NewFormItem("Writable only", writable),
-		widget.NewFormItem("Alignment", align),
-		widget.NewFormItem("Result limit", limit),
-		widget.NewFormItem("Process list", icons),
+		widget.NewFormItem(i18n.T("settings.theme"), themeSel),
+		widget.NewFormItem(i18n.T("settings.language"), langSel),
+		widget.NewFormItem(i18n.T("settings.ui_scale"), scale),
+		widget.NewFormItem(i18n.T("settings.font_size"), font),
+		widget.NewFormItem(i18n.T("settings.default_value_type"), vt),
+		widget.NewFormItem(i18n.T("settings.writable_only"), writable),
+		widget.NewFormItem(i18n.T("settings.alignment"), align),
+		widget.NewFormItem(i18n.T("settings.result_limit"), limit),
+		widget.NewFormItem(i18n.T("settings.process_list"), icons),
 	)
-	d := dialog.NewCustomConfirm("Settings", "Apply", "Cancel", form, func(ok bool) {
+	d := dialog.NewCustomConfirm(i18n.T("settings.title"), i18n.T("action.apply"), i18n.T("action.cancel"), form, func(ok bool) {
 		if !ok {
 			return
 		}
-		a.cfg.UI.Theme = strings.ToLower(themeSel.Selected)
+		a.cfg.UI.Theme = parseThemeLabel(themeSel.Selected)
+		langChanged := langSel.Selected != "" && langSel.Selected != a.cfg.UI.Language
+		if langSel.Selected != "" {
+			a.cfg.UI.Language = langSel.Selected
+		}
 		if f, err := strconv.ParseFloat(strings.TrimSpace(scale.Text), 64); err == nil && f > 0 {
 			a.cfg.UI.Scale = f
 		}
@@ -71,7 +80,10 @@ func (a *App) showSettings() {
 		if a.showIcons {
 			go a.loadIcons()
 		}
-		a.setStatus("settings applied")
+		a.setStatusText(i18n.T("status.settings_applied"))
+		if langChanged {
+			dialog.ShowInformation(i18n.T("settings.title"), i18n.T("settings.language_restart"), a.win)
+		}
 	}, a.win)
 	d.Resize(fyne.NewSize(460, 520))
 	d.Show()
@@ -105,14 +117,29 @@ func (a *App) saveConfig() {
 }
 
 func (a *App) showAbout() {
-	dialog.ShowInformation("About Firstspark",
-		"Firstspark\n\nA Cheat Engine style memory scanner, debugger and code patcher for Linux.\n\n"+
-			"Released under the MIT License.\nCopyright (c) 2026 Lucas Cruz dos Reis.", a.win)
+	dialog.ShowInformation(i18n.T("about.title"), i18n.T("about.body"), a.win)
 }
 
-func titleCase(s string) string {
-	if s == "" {
-		return "System"
+// themeLabel maps a stored theme name to its translated menu label.
+func themeLabel(s string) string {
+	switch s {
+	case "dark":
+		return i18n.T("menu.view.dark")
+	case "system":
+		return i18n.T("menu.view.system")
+	default:
+		return i18n.T("menu.view.light")
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// parseThemeLabel maps a translated menu label back to the stored name.
+func parseThemeLabel(s string) string {
+	switch s {
+	case i18n.T("menu.view.dark"):
+		return "dark"
+	case i18n.T("menu.view.system"):
+		return "system"
+	default:
+		return "light"
+	}
 }

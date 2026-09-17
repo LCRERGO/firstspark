@@ -15,11 +15,21 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
-var cheatHeaders = []string{"Active", "Description", "Address", "Type", "Value"}
+// cheatHeaders returns the translated cheat-table column titles.
+func cheatHeaders() []string {
+	return []string{
+		i18n.T("header.active"),
+		i18n.T("header.description"),
+		i18n.T("header.address"),
+		i18n.T("header.type"),
+		i18n.T("header.value"),
+	}
+}
 
 // displayFormat selects how a cheat-table value is rendered.
 type displayFormat int
@@ -30,17 +40,39 @@ const (
 	displayBinary
 )
 
-// pointerChain resolves an address as [[base]+off0]+off1...
+// pointerChain resolves an address as [[base]+off0]+off1... When module is set
+// the base is the module's load base plus offset, so the chain survives ASLR.
 type pointerChain struct {
+	module  string
 	base    uint64
+	offset  uint64
 	offsets []int64
 }
 
-func resolvePointer(p *mem.Process, c *pointerChain) (uint64, error) {
-	if len(c.offsets) == 0 {
+func (c *pointerChain) baseAddr(p *mem.Process) (uint64, error) {
+	if c.module == "" {
 		return c.base, nil
 	}
-	addr, err := p.ReadUint64(c.base)
+	regions, err := mem.Regions(p.PID)
+	if err != nil {
+		return 0, err
+	}
+	mb, ok := mem.ModuleBase(regions, c.module)
+	if !ok {
+		return 0, fmt.Errorf("module %q not found", c.module)
+	}
+	return mb + c.offset, nil
+}
+
+func resolvePointer(p *mem.Process, c *pointerChain) (uint64, error) {
+	base, err := c.baseAddr(p)
+	if err != nil {
+		return 0, err
+	}
+	if len(c.offsets) == 0 {
+		return base, nil
+	}
+	addr, err := p.ReadUint64(base)
 	if err != nil {
 		return 0, err
 	}
@@ -115,9 +147,9 @@ func (a *App) buildFoundList() {
 
 func (a *App) foundPanel() fyne.CanvasObject {
 	head := container.NewHBox(
-		a.th.heading("Found", a.th.size+2, a.pal().primary),
+		a.th.heading(i18n.T("results.found"), a.th.size+2, a.pal().primary),
 		layout.NewSpacer(),
-		widget.NewButton("Add to Table", func() { a.addResultToTable(a.foundSel) }),
+		widget.NewButton(i18n.T("results.add_to_table"), func() { a.addResultToTable(a.foundSel) }),
 	)
 	return container.NewBorder(head, nil, nil, nil, a.foundList)
 }
@@ -139,7 +171,7 @@ func (a *App) setResults(r []scan.Result) {
 	}
 	a.results = r
 	a.foundSel = -1
-	a.foundCount.SetText(fmt.Sprintf("Found: %d", len(a.results)))
+	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}
@@ -147,8 +179,9 @@ func (a *App) setResults(r []scan.Result) {
 
 // buildCheatTable creates the five-column cheat table.
 func (a *App) buildCheatTable() {
+	headers := cheatHeaders()
 	a.table = widget.NewTable(
-		func() (int, int) { return len(a.entries), len(cheatHeaders) },
+		func() (int, int) { return len(a.entries), len(headers) },
 		func() fyne.CanvasObject { return a.newDataCell() },
 		func(id widget.TableCellID, o fyne.CanvasObject) { a.updateDataCell(id, o) },
 	)
@@ -156,12 +189,12 @@ func (a *App) buildCheatTable() {
 	a.table.CreateHeader = func() fyne.CanvasObject { return a.monoText("") }
 	a.table.UpdateHeader = func(id widget.TableCellID, o fyne.CanvasObject) {
 		t := o.(*canvas.Text)
-		if id.Col < 0 || id.Col >= len(cheatHeaders) {
+		if id.Col < 0 || id.Col >= len(headers) {
 			t.Text = ""
 			t.Refresh()
 			return
 		}
-		t.Text = cheatHeaders[id.Col]
+		t.Text = headers[id.Col]
 		t.Color = a.pal().primary
 		t.Refresh()
 	}
@@ -175,10 +208,10 @@ func (a *App) buildCheatTable() {
 func (a *App) cheatPanel() fyne.CanvasObject {
 	head := container.NewBorder(
 		nil, nil,
-		a.th.heading("Cheat Table", a.th.size+2, a.pal().primary),
+		a.th.heading(i18n.T("results.cheat_table"), a.th.size+2, a.pal().primary),
 		container.NewHBox(
-			widget.NewButton("Add Address Manually", a.addAddressDialog),
-			widget.NewButton("Clear List", a.clearTable),
+			widget.NewButton(i18n.T("results.add_address_manually"), a.addAddressDialog),
+			widget.NewButton(i18n.T("results.clear_list"), a.clearTable),
 		),
 	)
 	return container.NewBorder(head, nil, nil, nil, a.table)
@@ -222,6 +255,9 @@ func (a *App) cellText(id widget.TableCellID) string {
 	case 3:
 		return ceValueTypeLabel(e.typ)
 	case 4:
+		if e.bit != nil {
+			return e.bit.format(e.value.Raw)
+		}
 		return a.formatEntryValue(e)
 	default:
 		return ""
@@ -246,21 +282,22 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 	}
 	a.tableSel = row
 	menu := fyne.NewMenu("",
-		fyne.NewMenuItem("Change Value...", func() { a.changeValueDialog(row) }),
-		fyne.NewMenuItem("Change Description...", func() { a.changeDescriptionDialog(row) }),
-		fyne.NewMenuItem("Freeze/Unfreeze", func() { a.toggleFreezeRow(row) }),
+		fyne.NewMenuItem(i18n.T("menu.change_value"), func() { a.changeValueDialog(row) }),
+		fyne.NewMenuItem(i18n.T("menu.change_description"), func() { a.changeDescriptionDialog(row) }),
+		fyne.NewMenuItem(i18n.T("menu.configure_bitfield"), func() { a.configureBitfieldDialog(row) }),
+		fyne.NewMenuItem(i18n.T("menu.freeze"), func() { a.toggleFreezeRow(row) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Browse this memory region", func() { a.browseRow(row) }),
-		fyne.NewMenuItem("Disassemble this memory region", func() { a.disassembleRow(row) }),
-		fyne.NewMenuItem("Find out what writes this address", func() { a.findWhatWrites(row, true) }),
-		fyne.NewMenuItem("Find out what accesses this address", func() { a.findWhatWrites(row, false) }),
+		fyne.NewMenuItem(i18n.T("menu.browse"), func() { a.browseRow(row) }),
+		fyne.NewMenuItem(i18n.T("menu.disassemble"), func() { a.disassembleRow(row) }),
+		fyne.NewMenuItem(i18n.T("menu.find_writes"), func() { a.findWhatWrites(row, true) }),
+		fyne.NewMenuItem(i18n.T("menu.find_accesses"), func() { a.findWhatWrites(row, false) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Show as decimal", func() { a.setDisplay(row, displayDefault) }),
-		fyne.NewMenuItem("Show as hexadecimal", func() { a.setDisplay(row, displayHex) }),
-		fyne.NewMenuItem("Show as binary", func() { a.setDisplay(row, displayBinary) }),
-		fyne.NewMenuItem("Assign Hotkey...", func() { a.assignHotkey(row) }),
+		fyne.NewMenuItem(i18n.T("menu.show_decimal"), func() { a.setDisplay(row, displayDefault) }),
+		fyne.NewMenuItem(i18n.T("menu.show_hex"), func() { a.setDisplay(row, displayHex) }),
+		fyne.NewMenuItem(i18n.T("menu.show_binary"), func() { a.setDisplay(row, displayBinary) }),
+		fyne.NewMenuItem(i18n.T("menu.assign_hotkey"), func() { a.assignHotkey(row) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Delete this record", func() { a.deleteRow(row) }),
+		fyne.NewMenuItem(i18n.T("menu.delete"), func() { a.deleteRow(row) }),
 	)
 	widget.ShowPopUpMenuAtRelativePosition(menu, a.win.Canvas(), rel, anchor)
 }
@@ -327,13 +364,13 @@ func (a *App) resolvePointers() bool {
 
 func (a *App) assignHotkey(row int) {
 	if row < 0 || row >= len(a.entries) {
-		a.setStatus("select a cheat table row first")
+		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
 	entry := widget.NewEntry()
-	entry.SetPlaceHolder("F1..F12 or a letter")
-	d := dialog.NewForm("Assign Hotkey", "Assign", "Cancel",
-		[]*widget.FormItem{widget.NewFormItem("Key", entry)},
+	entry.SetPlaceHolder(i18n.T("dialog.assign_hotkey.placeholder"))
+	d := dialog.NewForm(i18n.T("dialog.assign_hotkey.title"), i18n.T("action.assign"), i18n.T("action.cancel"),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T("dialog.assign_hotkey.key"), entry)},
 		func(ok bool) {
 			if !ok {
 				return
@@ -344,16 +381,42 @@ func (a *App) assignHotkey(row int) {
 				return
 			}
 			a.entries[row].hotkey = key
-			r := row
-			sc := &desktop.CustomShortcut{KeyName: key}
-			if !strings.HasPrefix(string(key), "F") {
-				sc.Modifier = fyne.KeyModifierControl | fyne.KeyModifierAlt
-			}
-			a.win.Canvas().AddShortcut(sc, func(fyne.Shortcut) { a.toggleFreezeRow(r) })
-			a.setStatus("hotkey %s assigned", key)
+			a.bindHotkey(key, row)
+			a.setStatusText(i18n.Tf("status.hotkey_assigned", map[string]any{"Key": key}))
 		}, a.win)
 	d.Resize(fyne.NewSize(340, 160))
 	d.Show()
+}
+
+// bindHotkey registers a shortcut that freezes/unfreezes the given row.
+func (a *App) bindHotkey(key fyne.KeyName, row int) {
+	sc := &desktop.CustomShortcut{KeyName: key}
+	if !strings.HasPrefix(string(key), "F") {
+		sc.Modifier = fyne.KeyModifierControl | fyne.KeyModifierAlt
+	}
+	a.win.Canvas().AddShortcut(sc, func(fyne.Shortcut) { a.toggleFreezeRow(row) })
+}
+
+func displayName(d displayFormat) string {
+	switch d {
+	case displayHex:
+		return "hex"
+	case displayBinary:
+		return "binary"
+	default:
+		return "decimal"
+	}
+}
+
+func parseDisplay(s string) displayFormat {
+	switch s {
+	case "hex":
+		return displayHex
+	case "binary":
+		return displayBinary
+	default:
+		return displayDefault
+	}
 }
 
 func parseHotkey(s string) (fyne.KeyName, error) {
@@ -366,7 +429,7 @@ func parseHotkey(s string) (fyne.KeyName, error) {
 			return fyne.KeyName(s), nil
 		}
 	}
-	return "", fmt.Errorf("unsupported hotkey %q (use F1..F12 or a letter)", s)
+	return "", fmt.Errorf("%s", i18n.Tf("error.unsupported_hotkey", map[string]any{"Key": s}))
 }
 
 func parseOffsets(base uint64, s string) (*pointerChain, error) {
@@ -379,7 +442,7 @@ func parseOffsets(base uint64, s string) (*pointerChain, error) {
 		digits := strings.TrimPrefix(strings.TrimPrefix(part, "0x"), "0X")
 		n, err := strconv.ParseInt(digits, 16, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid pointer offset %q", part)
+			return nil, fmt.Errorf("%s", i18n.Tf("error.invalid_pointer_offset", map[string]any{"Offset": part}))
 		}
 		offsets = append(offsets, n)
 	}
@@ -391,7 +454,7 @@ func parseOffsets(base uint64, s string) (*pointerChain, error) {
 
 func (a *App) addResultToTable(i int) {
 	if i < 0 || i >= len(a.results) {
-		a.setStatus("select a found result first")
+		a.setStatusText(i18n.T("status.select_found"))
 		return
 	}
 	r := a.results[i]
@@ -401,13 +464,13 @@ func (a *App) addResultToTable(i int) {
 	}
 	a.entries = append(a.entries, tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
 	a.table.Refresh()
-	a.setStatus("added 0x%x to the cheat table", r.Addr)
+	a.setStatusText(i18n.Tf("status.added_to_table", map[string]any{"Addr": fmt.Sprintf("%x", r.Addr)}))
 	a.updateScanControls()
 }
 
 func (a *App) browseRow(row int) {
 	if row < 0 || row >= len(a.entries) {
-		a.setStatus("select a cheat table row first")
+		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
 	a.openMemoryViewer()
@@ -420,16 +483,36 @@ func (a *App) disassembleRow(row int) {
 
 func (a *App) changeValueDialog(row int) {
 	if row < 0 || row >= len(a.entries) {
-		a.setStatus("select a cheat table row first")
+		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
 	e := a.entries[row]
 	entry := widget.NewEntry()
-	entry.SetText(e.value.String())
-	d := dialog.NewForm("Change Value", "Apply", "Cancel",
-		[]*widget.FormItem{widget.NewFormItem("Value", entry)},
+	if e.bit != nil {
+		entry.SetText(e.bit.format(e.value.Raw))
+	} else {
+		entry.SetText(e.value.String())
+	}
+	d := dialog.NewForm(i18n.T("dialog.change_value.title"), i18n.T("action.apply"), i18n.T("action.cancel"),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T("field.value"), entry)},
 		func(ok bool) {
 			if !ok {
+				return
+			}
+			if e.bit != nil {
+				field, err := e.bit.parse(entry.Text)
+				if err != nil {
+					a.fail(err)
+					return
+				}
+				updated, err := a.writeBitfield(e.addr, *e.bit, field)
+				if err != nil {
+					a.fail(err)
+					return
+				}
+				a.entries[row].value = scan.NewValue(e.typ, updated)
+				a.entries[row].orig = a.entries[row].value
+				a.table.Refresh()
 				return
 			}
 			v, err := scan.ParseValue(e.typ, entry.Text)
@@ -448,6 +531,57 @@ func (a *App) changeValueDialog(row int) {
 	d.Show()
 }
 
+// configureBitfieldDialog turns a row into a bitfield edit/display entry.
+func (a *App) configureBitfieldDialog(row int) {
+	if row < 0 || row >= len(a.entries) {
+		a.setStatusText(i18n.T("status.select_cheat_row"))
+		return
+	}
+	e := a.entries[row]
+	size := e.typ.Size()
+	if e.bit != nil {
+		size = e.bit.size
+	}
+	offset := widget.NewEntry()
+	width := widget.NewEntry()
+	signed := widget.NewCheck(i18n.T("bitfield.signed"), nil)
+	if e.bit != nil {
+		offset.SetText(strconv.Itoa(e.bit.offset))
+		width.SetText(strconv.Itoa(e.bit.width))
+		signed.SetChecked(e.bit.signed)
+	} else {
+		offset.SetText("0")
+		width.SetText(strconv.Itoa(size * 8))
+	}
+	d := dialog.NewForm(i18n.T("menu.configure_bitfield"), i18n.T("action.apply"), i18n.T("action.cancel"),
+		[]*widget.FormItem{
+			widget.NewFormItem(i18n.T("bitfield.offset"), offset),
+			widget.NewFormItem(i18n.T("bitfield.width"), width),
+			widget.NewFormItem(i18n.T("bitfield.signed"), signed),
+		},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			off, err1 := strconv.Atoi(strings.TrimSpace(offset.Text))
+			w, err2 := strconv.Atoi(strings.TrimSpace(width.Text))
+			if err1 != nil || err2 != nil || off < 0 || w < 1 || off+w > size*8 {
+				a.fail(fmt.Errorf("%s", i18n.T("error.bitfield_range")))
+				return
+			}
+			a.entries[row].bit = &bitSpec{size: size, offset: off, width: w, signed: signed.Checked}
+			if a.proc != nil {
+				if raw, rerr := a.proc.Read(e.addr, size); rerr == nil {
+					a.entries[row].value = scan.NewValue(e.typ, raw)
+					a.entries[row].orig = a.entries[row].value
+				}
+			}
+			a.table.Refresh()
+		}, a.win)
+	d.Resize(fyne.NewSize(360, 240))
+	d.Show()
+}
+
 func (a *App) changeValueBack(row int) {
 	if row < 0 || row >= len(a.entries) {
 		return
@@ -462,13 +596,13 @@ func (a *App) changeValueBack(row int) {
 
 func (a *App) changeDescriptionDialog(row int) {
 	if row < 0 || row >= len(a.entries) {
-		a.setStatus("select a cheat table row first")
+		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
 	entry := widget.NewEntry()
 	entry.SetText(a.entries[row].desc)
-	d := dialog.NewForm("Change Description", "Apply", "Cancel",
-		[]*widget.FormItem{widget.NewFormItem("Description", entry)},
+	d := dialog.NewForm(i18n.T("dialog.change_description.title"), i18n.T("action.apply"), i18n.T("action.cancel"),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T("field.description"), entry)},
 		func(ok bool) {
 			if !ok {
 				return
@@ -482,7 +616,7 @@ func (a *App) changeDescriptionDialog(row int) {
 
 func (a *App) writeValue(addr uint64, v scan.Value) error {
 	if a.proc == nil {
-		return fmt.Errorf("no process selected")
+		return fmt.Errorf("%s", i18n.T("error.no_process"))
 	}
 	if err := a.proc.Write(addr, v.Raw); err != nil {
 		return err
@@ -492,21 +626,21 @@ func (a *App) writeValue(addr uint64, v scan.Value) error {
 
 func (a *App) addAddressDialog() {
 	addr := widget.NewEntry()
-	addr.SetPlaceHolder("0x1234 or 1234 (hex)")
+	addr.SetPlaceHolder(i18n.T("placeholder.address"))
 	typ := widget.NewSelect(valueTypeOptions(), nil)
 	typ.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 	desc := widget.NewEntry()
 	val := widget.NewEntry()
-	val.SetPlaceHolder("optional")
+	val.SetPlaceHolder(i18n.T("placeholder.optional"))
 	offs := widget.NewEntry()
-	offs.SetPlaceHolder("optional pointer offsets, e.g. 0x10, 0x20")
-	d := dialog.NewForm("Add Address Manually", "Add", "Cancel",
+	offs.SetPlaceHolder(i18n.T("placeholder.pointer_offsets"))
+	d := dialog.NewForm(i18n.T("dialog.add_address.title"), i18n.T("action.add"), i18n.T("action.cancel"),
 		[]*widget.FormItem{
-			widget.NewFormItem("Address", addr),
-			widget.NewFormItem("Pointer Offsets", offs),
-			widget.NewFormItem("Type", typ),
-			widget.NewFormItem("Description", desc),
-			widget.NewFormItem("Value", val),
+			widget.NewFormItem(i18n.T("field.address"), addr),
+			widget.NewFormItem(i18n.T("field.pointer_offsets"), offs),
+			widget.NewFormItem(i18n.T("field.type"), typ),
+			widget.NewFormItem(i18n.T("field.description"), desc),
+			widget.NewFormItem(i18n.T("field.value"), val),
 		},
 		func(ok bool) {
 			if !ok {
@@ -557,7 +691,7 @@ func parseAddress(s string) (uint64, error) {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
 	if s == "" {
-		return 0, fmt.Errorf("empty address")
+		return 0, fmt.Errorf("%s", i18n.T("error.empty_address"))
 	}
 	return strconv.ParseUint(s, 16, 64)
 }

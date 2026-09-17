@@ -15,8 +15,11 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/config"
+	"github.com/LCRERGO/firstspark/pkg/debugger"
 	"github.com/LCRERGO/firstspark/pkg/scan"
+	"github.com/LCRERGO/firstspark/pkg/speedhack"
 )
 
 const scanLabelWidth float32 = 96
@@ -162,42 +165,42 @@ func scanRow(label string, w fyne.CanvasObject) *fyne.Container {
 // the progress bar and status, then the scan value with a Hex checkbox beside
 // it and the scan and value type dropdowns.
 func (a *App) scanPanel() fyne.CanvasObject {
-	a.scanBtn = widget.NewButton("First Scan", a.firstScan)
-	a.nextBtn = widget.NewButton("Next Scan", a.nextScan)
-	a.undoBtn = widget.NewButton("Undo Scan", a.undoScan)
-	a.stopBtn = widget.NewButton("Stop", a.stopScan)
+	a.scanBtn = widget.NewButton(i18n.T("scan.first"), a.firstScan)
+	a.nextBtn = widget.NewButton(i18n.T("scan.next"), a.nextScan)
+	a.undoBtn = widget.NewButton(i18n.T("scan.undo"), a.undoScan)
+	a.stopBtn = widget.NewButton(i18n.T("scan.stop"), a.stopScan)
 	buttons := container.NewHBox(a.scanBtn, a.nextBtn, a.undoBtn, a.stopBtn)
 
 	a.scanProgress = newProgressLine()
 	a.scanStatus = widget.NewLabel("")
 
 	// Cheat Engine keeps both value boxes on one row for "Value between".
-	a.andLabel = widget.NewLabel("and")
+	a.andLabel = widget.NewLabel(i18n.T("scan.and"))
 	a.valuePair = container.New(flexRow{weights: []float32{1, 0, 1}},
 		a.valueEntry, a.andLabel, a.value2Entry)
-	valueRow := container.NewBorder(nil, nil, scanLabel("Scan Value"), a.hexBox, a.valuePair)
+	valueRow := container.NewBorder(nil, nil, scanLabel(i18n.T("scan.value_label")), a.hexBox, a.valuePair)
 
-	a.scopeSelect = widget.NewSelect([]string{
-		"All writable", "Heap + stack + exec + BSS", "All readable",
-	}, nil)
-	a.scopeSelect.SetSelected("All writable")
+	a.scopeSelect = widget.NewSelect(scopeLabels(), nil)
+	a.scopeSelect.SetSelected(scopeLabel(scan.ScopeAllWritable))
 
 	body := container.NewVBox(
-		a.th.heading("Scan", a.th.size+2, a.pal().primary),
+		a.th.heading(i18n.T("scan.heading"), a.th.size+2, a.pal().primary),
 		buttons,
 		a.scanProgress,
 		a.scanStatus,
 		valueRow,
-		scanRow("Scan Type", a.scanType),
-		scanRow("Value Type", container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
-		scanRow("Compare", a.compareEntry),
+		scanRow(i18n.T("scan.type_label"), a.scanType),
+		scanRow(i18n.T("scan.value_type_label"), container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
+		scanRow(i18n.T("scan.compare_label"), a.compareEntry),
 		widget.NewSeparator(),
-		a.th.heading("Memory Scan Options", a.th.size, a.pal().primary),
+		a.th.heading(i18n.T("scan.options_heading"), a.th.size, a.pal().primary),
 		a.writable,
-		scanRow("Alignment", a.alignEntry),
-		scanRow("Region scope", a.scopeSelect),
+		scanRow(i18n.T("scan.alignment_label"), a.alignEntry),
+		scanRow(i18n.T("scan.region_scope_label"),
+			container.NewBorder(nil, nil, nil, widget.NewButton(i18n.T("regions.manage"), a.showRegionManager), a.scopeSelect)),
 		widget.NewSeparator(),
 		a.speedhack,
+		scanRow(i18n.T("scan.speedhack_scale"), a.speedScale),
 	)
 	return container.NewVScroll(container.NewPadded(body))
 }
@@ -206,25 +209,52 @@ func (a *App) scanPanel() fyne.CanvasObject {
 func valuePlaceholder(mode scan.ScanMode) string {
 	switch mode {
 	case scan.ModeBetween:
-		return "lower bound"
+		return i18n.T("scan.placeholder.lower_bound")
 	case scan.ModeIncreasedBy, scan.ModeDecreasedBy:
-		return "delta"
+		return i18n.T("scan.placeholder.delta")
 	case scan.ModeUnknown:
-		return "not used"
+		return i18n.T("scan.placeholder.not_used")
 	default:
-		return "value or AOB pattern"
+		return i18n.T("app.value_placeholder")
 	}
 }
 
-func parseScope(label string) scan.RegionScope {
-	switch label {
-	case "Heap + stack + exec + BSS":
-		return scan.ScopeHeapStackExecBSS
-	case "All readable":
-		return scan.ScopeAllReadable
-	default:
-		return scan.ScopeAllWritable
+// scopeOption pairs a region scope with its translation key.
+type scopeOption struct {
+	key   string
+	scope scan.RegionScope
+}
+
+var scopeOptions = []scopeOption{
+	{"scope.all_writable", scan.ScopeAllWritable},
+	{"scope.heap_stack_exec_bss", scan.ScopeHeapStackExecBSS},
+	{"scope.all_readable", scan.ScopeAllReadable},
+}
+
+func scopeLabels() []string {
+	out := make([]string, len(scopeOptions))
+	for i, o := range scopeOptions {
+		out[i] = i18n.T(o.key)
 	}
+	return out
+}
+
+func scopeLabel(s scan.RegionScope) string {
+	for _, o := range scopeOptions {
+		if o.scope == s {
+			return i18n.T(o.key)
+		}
+	}
+	return i18n.T("scope.all_writable")
+}
+
+func parseScope(label string) scan.RegionScope {
+	for _, o := range scopeOptions {
+		if i18n.T(o.key) == label {
+			return o.scope
+		}
+	}
+	return scan.ScopeAllWritable
 }
 
 // scanAction runs a first scan when no session exists, otherwise a next scan.
@@ -241,7 +271,7 @@ func (a *App) firstScan() {
 		return
 	}
 	if a.proc == nil {
-		a.fail(fmt.Errorf("no process selected"))
+		a.fail(fmt.Errorf("%s", i18n.T("error.no_process")))
 		return
 	}
 	opts, err := a.scanOptions()
@@ -257,7 +287,7 @@ func (a *App) nextScan() {
 		return
 	}
 	if a.session == nil {
-		a.fail(fmt.Errorf("run a first scan first"))
+		a.fail(fmt.Errorf("%s", i18n.T("error.run_first_scan")))
 		return
 	}
 	opts, err := a.scanOptions()
@@ -285,7 +315,7 @@ func (a *App) runScan(s *scan.Session, first bool) {
 	if a.scanProgress != nil {
 		a.scanProgress.SetValue(0)
 	}
-	a.scanStatus.SetText("scanning…")
+	a.scanStatus.SetText(i18n.T("scan.scanning"))
 	a.updateScanControls()
 
 	onProgress := func(p scan.Progress) {
@@ -311,8 +341,11 @@ func (a *App) updateScanProgress(p scan.Progress) {
 		}
 	}
 	if a.scanStatus != nil {
-		a.scanStatus.SetText(fmt.Sprintf("Scanned %s / %s, %d matches",
-			humanBytes(p.ScannedBytes), humanBytes(p.TotalBytes), p.Matches))
+		a.scanStatus.SetText(i18n.Tf("scan.progress", map[string]any{
+			"Scanned": humanBytes(p.ScannedBytes),
+			"Total":   humanBytes(p.TotalBytes),
+			"Matches": p.Matches,
+		}))
 	}
 }
 
@@ -321,7 +354,7 @@ func (a *App) finishScan(s *scan.Session, first bool, err error) {
 	a.scanCancel = nil
 	switch {
 	case errors.Is(err, context.Canceled):
-		a.setStatus("scan cancelled")
+		a.setStatusText(i18n.T("status.scan_cancelled"))
 	case err != nil:
 		a.fail(err)
 	default:
@@ -330,16 +363,16 @@ func (a *App) finishScan(s *scan.Session, first bool, err error) {
 		}
 		a.setResults(s.Results())
 		if first {
-			a.setStatus("first scan: %d results", len(a.results))
+			a.setStatusText(i18n.Tf("status.first_scan", map[string]any{"Count": len(a.results)}))
 		} else {
-			a.setStatus("next scan: %d results", len(a.results))
+			a.setStatusText(i18n.Tf("status.next_scan", map[string]any{"Count": len(a.results)}))
 		}
 	}
 	if a.scanProgress != nil {
 		a.scanProgress.SetValue(1)
 	}
 	if a.scanStatus != nil {
-		a.scanStatus.SetText(fmt.Sprintf("%d results", len(a.results)))
+		a.scanStatus.SetText(i18n.Tf("scan.results_count", map[string]any{"Count": len(a.results)}))
 	}
 	a.updateScanControls()
 }
@@ -380,6 +413,10 @@ func (a *App) scanOptions() (scan.Options, error) {
 	opts.SnapshotLimit = a.cfg.Scan.SnapshotLimit
 	opts.MaxResults = a.cfg.UI.ResultLimit
 	opts.Scope = parseScope(a.scopeSelect.Selected)
+	if len(a.regionSel) > 0 {
+		opts.Regions = a.regionSel
+		opts.Scope = scan.ScopeAllReadable
+	}
 	opts.Epsilon = a.cfg.Scan.FloatEpsilon
 	if modeNeedsValue(opts.Mode) {
 		v, err := scan.ParseValue(opts.Type, a.valueText())
@@ -439,22 +476,93 @@ func (a *App) undoScan() {
 		return
 	}
 	if a.session == nil || !a.session.CanUndo() {
-		a.setStatus("nothing to undo")
+		a.setStatusText(i18n.T("status.nothing_undo"))
 		return
 	}
 	a.session.Undo()
 	a.setResults(a.session.Results())
-	a.setStatus("undo: %d results", len(a.results))
+	a.setStatusText(i18n.Tf("status.undo", map[string]any{"Count": len(a.results)}))
 	a.updateScanControls()
 }
 
 func (a *App) toggleSpeedhack() {
 	a.speedhack.SetChecked(!a.speedhack.Checked)
-	a.cfg.Speedhack.Enabled = a.speedhack.Checked
-	if a.speedhack.Checked {
-		a.setStatus("speedhack enabled")
+}
+
+// setSpeedhack installs or removes the time-scaling hooks on the selected
+// process. It is driven by the checkbox and the Tools menu.
+func (a *App) setSpeedhack(on bool) {
+	if on == a.speedApplied {
+		return
+	}
+	if on {
+		if err := a.installSpeedhack(); err != nil {
+			a.fail(err)
+			a.speedhack.SetChecked(false)
+			return
+		}
+		a.speedApplied = true
+		a.setStatusText(i18n.T("status.speedhack_enabled"))
 	} else {
-		a.setStatus("speedhack disabled")
+		a.removeSpeedhack()
+		a.speedApplied = false
+		a.setStatusText(i18n.T("status.speedhack_disabled"))
+	}
+	a.cfg.Speedhack.Enabled = on
+	if a.speedScale != nil {
+		if f, err := strconv.ParseFloat(strings.TrimSpace(a.speedScale.Text), 64); err == nil && f > 0 {
+			a.cfg.Speedhack.Scale = f
+		}
 	}
 	_ = a.cfg.Save(config.DefaultPath())
+}
+
+// installSpeedhack attaches, hooks the time functions and detaches.
+func (a *App) installSpeedhack() error {
+	if a.proc == nil {
+		return fmt.Errorf("%s", i18n.T("error.no_process"))
+	}
+	scale := a.cfg.Speedhack.Scale
+	if a.speedScale != nil {
+		if f, err := strconv.ParseFloat(strings.TrimSpace(a.speedScale.Text), 64); err == nil && f > 0 {
+			scale = f
+		}
+	}
+	be, err := debugger.NewPtrace(a.proc.PID)
+	if err != nil {
+		return err
+	}
+	defer be.Close()
+	if err := be.Attach(); err != nil {
+		return err
+	}
+	defer be.Detach()
+	for _, sym := range speedhack.DefaultSymbols {
+		h, err := speedhack.Hook(be, a.proc.PID, sym, scale)
+		if err != nil {
+			a.removeSpeedhack()
+			return fmt.Errorf("speedhack: %s: %w", sym, err)
+		}
+		a.speedHooks = append(a.speedHooks, h)
+	}
+	return nil
+}
+
+// removeSpeedhack restores the hooked prologues.
+func (a *App) removeSpeedhack() {
+	if len(a.speedHooks) == 0 {
+		return
+	}
+	if a.proc != nil {
+		if be, err := debugger.NewPtrace(a.proc.PID); err == nil {
+			if err := be.Attach(); err == nil {
+				for _, h := range a.speedHooks {
+					_ = h.Remove()
+				}
+				_ = be.Detach()
+			}
+			_ = be.Close()
+		}
+	}
+	a.speedHooks = nil
 }

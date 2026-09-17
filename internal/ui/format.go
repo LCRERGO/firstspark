@@ -5,21 +5,48 @@ package ui
 import (
 	"strings"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
-// scanTypeOptions are Cheat Engine's scan type labels, restricted to the modes
-// the engine implements.
-var scanTypeOptions = []string{
-	"Exact value",
-	"Increased value",
-	"Increased value by ...",
-	"Decreased value",
-	"Decreased value by ...",
-	"Value between",
-	"Changed value",
-	"Unchanged value",
-	"Unknown initial value",
+// scanTypeOption pairs an engine mode with its translation key, keeping the
+// display label independent of the parsing logic.
+type scanTypeOption struct {
+	mode scan.ScanMode
+	key  string
+}
+
+// scanTypeOptions are Cheat Engine's scan types, restricted to the modes the
+// engine implements.
+var scanTypeOptions = []scanTypeOption{
+	{scan.ModeExact, "scan.type.exact"},
+	{scan.ModeIncreased, "scan.type.increased"},
+	{scan.ModeIncreasedBy, "scan.type.increased_by"},
+	{scan.ModeDecreased, "scan.type.decreased"},
+	{scan.ModeDecreasedBy, "scan.type.decreased_by"},
+	{scan.ModeBetween, "scan.type.between"},
+	{scan.ModeChanged, "scan.type.changed"},
+	{scan.ModeUnchanged, "scan.type.unchanged"},
+	{scan.ModeUnknown, "scan.type.unknown"},
+}
+
+// scanTypeLabels returns the translated scan type labels.
+func scanTypeLabels() []string {
+	out := make([]string, len(scanTypeOptions))
+	for i, o := range scanTypeOptions {
+		out[i] = i18n.T(o.key)
+	}
+	return out
+}
+
+// scanTypeLabel returns the translated label of a single mode.
+func scanTypeLabel(m scan.ScanMode) string {
+	for _, o := range scanTypeOptions {
+		if o.mode == m {
+			return i18n.T(o.key)
+		}
+	}
+	return i18n.T("scan.type.exact")
 }
 
 // valueTypeOptions returns the display labels of every registered type:
@@ -34,26 +61,12 @@ func valueTypeOptions() []string {
 }
 
 func parseCEScanType(s string) scan.ScanMode {
-	switch s {
-	case "Increased value":
-		return scan.ModeIncreased
-	case "Increased value by ...":
-		return scan.ModeIncreasedBy
-	case "Decreased value":
-		return scan.ModeDecreased
-	case "Decreased value by ...":
-		return scan.ModeDecreasedBy
-	case "Value between":
-		return scan.ModeBetween
-	case "Changed value":
-		return scan.ModeChanged
-	case "Unchanged value":
-		return scan.ModeUnchanged
-	case "Unknown initial value":
-		return scan.ModeUnknown
-	default:
-		return scan.ModeExact
+	for _, o := range scanTypeOptions {
+		if i18n.T(o.key) == s {
+			return o.mode
+		}
 	}
+	return scan.ModeExact
 }
 
 // parseCEValueType maps a display label to a registered type ID.

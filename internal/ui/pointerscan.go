@@ -12,8 +12,10 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/pointerscan"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -21,7 +23,7 @@ import (
 // showPointerScan opens the pointer scan configuration dialog.
 func (a *App) showPointerScan() {
 	if a.proc == nil {
-		a.fail(fmt.Errorf("no process selected"))
+		a.fail(fmt.Errorf("%s", i18n.T("error.no_process")))
 		return
 	}
 	target := widget.NewEntry()
@@ -31,23 +33,23 @@ func (a *App) showPointerScan() {
 	case len(a.results) > 0:
 		target.SetText(fmt.Sprintf("0x%x", a.results[0].Addr))
 	}
-	target.SetPlaceHolder("0x1234")
+	target.SetPlaceHolder(i18n.T("debugger.address_placeholder"))
 	level := widget.NewEntry()
 	level.SetText("5")
 	offset := widget.NewEntry()
 	offset.SetText("2048")
-	aligned := widget.NewCheck("Aligned", nil)
+	aligned := widget.NewCheck(i18n.T("pointerscan.aligned"), nil)
 	aligned.SetChecked(true)
-	staticOnly := widget.NewCheck("Static only", nil)
-	writable := widget.NewCheck("Writable memory only", nil)
+	staticOnly := widget.NewCheck(i18n.T("pointerscan.static_only"), nil)
+	writable := widget.NewCheck(i18n.T("pointerscan.writable_only"), nil)
 	writable.SetChecked(true)
 
-	d := dialog.NewForm("Pointer Scan", "Scan", "Cancel",
+	d := dialog.NewForm(i18n.T("pointerscan.title"), i18n.T("pointerscan.scan"), i18n.T("action.cancel"),
 		[]*widget.FormItem{
-			widget.NewFormItem("Target address", target),
-			widget.NewFormItem("Max level", level),
-			widget.NewFormItem("Max offset", offset),
-			widget.NewFormItem("Options", container.NewVBox(aligned, staticOnly, writable)),
+			widget.NewFormItem(i18n.T("pointerscan.target"), target),
+			widget.NewFormItem(i18n.T("pointerscan.max_level"), level),
+			widget.NewFormItem(i18n.T("pointerscan.max_offset"), offset),
+			widget.NewFormItem(i18n.T("pointerscan.options"), container.NewVBox(aligned, staticOnly, writable)),
 		},
 		func(ok bool) {
 			if !ok {
@@ -68,10 +70,10 @@ func (a *App) showPointerScan() {
 
 func (a *App) runPointerScan(target uint64, level int, maxOffset uint64, aligned, staticOnly, writable bool) {
 	proc := a.proc
-	progress := dialog.NewProgressInfinite("Pointer Scan", "Building pointermap...", a.win)
+	progress := dialog.NewProgressInfinite(i18n.T("pointerscan.title"), i18n.T("pointerscan.building"), a.win)
 	progress.Show()
 	go func() {
-		pm, err := pointerscan.BuildPointermap(proc, pointerscan.BuildOptions{
+		pm, err := pointerscan.BuildOrLoad(proc, pointerscan.BuildOptions{
 			WritableOnly: writable,
 			Aligned:      aligned,
 			MaxBytes:     1 << 30,
@@ -96,7 +98,7 @@ func (a *App) runPointerScan(target uint64, level int, maxOffset uint64, aligned
 
 func (a *App) showPointerResults(chains []pointerscan.Chain) {
 	if len(chains) == 0 {
-		a.fail(fmt.Errorf("no pointer chains found"))
+		a.fail(fmt.Errorf("%s", i18n.T("pointerscan.no_chains")))
 		return
 	}
 	labels := make([]string, len(chains))
@@ -121,19 +123,19 @@ func (a *App) showPointerResults(chains []pointerscan.Chain) {
 	)
 	list.OnSelected = func(id widget.ListItemID) { sel = int(id) }
 
-	add := widget.NewButton("Add to Table", func() {
+	add := widget.NewButton(i18n.T("pointerscan.add_to_table"), func() {
 		if sel < 0 || sel >= len(chains) {
 			return
 		}
 		a.addPointerChain(chains[sel])
 	})
-	save := widget.NewButton("Save...", func() { a.saveChains(chains) })
+	save := widget.NewButton(i18n.T("pointerscan.save"), func() { a.saveChains(chains) })
 	footer := container.NewHBox(
-		widget.NewLabel(fmt.Sprintf("%d chains", len(chains))),
+		widget.NewLabel(i18n.Tf("pointerscan.chains", map[string]any{"Count": len(chains)})),
 		layout.NewSpacer(), save, add,
 	)
 	content := container.NewBorder(nil, footer, nil, nil, list)
-	d := dialog.NewCustom("Pointer Scan Results", "Close", content, a.win)
+	d := dialog.NewCustom(i18n.T("pointerscan.results"), i18n.T("menu.file.close"), content, a.win)
 	d.Resize(fyne.NewSize(620, 480))
 	d.Show()
 }
@@ -161,6 +163,9 @@ func chainToPointer(c pointerscan.Chain) (*pointerChain, bool) {
 	for _, o := range c.Offsets[1:] {
 		offs = append(offs, int64(o))
 	}
+	if c.Module != "" {
+		return &pointerChain{module: c.Module, offset: c.Offsets[0], offsets: offs}, true
+	}
 	return &pointerChain{base: c.Base + c.Offsets[0], offsets: offs}, true
 }
 
@@ -183,7 +188,30 @@ func (a *App) addPointerChain(c pointerscan.Chain) {
 	})
 	a.resolvePointers()
 	a.table.Refresh()
-	a.setStatus("added pointer chain")
+	a.setStatusText(i18n.T("status.added_pointer_chain"))
+}
+
+// loadPointerScan opens a saved .ptr file and shows its chains.
+func (a *App) loadPointerScan() {
+	d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
+		if err != nil {
+			a.fail(err)
+			return
+		}
+		if r == nil {
+			return
+		}
+		path := r.URI().Path()
+		_ = r.Close()
+		chains, lerr := pointerscan.Load(path)
+		if lerr != nil {
+			a.fail(lerr)
+			return
+		}
+		a.showPointerResults(chains)
+	}, a.win)
+	d.SetFilter(storage.NewExtensionFileFilter([]string{".ptr"}))
+	d.Show()
 }
 
 func (a *App) saveChains(chains []pointerscan.Chain) {
@@ -201,7 +229,7 @@ func (a *App) saveChains(chains []pointerscan.Chain) {
 			a.fail(err)
 			return
 		}
-		a.setStatus("saved %s", path)
+		a.setStatusText(i18n.Tf("status.saved", map[string]any{"Path": path}))
 	}, a.win)
 	d.SetFileName("scan.ptr")
 	d.Show()

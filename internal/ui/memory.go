@@ -13,16 +13,58 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
 const hexWindow = 256
 
+// memTypeOption pairs a memory-viewer display width with its translation key.
+type memTypeOption struct {
+	key string
+	typ scan.ValueType
+}
+
+var memTypeOptions = []memTypeOption{
+	{"memory.type.byte", scan.TypeByte},
+	{"memory.type.2bytes", scan.TypeWord},
+	{"memory.type.4bytes", scan.TypeDword},
+	{"memory.type.8bytes", scan.TypeQword},
+	{"memory.type.float", scan.TypeFloat},
+	{"memory.type.double", scan.TypeDouble},
+}
+
+func memTypeLabels() []string {
+	out := make([]string, len(memTypeOptions))
+	for i, o := range memTypeOptions {
+		out[i] = i18n.T(o.key)
+	}
+	return out
+}
+
+func memTypeLabel(t scan.ValueType) string {
+	for _, o := range memTypeOptions {
+		if o.typ == t {
+			return i18n.T(o.key)
+		}
+	}
+	return i18n.T("memory.type.4bytes")
+}
+
+func parseMemType(label string) scan.ValueType {
+	for _, o := range memTypeOptions {
+		if i18n.T(o.key) == label {
+			return o.typ
+		}
+	}
+	return scan.TypeDword
+}
+
 // openMemoryViewer shows the separate Memory Viewer window, creating it lazily.
 func (a *App) openMemoryViewer() {
 	if a.memWin == nil {
-		a.memWin = a.fapp.NewWindow("Memory Viewer")
+		a.memWin = a.fapp.NewWindow(i18n.T("memory.title"))
 		a.memWin.Resize(fyne.NewSize(801, 530))
 		a.buildMemoryViewer()
 	}
@@ -34,16 +76,15 @@ func (a *App) buildMemoryViewer() {
 	a.memAddrEntry.SetText("0x0")
 	a.memAddrEntry.OnSubmitted = func(string) { a.goToAddress() }
 
-	a.memType = widget.NewSelect([]string{"Byte", "2 Bytes", "4 Bytes", "8 Bytes", "Float", "Double"},
-		func(string) { a.reloadMemory() })
-	a.memType.SetSelected("4 Bytes")
+	a.memType = widget.NewSelect(memTypeLabels(), func(string) { a.reloadMemory() })
+	a.memType.SetSelected(memTypeLabel(scan.TypeDword))
 
 	bar := container.NewHBox(
-		widget.NewLabel("Address"), a.memAddrEntry,
-		widget.NewButton("Go", a.goToAddress),
+		widget.NewLabel(i18n.T("memory.address")), a.memAddrEntry,
+		widget.NewButton(i18n.T("memory.go"), a.goToAddress),
 		widget.NewSeparator(),
-		widget.NewLabel("Display"), a.memType,
-		widget.NewButton("Find...", a.findDialog),
+		widget.NewLabel(i18n.T("memory.display")), a.memType,
+		widget.NewButton(i18n.T("memory.find"), a.findDialog),
 	)
 
 	a.disasmList = widget.NewList(
@@ -81,20 +122,18 @@ func (a *App) buildMemoryViewer() {
 	split := container.NewVSplit(a.disasmList, a.hexList)
 	split.SetOffset(0.69)
 	a.memWin.SetContent(container.NewBorder(bar, nil, nil, nil, split))
+	viewItems := make([]*fyne.MenuItem, len(memTypeOptions))
+	for i, o := range memTypeOptions {
+		opt := o
+		viewItems[i] = fyne.NewMenuItem(i18n.T(opt.key), func() { a.memType.SetSelected(i18n.T(opt.key)) })
+	}
 	a.memWin.SetMainMenu(fyne.NewMainMenu(
-		fyne.NewMenu("File", fyne.NewMenuItem("Close", func() { a.memWin.Hide() })),
-		fyne.NewMenu("Search",
-			fyne.NewMenuItem("Find...", a.findDialog),
-			fyne.NewMenuItem("Find Next", a.findNext),
+		fyne.NewMenu(i18n.T("menu.file"), fyne.NewMenuItem(i18n.T("menu.file.close"), func() { a.memWin.Hide() })),
+		fyne.NewMenu(i18n.T("menu.search"),
+			fyne.NewMenuItem(i18n.T("menu.search.find"), a.findDialog),
+			fyne.NewMenuItem(i18n.T("menu.search.find_next"), a.findNext),
 		),
-		fyne.NewMenu("View",
-			fyne.NewMenuItem("Byte", func() { a.memType.SetSelected("Byte") }),
-			fyne.NewMenuItem("2 Bytes", func() { a.memType.SetSelected("2 Bytes") }),
-			fyne.NewMenuItem("4 Bytes", func() { a.memType.SetSelected("4 Bytes") }),
-			fyne.NewMenuItem("8 Bytes", func() { a.memType.SetSelected("8 Bytes") }),
-			fyne.NewMenuItem("Float", func() { a.memType.SetSelected("Float") }),
-			fyne.NewMenuItem("Double", func() { a.memType.SetSelected("Double") }),
-		),
+		fyne.NewMenu(i18n.T("menu.view"), viewItems...),
 	))
 	a.installMemoryShortcuts()
 }
@@ -118,7 +157,7 @@ func (a *App) goToAddress() {
 // loadMemory reads a page around addr and refreshes the viewer panes.
 func (a *App) loadMemory(addr uint64) {
 	if a.proc == nil {
-		a.setStatus("no process selected")
+		a.setStatusText(i18n.T("error.no_process"))
 		return
 	}
 	page := addr &^ 0xFF
@@ -152,7 +191,7 @@ func (a *App) reloadMemory() {
 func (a *App) buildHexLines(base uint64, data []byte) []string {
 	typ := scan.TypeDword
 	if a.memType != nil {
-		typ = parseCEValueType(a.memType.Selected)
+		typ = parseMemType(a.memType.Selected)
 	}
 	w := typ.Size()
 	if w <= 0 {
@@ -189,9 +228,9 @@ func (a *App) buildHexLines(base uint64, data []byte) []string {
 
 func (a *App) findDialog() {
 	entry := widget.NewEntry()
-	entry.SetPlaceHolder("e.g. 48 8B ?? E8")
-	d := dialog.NewForm("Find", "Find", "Cancel",
-		[]*widget.FormItem{widget.NewFormItem("AOB pattern", entry)},
+	entry.SetPlaceHolder(i18n.T("placeholder.aob_pattern"))
+	d := dialog.NewForm(i18n.T("dialog.find.title"), i18n.T("action.find"), i18n.T("action.cancel"),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T("field.aob_pattern"), entry)},
 		func(ok bool) {
 			if !ok {
 				return
@@ -212,7 +251,7 @@ func (a *App) findDialog() {
 
 func (a *App) findNext() {
 	if len(a.searchPat) == 0 {
-		a.setStatus("no search pattern; use Search > Find...")
+		a.setStatusText(i18n.T("status.no_search_pattern"))
 		return
 	}
 	start := 0
@@ -224,11 +263,11 @@ func (a *App) findNext() {
 			addr := a.hexAddr + uint64(i)
 			a.searchNext = addr + 1
 			a.loadMemory(addr)
-			a.setStatus("found at 0x%x", addr)
+			a.setStatusText(i18n.Tf("status.found_at", map[string]any{"Addr": fmt.Sprintf("%x", addr)}))
 			return
 		}
 	}
-	a.setStatus("pattern not found in this window")
+	a.setStatusText(i18n.T("status.pattern_not_found"))
 }
 
 func matchAt(data []byte, off int, pat, mask []byte) bool {

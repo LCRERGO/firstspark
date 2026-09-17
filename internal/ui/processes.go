@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"fmt"
 	"image/color"
 	"os"
 	"sort"
@@ -15,8 +14,13 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
+
+func procColumnLabels() []string {
+	return []string{i18n.T("process.column.name"), i18n.T("process.column.pid"), i18n.T("process.column.user")}
+}
 
 // Process list column widths.
 const (
@@ -68,7 +72,7 @@ func (t *treeToggle) CreateRenderer() fyne.WidgetRenderer {
 // openProcessList shows the separate Process List window, creating it lazily.
 func (a *App) openProcessList() {
 	if a.procWin == nil {
-		a.procWin = a.fapp.NewWindow("Process List")
+		a.procWin = a.fapp.NewWindow(i18n.T("process.title"))
 		a.procWin.Resize(fyne.NewSize(420, 420))
 		a.buildProcessList()
 	}
@@ -78,10 +82,10 @@ func (a *App) openProcessList() {
 
 func (a *App) buildProcessList() {
 	a.procFilter = widget.NewEntry()
-	a.procFilter.SetPlaceHolder("filter by name, pid or user")
+	a.procFilter.SetPlaceHolder(i18n.T("process.filter_placeholder"))
 	a.procFilter.OnChanged = func(string) { a.applyFilter() }
 
-	a.procTree = widget.NewCheck("Tree", func(on bool) {
+	a.procTree = widget.NewCheck(i18n.T("process.tree"), func(on bool) {
 		a.treeMode = on
 		a.applyFilter()
 	})
@@ -107,7 +111,7 @@ func (a *App) buildProcessList() {
 }
 
 func (a *App) procHeader() fyne.CanvasObject {
-	labels := []string{"Name", "PID", "User"}
+	labels := procColumnLabels()
 	widths := []float32{procNameW, procPIDW, procUserW}
 	a.procHeaderBtns = make([]*widget.Button, len(labels))
 	row := container.NewHBox(
@@ -218,7 +222,7 @@ func (a *App) refreshProcesses() {
 	}
 	a.procs = procs
 	a.applyFilter()
-	a.setStatus("%d processes", len(procs))
+	a.setStatusText(i18n.Tf("status.process_count", map[string]any{"Count": len(procs)}))
 	if a.showIcons {
 		go a.loadIcons()
 	}
@@ -414,7 +418,7 @@ func (a *App) lessProcess(pi, pj mem.Process) bool {
 }
 
 func (a *App) updateProcHeaders() {
-	labels := []string{"Name", "PID", "User"}
+	labels := procColumnLabels()
 	for i, btn := range a.procHeaderBtns {
 		text := labels[i]
 		if i == a.procSortCol {
@@ -464,16 +468,26 @@ func (a *App) selectProcess(idx int) {
 	if idx < 0 || idx >= len(a.procs) {
 		return
 	}
+	if a.speedApplied {
+		a.removeSpeedhack()
+		a.speedApplied = false
+	}
 	p := a.procs[idx]
+	a.mu.Lock()
 	a.proc = &p
-	a.processLabel.SetText(fmt.Sprintf("Process: %s (%d)", p.Name, p.PID))
+	a.mu.Unlock()
+	if a.speedhack != nil && a.speedhack.Checked {
+		a.setSpeedhack(true)
+	}
+	a.processLabel.SetText(i18n.Tf("process.label", map[string]any{"Name": p.Name, "PID": p.PID}))
 	a.session = nil
+	a.regionSel = nil
 	a.results = nil
 	a.foundSel = -1
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}
-	a.foundCount.SetText("Found: 0")
-	a.setStatus("selected %s (%d)", p.Name, p.PID)
+	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
+	a.setStatusText(i18n.Tf("status.selected_process", map[string]any{"Name": p.Name, "PID": p.PID}))
 	a.updateScanControls()
 }

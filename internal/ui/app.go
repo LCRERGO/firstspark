@@ -19,12 +19,14 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
 	"github.com/LCRERGO/firstspark/pkg/dissect"
+	"github.com/LCRERGO/firstspark/pkg/inject"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -37,6 +39,7 @@ type tableEntry struct {
 	value   scan.Value
 	orig    scan.Value
 	pointer *pointerChain
+	bit     *bitSpec
 	display displayFormat
 	hotkey  fyne.KeyName
 }
@@ -70,6 +73,7 @@ type App struct {
 	themeItems []*fyne.MenuItem
 
 	session    *scan.Session
+	regionSel  []mem.Region
 	results    []scan.Result
 	foundList  *widget.List
 	foundSel   int
@@ -88,6 +92,9 @@ type App struct {
 	compareEntry *widget.Entry
 	writable     *widget.Check
 	speedhack    *widget.Check
+	speedScale   *widget.Entry
+	speedHooks   []*inject.Hook
+	speedApplied bool
 	alignEntry   *widget.Entry
 	scanBtn      *widget.Button
 	nextBtn      *widget.Button
@@ -120,6 +127,11 @@ type App struct {
 	dbgStatus      *widget.Label
 	dbgStop        chan struct{}
 	dbgBreakpoints map[uint64]bool
+	dbgWatchpoints map[uint64]int
+	dbgWatchWrite  map[uint64]bool
+	dbgBPList      *widget.List
+	dbgBPLabels    []string
+	dbgRegEdit     *widget.Entry
 
 	asmWin    fyne.Window
 	asmEditor *codeEditor
@@ -214,7 +226,7 @@ func Run(cfg config.Config) error {
 }
 
 func (a *App) build() {
-	a.win = a.fapp.NewWindow("Firstspark")
+	a.win = a.fapp.NewWindow(i18n.T("app.title"))
 	a.win.Resize(fyne.NewSize(780, 600))
 	a.win.CenterOnScreen()
 	a.buildWidgets()
@@ -225,23 +237,23 @@ func (a *App) build() {
 }
 
 func (a *App) buildWidgets() {
-	a.processLabel = &tapLabel{Label: widget.NewLabel("No Process Selected"), onTap: a.openProcessList}
-	a.foundCount = widget.NewLabel("Found: 0")
+	a.processLabel = &tapLabel{Label: widget.NewLabel(i18n.T("app.no_process")), onTap: a.openProcessList}
+	a.foundCount = widget.NewLabel(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.status = widget.NewLabel("")
 
 	a.valueEntry = widget.NewEntry()
-	a.valueEntry.SetPlaceHolder("value or AOB pattern")
+	a.valueEntry.SetPlaceHolder(i18n.T("app.value_placeholder"))
 	a.valueEntry.OnSubmitted = func(string) { a.scanAction() }
 
 	a.value2Entry = widget.NewEntry()
-	a.value2Entry.SetPlaceHolder("upper bound (Value between)")
+	a.value2Entry.SetPlaceHolder(i18n.T("app.upper_bound_placeholder"))
 	a.value2Entry.OnSubmitted = func(string) { a.scanAction() }
 
 	a.compareEntry = widget.NewEntry()
 	a.compareEntry.SetText("==")
 
-	a.scanType = widget.NewSelect(scanTypeOptions, func(string) { a.updateScanControls() })
-	a.scanType.SetSelected("Exact value")
+	a.scanType = widget.NewSelect(scanTypeLabels(), func(string) { a.updateScanControls() })
+	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
 	a.valueType = widget.NewSelect(valueTypeOptions(), func(label string) {
 		if n := customTypeAlignment(label); n > 0 {
 			a.alignEntry.SetText(strconv.Itoa(n))
@@ -249,11 +261,13 @@ func (a *App) buildWidgets() {
 	})
 	a.valueType.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 
-	a.hexBox = widget.NewCheck("Hex", func(bool) {})
-	a.writable = widget.NewCheck("Writable", func(bool) {})
+	a.hexBox = widget.NewCheck(i18n.T("app.hex"), func(bool) {})
+	a.writable = widget.NewCheck(i18n.T("app.writable"), func(bool) {})
 	a.writable.SetChecked(a.cfg.Scan.WritableOnly)
-	a.speedhack = widget.NewCheck("Enable Speedhack", func(bool) {})
+	a.speedhack = widget.NewCheck(i18n.T("app.enable_speedhack"), func(on bool) { a.setSpeedhack(on) })
 	a.speedhack.SetChecked(a.cfg.Speedhack.Enabled)
+	a.speedScale = widget.NewEntry()
+	a.speedScale.SetText(strconv.FormatFloat(a.cfg.Speedhack.Scale, 'g', -1, 64))
 
 	a.alignEntry = widget.NewEntry()
 	a.alignEntry.SetText(strconv.Itoa(a.cfg.Scan.Alignment))
@@ -390,18 +404,18 @@ func setActionEnabled(action *widget.ToolbarAction, enabled bool) {
 }
 
 func (a *App) mainMenu() *fyne.MainMenu {
-	openProc := fyne.NewMenuItem("Open Process", a.openProcessList)
+	openProc := fyne.NewMenuItem(i18n.T("menu.file.open_process"), a.openProcessList)
 	openProc.Shortcut = ctrl(fyne.KeyP)
-	load := fyne.NewMenuItem("Load...", a.loadTable)
+	load := fyne.NewMenuItem(i18n.T("menu.file.load"), a.loadTable)
 	load.Shortcut = ctrl(fyne.KeyO)
-	save := fyne.NewMenuItem("Save", a.saveTable)
+	save := fyne.NewMenuItem(i18n.T("menu.file.save"), a.saveTable)
 	save.Shortcut = ctrl(fyne.KeyS)
-	saveAs := fyne.NewMenuItem("Save As...", a.saveTableAs)
+	saveAs := fyne.NewMenuItem(i18n.T("menu.file.save_as"), a.saveTableAs)
 	saveAs.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
-	saveRes := fyne.NewMenuItem("Save Scan Results", a.saveScanResults)
+	saveRes := fyne.NewMenuItem(i18n.T("menu.file.save_scan_results"), a.saveScanResults)
 	saveRes.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierAlt | fyne.KeyModifierShift}
-	quit := fyne.NewMenuItem("Quit", a.fapp.Quit)
-	file := fyne.NewMenu("File",
+	quit := fyne.NewMenuItem(i18n.T("menu.file.quit"), a.fapp.Quit)
+	file := fyne.NewMenu(i18n.T("menu.file"),
 		openProc,
 		fyne.NewMenuItemSeparator(),
 		load, save, saveAs,
@@ -411,31 +425,32 @@ func (a *App) mainMenu() *fyne.MainMenu {
 		quit,
 	)
 
-	settings := fyne.NewMenuItem("Settings", a.showSettings)
-	edit := fyne.NewMenu("Edit", settings)
+	settings := fyne.NewMenuItem(i18n.T("menu.edit.settings"), a.showSettings)
+	edit := fyne.NewMenu(i18n.T("menu.edit"), settings)
 
 	a.themeItems = []*fyne.MenuItem{
-		fyne.NewMenuItem("Light", func() { a.setTheme(schemeLight) }),
-		fyne.NewMenuItem("Dark", func() { a.setTheme(schemeDark) }),
-		fyne.NewMenuItem("System", func() { a.setTheme(schemeSystem) }),
+		fyne.NewMenuItem(i18n.T("menu.view.light"), func() { a.setTheme(schemeLight) }),
+		fyne.NewMenuItem(i18n.T("menu.view.dark"), func() { a.setTheme(schemeDark) }),
+		fyne.NewMenuItem(i18n.T("menu.view.system"), func() { a.setTheme(schemeSystem) }),
 	}
-	a.viewMenu = fyne.NewMenu("View", a.themeItems...)
+	a.viewMenu = fyne.NewMenu(i18n.T("menu.view"), a.themeItems...)
 	a.updateThemeChecks()
 
-	addAddr := fyne.NewMenuItem("Add Address Manually", a.addAddressDialog)
-	clear := fyne.NewMenuItem("Clear List", a.clearTable)
-	custom := fyne.NewMenuItem("Custom Types...", a.showCustomTypes)
-	pointer := fyne.NewMenuItem("Pointer Scan...", a.showPointerScan)
-	table := fyne.NewMenu("Table", addAddr, clear, fyne.NewMenuItemSeparator(), pointer, custom)
+	addAddr := fyne.NewMenuItem(i18n.T("menu.table.add_address"), a.addAddressDialog)
+	clear := fyne.NewMenuItem(i18n.T("menu.table.clear"), a.clearTable)
+	custom := fyne.NewMenuItem(i18n.T("menu.table.custom_types"), a.showCustomTypes)
+	pointer := fyne.NewMenuItem(i18n.T("menu.table.pointer_scan"), a.showPointerScan)
+	loadPointer := fyne.NewMenuItem(i18n.T("menu.table.load_pointer_scan"), a.loadPointerScan)
+	table := fyne.NewMenu(i18n.T("menu.table"), addAddr, clear, fyne.NewMenuItemSeparator(), pointer, loadPointer, custom)
 
-	speed := fyne.NewMenuItem("Speedhack", a.toggleSpeedhack)
-	debuggerItem := fyne.NewMenuItem("Debugger", a.openDebugger)
-	dissectItem := fyne.NewMenuItem("Dissect Data/Structures", a.openDissect)
-	autoasmItem := fyne.NewMenuItem("Auto Assemble", a.openAutoAssemble)
-	tools := fyne.NewMenu("Tools", debuggerItem, dissectItem, autoasmItem, speed)
+	speed := fyne.NewMenuItem(i18n.T("menu.tools.speedhack"), a.toggleSpeedhack)
+	debuggerItem := fyne.NewMenuItem(i18n.T("menu.tools.debugger"), a.openDebugger)
+	dissectItem := fyne.NewMenuItem(i18n.T("menu.tools.dissect"), a.openDissect)
+	autoasmItem := fyne.NewMenuItem(i18n.T("menu.tools.auto_assemble"), a.openAutoAssemble)
+	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, speed)
 
-	about := fyne.NewMenuItem("About", a.showAbout)
-	help := fyne.NewMenu("Help", about)
+	about := fyne.NewMenuItem(i18n.T("menu.help.about"), a.showAbout)
+	help := fyne.NewMenu(i18n.T("menu.help"), about)
 
 	return fyne.NewMainMenu(file, edit, a.viewMenu, table, tools, help)
 }
@@ -446,7 +461,7 @@ func (a *App) setTheme(m scheme) {
 	a.applyTheme()
 	a.updateThemeChecks()
 	a.saveConfig()
-	a.setStatus("theme: %s", m.String())
+	a.setStatusText(i18n.Tf("status.theme", map[string]any{"Theme": m.String()}))
 }
 
 // updateThemeChecks marks the active scheme in the View > Theme menu.
@@ -489,6 +504,11 @@ func (a *App) setStatus(format string, args ...any) {
 	a.status.SetText(fmt.Sprintf(format, args...))
 }
 
+// setStatusText sets an already-formatted (typically translated) status line.
+func (a *App) setStatusText(text string) {
+	a.status.SetText(text)
+}
+
 func (a *App) fail(err error) {
 	if err == nil {
 		return
@@ -512,12 +532,12 @@ func (a *App) freezeLoop() {
 		case <-a.stop:
 			return
 		case <-ticker.C:
-			if a.proc == nil {
-				continue
-			}
 			a.mu.Lock()
-			for addr, v := range a.frozen {
-				_ = a.proc.Write(addr, v.Raw)
+			proc := a.proc
+			if proc != nil {
+				for addr, v := range a.frozen {
+					_ = proc.Write(addr, v.Raw)
+				}
 			}
 			a.mu.Unlock()
 			tick++

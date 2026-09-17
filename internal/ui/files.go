@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
 
+	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/cheattable"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -49,9 +50,27 @@ func (a *App) applyTable(tbl *cheattable.Table) {
 		if err != nil {
 			continue
 		}
-		typ, err := scan.ParseValueType(e.Type)
-		if err != nil {
+		var typ scan.ValueType
+		var bit *bitSpec
+		if strings.EqualFold(e.Type, "bitfield") {
+			bit = &bitSpec{size: e.BitSize, offset: e.BitOffset, width: e.BitWidth, signed: e.BitSigned}
+			typ = typeForSize(bit.size)
+		} else if parsed, terr := scan.ParseValueType(e.Type); terr == nil {
+			typ = parsed
+		} else {
 			typ = a.defaultValueType()
+		}
+		entry := tableEntry{addr: addr, typ: typ, desc: e.Description, display: parseDisplay(e.Display), bit: bit}
+		if pc, ok := cheattable.ParsePointerChain(e.Pointer); ok {
+			upc := &pointerChain{module: pc.Module, base: pc.Base, offset: pc.Offset, offsets: pc.Offsets}
+			entry.pointer = upc
+			if a.proc != nil {
+				if resolved, rerr := resolvePointer(a.proc, upc); rerr == nil {
+					entry.addr = resolved
+				}
+			} else if pc.Module == "" {
+				entry.addr = pc.Base
+			}
 		}
 		var v scan.Value
 		if strings.TrimSpace(e.Value) != "" {
@@ -60,15 +79,26 @@ func (a *App) applyTable(tbl *cheattable.Table) {
 			}
 		}
 		if len(v.Raw) == 0 && a.proc != nil && typ.Size() > 0 {
-			if raw, rerr := a.proc.Read(addr, typ.Size()); rerr == nil {
+			if raw, rerr := a.proc.Read(entry.addr, typ.Size()); rerr == nil {
 				v = scan.NewValue(typ, raw)
 			}
 		}
-		a.entries = append(a.entries, tableEntry{addr: addr, typ: typ, desc: e.Description, value: v, orig: v})
+		entry.value = v
+		entry.orig = v
+		a.entries = append(a.entries, entry)
+		if key, kerr := parseHotkey(e.Hotkey); kerr == nil {
+			a.bindHotkey(key, len(a.entries)-1)
+			a.entries[len(a.entries)-1].hotkey = key
+		}
+		if e.Frozen {
+			a.mu.Lock()
+			a.frozen[entry.addr] = v
+			a.mu.Unlock()
+		}
 	}
 	a.tableSel = -1
 	a.table.Refresh()
-	a.setStatus("loaded %d entries", len(a.entries))
+	a.setStatusText(i18n.Tf("status.loaded_entries", map[string]any{"Count": len(a.entries)}))
 	a.updateScanControls()
 }
 
@@ -76,7 +106,7 @@ func (a *App) saveTable() { a.saveTableAs() }
 
 func (a *App) saveTableAs() {
 	if len(a.entries) == 0 {
-		a.setStatus("nothing to save")
+		a.setStatusText(i18n.T("status.nothing_to_save"))
 		return
 	}
 	a.saveTableDialog("firstspark.ct", a.tableFromEntries())
@@ -84,7 +114,7 @@ func (a *App) saveTableAs() {
 
 func (a *App) saveScanResults() {
 	if len(a.results) == 0 {
-		a.setStatus("no scan results to save")
+		a.setStatusText(i18n.T("status.no_scan_results"))
 		return
 	}
 	a.saveTableDialog("scan-results.ct", a.resultsTable())
@@ -111,7 +141,7 @@ func (a *App) saveTableDialog(name string, tbl *cheattable.Table) {
 			a.fail(serr)
 			return
 		}
-		a.setStatus("saved %s", path)
+		a.setStatusText(i18n.Tf("status.saved", map[string]any{"Path": path}))
 	}, a.win)
 	d.SetFileName(name)
 	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json"}))
@@ -122,6 +152,27 @@ func (a *App) tableFromEntries() *cheattable.Table {
 	t := &cheattable.Table{}
 	for _, e := range a.entries {
 		t.Add(e.desc, fmt.Sprintf("0x%x", e.addr), e.typ.String(), e.value.String())
+		last := &t.Entries[len(t.Entries)-1]
+		if e.hotkey != "" {
+			last.Hotkey = string(e.hotkey)
+		}
+		last.Display = displayName(e.display)
+		last.Frozen = a.isFrozen(e.addr)
+		if e.bit != nil {
+			last.Type = "bitfield"
+			last.BitSize = e.bit.size
+			last.BitOffset = e.bit.offset
+			last.BitWidth = e.bit.width
+			last.BitSigned = e.bit.signed
+		}
+		if e.pointer != nil {
+			last.Pointer = cheattable.FormatPointerChain(cheattable.PointerChain{
+				Module:  e.pointer.module,
+				Base:    e.pointer.base,
+				Offset:  e.pointer.offset,
+				Offsets: e.pointer.offsets,
+			})
+		}
 	}
 	return t
 }
