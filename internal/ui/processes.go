@@ -489,6 +489,7 @@ func (a *App) selectProcess(idx int) {
 		a.removeSpeedhack()
 		a.speedApplied = false
 	}
+	a.resumeTarget()
 	a.stopProcessWatch()
 	if a.dbgSession != nil {
 		_ = a.dbgSession.Detach()
@@ -558,6 +559,7 @@ func (a *App) processGone(pid int) {
 	name := a.proc.Name
 	log.Warn("target process exited", "pid", pid, "name", name)
 	a.stopProcessWatch()
+	a.paused = false
 	a.mu.Lock()
 	a.proc = nil
 	a.mu.Unlock()

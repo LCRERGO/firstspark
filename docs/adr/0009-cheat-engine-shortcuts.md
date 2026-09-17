@@ -28,15 +28,30 @@ and leave shortcuts for unimplemented features unbound:
 | `Ctrl+D` | Disassemble this memory region |
 | `Ctrl+E` | Change value of selected addresses |
 | `Ctrl+Alt+E` | Change value back |
-| `Delete` | Delete this record (context menu) |
+| `Ctrl+Enter` | Change description |
+| `Ctrl+Alt+H` | Show the selected record as hexadecimal |
+| `Ctrl+H` | Assign a per-entry hotkey |
+| `Ctrl+Alt+A` | Auto Assemble |
+| `Ctrl+Alt+D` | Dissect Data/Structures |
+| `Ctrl+1`..`Ctrl+6` | Memory viewer display width |
+| `Delete` / `Enter` / `Space` | Delete / change value / freeze the selected record |
+| `F5` / `F6` | Find out what accesses / writes the selected address |
+| `F9` / `F7` / `F8` / `F5` | Debugger run / step / step over / toggle breakpoint |
+
+The shortcuts are registered in one place (`internal/ui/shortcuts.go`). Fyne
+delivers modified keys to the focused widget, so the list also drives a
+dispatch used by the text fields and the code editor, and bare keys (Delete,
+Enter, Space, F-keys) are handled by the focused table/list widgets.
 
 `Ctrl+C` / `Ctrl+V` / `Ctrl+X` / `Ctrl+A` are not bound globally: Fyne already
 handles them inside text fields, and binding them application-wide would break
 editing. They remain available as Cheat Engine's context-menu entries.
 
-`Ctrl+T` (add scan tab), `Ctrl+Alt+A` (auto assemble), `Ctrl+Alt+D` (dissect),
-the Lua shortcuts and the debugger shortcuts (`F5`/`F6`) are intentionally not
-bound.
+`Ctrl+T` (add scan tab) and the Lua shortcuts are intentionally not bound
+because the features do not exist.
+
+Global, user-configurable hotkeys (Cheat Engine's Settings ▸ Hotkeys) are a
+separate mechanism, described in ADR 0033.
 
 ## Consequences
 

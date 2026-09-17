@@ -29,6 +29,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
 	"github.com/LCRERGO/firstspark/pkg/dissect"
+	"github.com/LCRERGO/firstspark/pkg/hotkey"
 	"github.com/LCRERGO/firstspark/pkg/inject"
 	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
@@ -190,6 +191,12 @@ type App struct {
 	stop            chan struct{}
 	err             error
 	procWatchCancel context.CancelFunc
+
+	hotkeys            *hotkey.Manager
+	hkWin              fyne.Window
+	hotkeyStatus       map[string]string
+	hotkeyStatusLabels map[string]*widget.Label
+	paused             bool
 }
 
 // Run opens the application window and blocks until it is closed.
@@ -224,6 +231,7 @@ func Run(cfg config.Config) error {
 		a.fail(loadErr)
 	}
 	a.fapp.Lifecycle().SetOnStopped(a.shutdown)
+	a.setupHotkeys()
 	a.refreshProcesses()
 	go a.freezeLoop()
 	a.win.Show()
@@ -454,12 +462,13 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	table := fyne.NewMenu(i18n.T("menu.table"), addAddr, clear, fyne.NewMenuItemSeparator(), pointer, loadPointer, custom)
 
 	speed := fyne.NewMenuItem(i18n.T("menu.tools.speedhack"), a.toggleSpeedhack)
+	hotkeysItem := fyne.NewMenuItem(i18n.T("menu.tools.hotkeys"), a.showHotkeys)
 	debuggerItem := fyne.NewMenuItem(i18n.T("menu.tools.debugger"), a.openDebugger)
 	dissectItem := fyne.NewMenuItem(i18n.T("menu.tools.dissect"), a.openDissect)
 	dissectItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	autoasmItem := fyne.NewMenuItem(i18n.T("menu.tools.auto_assemble"), a.openAutoAssemble)
 	autoasmItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
-	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, speed)
+	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, speed, hotkeysItem)
 
 	about := fyne.NewMenuItem(i18n.T("menu.help.about"), a.showAbout)
 	help := fyne.NewMenu(i18n.T("menu.help"), about)
@@ -543,6 +552,10 @@ func (a *App) shutdown() {
 	if a.asmBackend != nil {
 		_ = a.asmBackend.Close()
 		a.asmBackend = nil
+	}
+	if a.hotkeys != nil {
+		a.hotkeys.Close()
+		a.hotkeys = nil
 	}
 	log.Info("firstspark stopped")
 }

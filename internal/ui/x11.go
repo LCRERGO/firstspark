@@ -33,6 +33,24 @@ func (c *x11Client) conn() *xgbutil.XUtil {
 	return c.xu
 }
 
+// activePID returns the PID of the window that currently has input focus, or
+// an error when there is no X display or no active window.
+func (c *x11Client) activePID() (int, error) {
+	xu := c.conn()
+	if xu == nil {
+		return 0, os.ErrNotExist
+	}
+	win, err := ewmh.ActiveWindowGet(xu)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := ewmh.WmPidGet(xu, win)
+	if err != nil {
+		return 0, err
+	}
+	return int(pid), nil
+}
+
 // pidWindows maps each PID to one of its X11 windows.
 func (c *x11Client) pidWindows() map[int]xproto.Window {
 	xu := c.conn()
