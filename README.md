@@ -15,11 +15,12 @@ or GDB runtime dependency.
 | Process listing and region enumeration (`/proc`) | implemented |
 | Cross-process read/write (`process_vm_readv`/`writev`) | implemented |
 | Memory scanner: byte/word/dword/qword/float/double/string/AOB/binary/all | implemented |
+| String encodings: UTF-8/16/32 (LE and BE) | implemented |
 | Scan modes: exact, unknown initial, changed, unchanged, increased, decreased, increased-by, decreased-by, value-between | implemented |
 | Undo scan | implemented |
 | User-defined value types (Lua 5.1 scripts, or Auto Assembler via a local JIT) | implemented |
-| Cheat table: pointer records, hex/binary display, hotkeys | implemented |
-| Pointer scanner (N-level) | implemented |
+| Cheat table: pointer records, bitfields, hex/binary display, hotkeys, ASLR-safe chains | implemented |
+| Pointer scanner (N-level, cached pointermap, `.ptr` load/save) | implemented |
 | Hex viewer/editor | partial (viewer + byte-level read/write API) |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
 | Breakpoints, single-step, registers | implemented |
@@ -30,7 +31,9 @@ or GDB runtime dependency.
 | Disassembler (pure Go, `x86asm`) | implemented |
 | Assembler (pure-Go Intel syntax, common subset) | implemented |
 | Inline trampoline hooking + remote `mmap`/`mprotect` | implemented |
-| Speedhack (`clock_gettime`, `gettimeofday`) | implemented (experimental) |
+| Speedhack (`clock_gettime`, `gettimeofday`), wired to the UI | implemented (experimental) |
+| Remote function calls (int/float/double arguments) | implemented |
+| Internationalization (go-i18n catalogs, `ui.language`) | implemented |
 | Fyne desktop GUI | implemented (build tag `gui`) |
 | Cheat Engine `.CT` import/export + JSON sessions | implemented |
 

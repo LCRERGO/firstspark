@@ -3,8 +3,9 @@
 ## Building
 
 ```sh
-make build     # headless
-make gui       # with the Gio GUI (needs Vulkan/X11 dev headers)
+make build/headless  # headless (no CGO)
+make build/gui       # Fyne GUI (needs OpenGL/X11 dev headers)
+make                 # same as make build/gui
 ```
 
 ## Finding a value
@@ -43,7 +44,9 @@ firstspark --pid 1234 --type dword --mode exact --value 42 --export run.CT
 
 ## Value types
 
-`byte`, `word`, `dword`, `qword`, `float`, `double`, `string`, `aob`.
+`byte`, `word`, `dword`, `qword`, `float`, `double`, `string`, `aob`,
+`binary`, plus the `utf16le`, `utf16be`, `utf32le` and `utf32be` string
+encodings. Custom types loaded from `customtypes.yaml` also appear here.
 
 AOB patterns accept spaces or compact hex and `??` wildcards, e.g.
 `48 8B ?? E5` or `488B??E5`.
@@ -51,9 +54,10 @@ AOB patterns accept spaces or compact hex and `??` wildcards, e.g.
 ## Scan modes
 
 `exact`, `unknown`, `changed`, `unchanged`, `increased`, `decreased`,
-`increased by`, `decreased by`.
+`increased by`, `decreased by`, `between`.
 
-`exact`, `increased by` and `decreased by` take a value; the others do not.
+`exact`, `increased by`, `decreased by` and `between` take a value; the others
+do not.
 
 ## Configuration
 
@@ -75,7 +79,12 @@ speedhack:
 ui:
   result_limit: 1000
   theme: dark
+  language: en
 ```
+
+`ui.language` selects an embedded catalog from `internal/i18n/locales`; the
+change applies on the next launch. `ui.theme` accepts `light`, `dark` or
+`system`.
 
 ## Troubleshooting
 

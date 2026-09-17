@@ -32,6 +32,8 @@ ui:
   result_limit: 1000
   # Colour scheme: light, dark, or system (follow the desktop preference).
   theme: light
+  # Interface language code (catalogs live in internal/i18n/locales).
+  language: en
   # Interface scale factor (1.0 is the platform default).
   scale: 1.0
   # Base text size in points. Monospace data uses this size minus two.
