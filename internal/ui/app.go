@@ -146,16 +146,16 @@ type App struct {
 	ctDefs      []customtype.Definition
 	ctSel       int
 	ctID        scan.ValueType
-	ctName      *widget.Entry
-	ctMode      *widget.Select
-	ctSize      *widget.Entry
-	ctKind      *widget.Select
-	ctAlign     *widget.Entry
-	ctDesc      *widget.Entry
+	ctName      *toolTipEntry
+	ctMode      *ttwidget.Select
+	ctSize      *toolTipEntry
+	ctKind      *ttwidget.Select
+	ctAlign     *toolTipEntry
+	ctDesc      *toolTipEntry
 	ctEditor    *codeEditor
 	ctStatus    *widget.Label
-	ctTestBytes *widget.Entry
-	ctTestAddr  *widget.Entry
+	ctTestBytes *toolTipEntry
+	ctTestAddr  *toolTipEntry
 	ctTestOut   *widget.Label
 
 	dissectWin       fyne.Window

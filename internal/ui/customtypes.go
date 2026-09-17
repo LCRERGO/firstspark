@@ -11,6 +11,8 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+
 	"github.com/LCRERGO/firstspark/pkg/combinator"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
@@ -70,10 +72,10 @@ func (a *App) buildCustomTypes() {
 		}
 	}
 
-	a.ctName = widget.NewEntry()
-	a.ctSize = widget.NewEntry()
+	a.ctName = newHintEntry("customtypes.hint.name")
+	a.ctSize = newHintEntry("customtypes.hint.size")
 	a.ctSize.SetText("4")
-	a.ctMode = widget.NewSelect([]string{"Lua", "Auto Assembler"}, func(s string) {
+	a.ctMode = newHintSelect([]string{"Lua", "Auto Assembler"}, "customtypes.hint.mode", func(s string) {
 		if s == "Auto Assembler" {
 			a.ctEditor.SetLanguage(langAutoasm)
 		} else {
@@ -81,18 +83,18 @@ func (a *App) buildCustomTypes() {
 		}
 	})
 	a.ctMode.SetSelected("Lua")
-	a.ctKind = widget.NewSelect([]string{"int", "float", "string"}, nil)
+	a.ctKind = newHintSelect([]string{"int", "float", "string"}, "customtypes.hint.kind", nil)
 	a.ctKind.SetSelected("int")
-	a.ctAlign = widget.NewEntry()
+	a.ctAlign = newHintEntry("customtypes.hint.align")
 	a.ctAlign.SetPlaceHolder("0 = size")
-	a.ctDesc = widget.NewEntry()
+	a.ctDesc = newHintEntry("customtypes.hint.desc")
 	a.ctEditor = newCodeEditor(nil)
 	a.ctEditor.SetText(defaultTypeScript)
 	a.ctStatus = widget.NewLabel("ready")
 
-	a.ctTestBytes = widget.NewEntry()
+	a.ctTestBytes = newHintEntry("customtypes.hint.test_bytes")
 	a.ctTestBytes.SetPlaceHolder("hex bytes, e.g. 39 30 00 00")
-	a.ctTestAddr = widget.NewEntry()
+	a.ctTestAddr = newHintEntry("customtypes.hint.test_addr")
 	a.ctTestAddr.SetPlaceHolder("or read from address")
 	a.ctTestOut = widget.NewLabel("")
 	a.ctTestOut.Wrapping = fyne.TextWrapWord
@@ -107,21 +109,21 @@ func (a *App) buildCustomTypes() {
 	)
 	test := container.NewVBox(
 		widget.NewLabel("Test"),
-		container.NewHBox(a.ctTestBytes, a.ctTestAddr, widget.NewButton("Test", a.ctTest)),
+		container.NewHBox(a.ctTestBytes, a.ctTestAddr, newHintButton("Test", "customtypes.hint.test", a.ctTest)),
 		a.ctTestOut,
 	)
 	buttons := container.NewHBox(
-		widget.NewButton("Add", a.ctAdd),
-		widget.NewButton("Save", a.ctSave),
-		widget.NewButton("Delete", a.ctDelete),
-		widget.NewButton("Check", a.ctCheck),
+		newHintButton("Add", "customtypes.hint.add", a.ctAdd),
+		newHintButton("Save", "customtypes.hint.save", a.ctSave),
+		newHintButton("Delete", "customtypes.hint.delete", a.ctDelete),
+		newHintButton("Check", "customtypes.hint.check", a.ctCheck),
 	)
 	right := container.NewVScroll(container.NewVBox(form, a.ctEditor, test, buttons, a.ctStatus))
 
 	left := container.NewBorder(nil, nil, nil, nil, a.ctList)
 	split := container.NewHSplit(left, right)
 	split.SetOffset(0.3)
-	a.ctWin.SetContent(split)
+	a.ctWin.SetContent(fynetooltip.AddWindowToolTipLayer(split, a.ctWin.Canvas()))
 }
 
 func kindOr(k string) string {
