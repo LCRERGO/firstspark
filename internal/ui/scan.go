@@ -165,10 +165,10 @@ func scanRow(label string, w fyne.CanvasObject) *fyne.Container {
 // the progress bar and status, then the scan value with a Hex checkbox beside
 // it and the scan and value type dropdowns.
 func (a *App) scanPanel() fyne.CanvasObject {
-	a.scanBtn = widget.NewButton(i18n.T("scan.first"), a.firstScan)
-	a.nextBtn = widget.NewButton(i18n.T("scan.next"), a.nextScan)
-	a.undoBtn = widget.NewButton(i18n.T("scan.undo"), a.undoScan)
-	a.stopBtn = widget.NewButton(i18n.T("scan.stop"), a.stopScan)
+	a.scanBtn = newHintButton(i18n.T("scan.first"), "scan.hint.first", a.firstScan)
+	a.nextBtn = newHintButton(i18n.T("scan.next"), "scan.hint.next", a.nextScan)
+	a.undoBtn = newHintButton(i18n.T("scan.undo"), "scan.hint.undo", a.undoScan)
+	a.stopBtn = newHintButton(i18n.T("scan.stop"), "scan.hint.stop", a.stopScan)
 	buttons := container.NewHBox(a.scanBtn, a.nextBtn, a.undoBtn, a.stopBtn)
 
 	a.scanProgress = newProgressLine()
@@ -180,7 +180,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		a.valueEntry, a.andLabel, a.value2Entry)
 	valueRow := container.NewBorder(nil, nil, scanLabel(i18n.T("scan.value_label")), a.hexBox, a.valuePair)
 
-	a.scopeSelect = widget.NewSelect(scopeLabels(), nil)
+	a.scopeSelect = newHintSelect(scopeLabels(), "scan.hint.scope", nil)
 	a.scopeSelect.SetSelected(scopeLabel(scan.ScopeAllWritable))
 
 	body := container.NewVBox(
@@ -190,14 +190,14 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		a.scanStatus,
 		valueRow,
 		scanRow(i18n.T("scan.type_label"), a.scanType),
-		scanRow(i18n.T("scan.value_type_label"), container.NewBorder(nil, nil, nil, widget.NewButton("…", a.showCustomTypes), a.valueType)),
+		scanRow(i18n.T("scan.value_type_label"), container.NewBorder(nil, nil, nil, newHintButton("…", "scan.hint.custom_types", a.showCustomTypes), a.valueType)),
 		scanRow(i18n.T("scan.compare_label"), a.compareEntry),
 		widget.NewSeparator(),
 		a.th.heading(i18n.T("scan.options_heading"), a.th.size, a.pal().primary),
 		a.writable,
 		scanRow(i18n.T("scan.alignment_label"), a.alignEntry),
 		scanRow(i18n.T("scan.region_scope_label"),
-			container.NewBorder(nil, nil, nil, widget.NewButton(i18n.T("regions.manage"), a.showRegionManager), a.scopeSelect)),
+			container.NewBorder(nil, nil, nil, newHintButton(i18n.T("regions.manage"), "scan.hint.regions", a.showRegionManager), a.scopeSelect)),
 		widget.NewSeparator(),
 		a.speedhack,
 		scanRow(i18n.T("scan.speedhack_scale"), a.speedScale),

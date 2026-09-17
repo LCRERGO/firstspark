@@ -47,6 +47,34 @@ func setHint(w toolTipper, text string) {
 	w.SetToolTip(text)
 }
 
+// newHintEntry builds a single-line entry whose hint is the translated key.
+func newHintEntry(key string) *toolTipEntry {
+	e := newToolTipEntry()
+	e.SetToolTip(i18n.T(key))
+	return e
+}
+
+// newHintButton builds a button whose hint is the translated key.
+func newHintButton(text, key string, tapped func()) *ttwidget.Button {
+	b := ttwidget.NewButton(text, tapped)
+	b.SetToolTip(i18n.T(key))
+	return b
+}
+
+// newHintCheck builds a checkbox whose hint is the translated key.
+func newHintCheck(text, key string, changed func(bool)) *ttwidget.Check {
+	c := ttwidget.NewCheck(text, changed)
+	c.SetToolTip(i18n.T(key))
+	return c
+}
+
+// newHintSelect builds a dropdown whose hint is the translated key.
+func newHintSelect(options []string, key string, changed func(string)) *ttwidget.Select {
+	s := ttwidget.NewSelect(options, changed)
+	s.SetToolTip(i18n.T(key))
+	return s
+}
+
 // valueHintKey maps a value type to the translation key of its hover hint.
 func valueHintKey(t scan.ValueType) string {
 	switch t {

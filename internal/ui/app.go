@@ -89,25 +89,25 @@ type App struct {
 
 	scanType     *ttwidget.Select
 	valueType    *ttwidget.Select
-	hexBox       *widget.Check
+	hexBox       *ttwidget.Check
 	valueEntry   *toolTipEntry
 	value2Entry  *toolTipEntry
 	compareEntry *toolTipEntry
-	writable     *widget.Check
-	speedhack    *widget.Check
-	speedScale   *widget.Entry
+	writable     *ttwidget.Check
+	speedhack    *ttwidget.Check
+	speedScale   *toolTipEntry
 	speedHooks   []*inject.Hook
 	speedApplied bool
-	alignEntry   *widget.Entry
-	scanBtn      *widget.Button
-	nextBtn      *widget.Button
-	undoBtn      *widget.Button
-	stopBtn      *widget.Button
+	alignEntry   *toolTipEntry
+	scanBtn      *ttwidget.Button
+	nextBtn      *ttwidget.Button
+	undoBtn      *ttwidget.Button
+	stopBtn      *ttwidget.Button
 	andLabel     *widget.Label
 	valuePair    *fyne.Container
 	scanProgress *progressLine
 	scanStatus   *widget.Label
-	scopeSelect  *widget.Select
+	scopeSelect  *ttwidget.Select
 	scanCancel   context.CancelFunc
 	scanning     bool
 
@@ -265,15 +265,15 @@ func (a *App) buildWidgets() {
 	})
 	a.valueType.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 
-	a.hexBox = widget.NewCheck(i18n.T("app.hex"), func(bool) {})
-	a.writable = widget.NewCheck(i18n.T("app.writable"), func(bool) {})
+	a.hexBox = newHintCheck(i18n.T("app.hex"), "scan.hint.hex", func(bool) {})
+	a.writable = newHintCheck(i18n.T("app.writable"), "scan.hint.writable", func(bool) {})
 	a.writable.SetChecked(a.cfg.Scan.WritableOnly)
-	a.speedhack = widget.NewCheck(i18n.T("app.enable_speedhack"), func(on bool) { a.setSpeedhack(on) })
+	a.speedhack = newHintCheck(i18n.T("app.enable_speedhack"), "scan.hint.speedhack", func(on bool) { a.setSpeedhack(on) })
 	a.speedhack.SetChecked(a.cfg.Speedhack.Enabled)
-	a.speedScale = widget.NewEntry()
+	a.speedScale = newHintEntry("scan.hint.speedhack_scale")
 	a.speedScale.SetText(strconv.FormatFloat(a.cfg.Speedhack.Scale, 'g', -1, 64))
 
-	a.alignEntry = widget.NewEntry()
+	a.alignEntry = newHintEntry("scan.hint.alignment")
 	a.alignEntry.SetText(strconv.Itoa(a.cfg.Scan.Alignment))
 
 	a.buildFoundList()
