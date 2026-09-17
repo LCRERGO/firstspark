@@ -84,9 +84,10 @@ type App struct {
 	foundCount *widget.Label
 	status     *widget.Label
 
-	entries  []tableEntry
-	table    *widget.Table
-	tableSel int
+	entries         []tableEntry
+	table           *cheatTable
+	tableSel        int
+	hotkeyShortcuts map[uint64]fyne.Shortcut
 
 	scanType     *ttwidget.Select
 	valueType    *ttwidget.Select
@@ -123,8 +124,8 @@ type App struct {
 
 	dbgWin         fyne.Window
 	dbgSession     *debugger.Session
-	dbgRegs        *widget.List
-	dbgHits        *widget.List
+	dbgRegs        *dbgList
+	dbgHits        *dbgList
 	dbgRegVals     []string
 	dbgHitLabels   []string
 	dbgAddrEntry   *toolTipEntry
@@ -133,7 +134,7 @@ type App struct {
 	dbgBreakpoints map[uint64]bool
 	dbgWatchpoints map[uint64]int
 	dbgWatchWrite  map[uint64]bool
-	dbgBPList      *widget.List
+	dbgBPList      *dbgList
 	dbgBPLabels    []string
 	dbgRegEdit     *toolTipEntry
 
@@ -455,7 +456,9 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	speed := fyne.NewMenuItem(i18n.T("menu.tools.speedhack"), a.toggleSpeedhack)
 	debuggerItem := fyne.NewMenuItem(i18n.T("menu.tools.debugger"), a.openDebugger)
 	dissectItem := fyne.NewMenuItem(i18n.T("menu.tools.dissect"), a.openDissect)
+	dissectItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	autoasmItem := fyne.NewMenuItem(i18n.T("menu.tools.auto_assemble"), a.openAutoAssemble)
+	autoasmItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, speed)
 
 	about := fyne.NewMenuItem(i18n.T("menu.help.about"), a.showAbout)
@@ -483,16 +486,6 @@ func (a *App) updateThemeChecks() {
 	if a.viewMenu != nil {
 		a.viewMenu.Refresh()
 	}
-}
-
-func (a *App) installShortcuts() {
-	canvas := a.win.Canvas()
-	canvas.AddShortcut(ctrl(fyne.KeyM), func(fyne.Shortcut) { a.openMemoryViewer() })
-	canvas.AddShortcut(ctrl(fyne.KeyB), func(fyne.Shortcut) { a.browseRow(a.tableSel) })
-	canvas.AddShortcut(ctrl(fyne.KeyD), func(fyne.Shortcut) { a.disassembleRow(a.tableSel) })
-	canvas.AddShortcut(ctrl(fyne.KeyE), func(fyne.Shortcut) { a.changeValueDialog(a.tableSel) })
-	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt},
-		func(fyne.Shortcut) { a.changeValueBack(a.tableSel) })
 }
 
 func ctrl(k fyne.KeyName) fyne.Shortcut {

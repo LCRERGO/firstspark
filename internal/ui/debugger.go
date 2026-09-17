@@ -40,6 +40,7 @@ func (a *App) openDebugger() {
 		a.buildDebugger()
 	}
 	a.dbgWin.Show()
+	a.dbgWin.Canvas().Focus(a.dbgRegs)
 }
 
 func (a *App) buildDebugger() {
@@ -51,7 +52,7 @@ func (a *App) buildDebugger() {
 	a.dbgWatchpoints = map[uint64]int{}
 	a.dbgWatchWrite = map[uint64]bool{}
 
-	a.dbgRegs = widget.NewList(
+	a.dbgRegs = a.newDebuggerList(
 		func() int { return len(dbgRegNames) },
 		func() fyne.CanvasObject { return a.monoText("") },
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -66,7 +67,7 @@ func (a *App) buildDebugger() {
 			t.Refresh()
 		},
 	)
-	a.dbgHits = widget.NewList(
+	a.dbgHits = a.newDebuggerList(
 		func() int { return len(a.dbgHitLabels) },
 		func() fyne.CanvasObject { return a.monoText("") },
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -81,7 +82,7 @@ func (a *App) buildDebugger() {
 			t.Refresh()
 		},
 	)
-	a.dbgBPList = widget.NewList(
+	a.dbgBPList = a.newDebuggerList(
 		func() int { return len(a.dbgBPLabels) },
 		func() fyne.CanvasObject { return a.monoText("") },
 		func(id widget.ListItemID, o fyne.CanvasObject) {
@@ -122,6 +123,40 @@ func (a *App) buildDebugger() {
 	lists := container.NewVSplit(a.dbgRegs, container.NewVSplit(a.dbgBPList, a.dbgHits))
 	lists.SetOffset(0.5)
 	a.dbgWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(top, nil, nil, nil, lists), a.dbgWin.Canvas()))
+}
+
+// dbgList is a list that also handles the debugger's bare function keys, which
+// Fyne delivers to the focused widget instead of the shortcut system.
+type dbgList struct {
+	widget.List
+	app *App
+}
+
+func (a *App) newDebuggerList(length func() int, create func() fyne.CanvasObject, update func(widget.ListItemID, fyne.CanvasObject)) *dbgList {
+	l := &dbgList{app: a}
+	l.Length = length
+	l.CreateItem = create
+	l.UpdateItem = update
+	l.ExtendBaseWidget(l)
+	return l
+}
+
+func (l *dbgList) TypedKey(ev *fyne.KeyEvent) {
+	switch ev.Name {
+	case fyne.KeyF9:
+		l.app.debuggerContinue()
+		return
+	case fyne.KeyF7:
+		l.app.debuggerStep()
+		return
+	case fyne.KeyF8:
+		l.app.debuggerStepOver()
+		return
+	case fyne.KeyF5:
+		l.app.debuggerToggleBreakpoint()
+		return
+	}
+	l.List.TypedKey(ev)
 }
 
 func (a *App) ensureDebuggerSession() bool {

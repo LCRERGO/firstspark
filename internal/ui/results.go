@@ -180,11 +180,11 @@ func (a *App) setResults(r []scan.Result) {
 // buildCheatTable creates the five-column cheat table.
 func (a *App) buildCheatTable() {
 	headers := cheatHeaders()
-	a.table = widget.NewTable(
-		func() (int, int) { return len(a.entries), len(headers) },
-		func() fyne.CanvasObject { return a.newDataCell() },
-		func(id widget.TableCellID, o fyne.CanvasObject) { a.updateDataCell(id, o) },
-	)
+	a.table = &cheatTable{app: a}
+	a.table.Length = func() (int, int) { return len(a.entries), len(headers) }
+	a.table.CreateCell = func() fyne.CanvasObject { return a.newDataCell() }
+	a.table.UpdateCell = func(id widget.TableCellID, o fyne.CanvasObject) { a.updateDataCell(id, o) }
+	a.table.ExtendBaseWidget(a.table)
 	a.table.ShowHeaderRow = true
 	a.table.CreateHeader = func() fyne.CanvasObject { return a.monoText("") }
 	a.table.UpdateHeader = func(id widget.TableCellID, o fyne.CanvasObject) {
@@ -321,6 +321,7 @@ func (a *App) deleteRow(row int) {
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
+	a.unbindHotkey(a.entries[row].addr)
 	a.entries = append(a.entries[:row], a.entries[row+1:]...)
 	a.tableSel = -1
 	a.table.Refresh()
@@ -381,20 +382,47 @@ func (a *App) assignHotkey(row int) {
 				return
 			}
 			a.entries[row].hotkey = key
-			a.bindHotkey(key, row)
+			a.bindHotkey(key, a.entries[row].addr)
 			a.setStatusText(i18n.Tf("status.hotkey_assigned", map[string]any{"Key": key}))
 		}, a.win)
 	d.Resize(fyne.NewSize(340, 160))
 	d.Show()
 }
 
-// bindHotkey registers a shortcut that freezes/unfreezes the given row.
-func (a *App) bindHotkey(key fyne.KeyName, row int) {
+// bindHotkey registers a shortcut that freezes/unfreezes the entry at addr.
+// Re-binding an address replaces the previous shortcut, and the handler looks
+// the address up at fire time so it survives row reordering.
+func (a *App) bindHotkey(key fyne.KeyName, addr uint64) {
+	if a.hotkeyShortcuts == nil {
+		a.hotkeyShortcuts = map[uint64]fyne.Shortcut{}
+	}
+	a.unbindHotkey(addr)
 	sc := &desktop.CustomShortcut{KeyName: key}
 	if !strings.HasPrefix(string(key), "F") {
 		sc.Modifier = fyne.KeyModifierControl | fyne.KeyModifierAlt
 	}
-	a.win.Canvas().AddShortcut(sc, func(fyne.Shortcut) { a.toggleFreezeRow(row) })
+	a.win.Canvas().AddShortcut(sc, func(fyne.Shortcut) { a.toggleFreezeAddr(addr) })
+	a.hotkeyShortcuts[addr] = sc
+}
+
+// unbindHotkey removes the shortcut registered for addr, if any.
+func (a *App) unbindHotkey(addr uint64) {
+	sc, ok := a.hotkeyShortcuts[addr]
+	if !ok {
+		return
+	}
+	a.win.Canvas().RemoveShortcut(sc)
+	delete(a.hotkeyShortcuts, addr)
+}
+
+// toggleFreezeAddr toggles the frozen state of the entry at addr.
+func (a *App) toggleFreezeAddr(addr uint64) {
+	for i := range a.entries {
+		if a.entries[i].addr == addr {
+			a.toggleFreezeRow(i)
+			return
+		}
+	}
 }
 
 func displayName(d displayFormat) string {

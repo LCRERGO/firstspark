@@ -145,6 +145,15 @@ func (a *App) installMemoryShortcuts() {
 	c.AddShortcut(ctrl(fyne.KeyG), func(fyne.Shortcut) { c.Focus(a.memAddrEntry) })
 	c.AddShortcut(ctrl(fyne.KeyF), func(fyne.Shortcut) { a.findDialog() })
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyF3}, func(fyne.Shortcut) { a.findNext() })
+	// Cheat Engine selects the display width with Ctrl+1..0.
+	keys := []fyne.KeyName{fyne.Key1, fyne.Key2, fyne.Key3, fyne.Key4, fyne.Key5, fyne.Key6}
+	for i, k := range keys {
+		if i >= len(memTypeOptions) {
+			break
+		}
+		label := i18n.T(memTypeOptions[i].key)
+		c.AddShortcut(ctrl(k), func(fyne.Shortcut) { a.memType.SetSelected(label) })
+	}
 }
 
 func (a *App) goToAddress() {

@@ -87,7 +87,7 @@ func (a *App) applyTable(tbl *cheattable.Table) {
 		entry.orig = v
 		a.entries = append(a.entries, entry)
 		if key, kerr := parseHotkey(e.Hotkey); kerr == nil {
-			a.bindHotkey(key, len(a.entries)-1)
+			a.bindHotkey(key, entry.addr)
 			a.entries[len(a.entries)-1].hotkey = key
 		}
 		if e.Frozen {

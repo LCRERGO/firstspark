@@ -166,8 +166,13 @@ func (e *codeEditor) KeyUp(ev *fyne.KeyEvent) {
 	}
 }
 
-// TypedShortcut handles clipboard, undo/redo and select-all.
+// TypedShortcut handles clipboard, undo/redo, select-all and the editor's own
+// Ctrl combinations. Fyne routes every modified key here, so these cannot live
+// in TypedKey.
 func (e *codeEditor) TypedShortcut(s fyne.Shortcut) {
+	if appShortcutDispatch != nil && appShortcutDispatch(s) {
+		return
+	}
 	switch s.(type) {
 	case *fyne.ShortcutCopy:
 		e.copy()
@@ -182,7 +187,65 @@ func (e *codeEditor) TypedShortcut(s fyne.Shortcut) {
 	case *fyne.ShortcutRedo:
 		e.Redo()
 	}
+	if cs, ok := s.(*desktop.CustomShortcut); ok {
+		e.customShortcut(cs)
+	}
 }
+
+// customShortcut handles the editor combinations that Fyne reports as custom
+// shortcuts.
+func (e *codeEditor) customShortcut(cs *desktop.CustomShortcut) {
+	if cs.Modifier != fyne.KeyModifierControl {
+		return
+	}
+	switch cs.KeyName {
+	case fyne.KeyBackspace:
+		e.snapshot()
+		if e.hasSel {
+			e.deleteSelection()
+		} else {
+			e.deleteWordBack()
+		}
+		e.clearSel()
+	case fyne.KeyDelete:
+		e.snapshot()
+		if e.hasSel {
+			e.deleteSelection()
+		} else {
+			e.deleteWordForward()
+		}
+		e.clearSel()
+	case fyne.KeyHome:
+		e.row, e.col = 0, 0
+		e.clearSel()
+	case fyne.KeyEnd:
+		e.row = len(e.lines) - 1
+		e.col = len([]rune(e.lines[e.row]))
+		e.clearSel()
+	case fyne.KeyF2:
+		e.toggleBookmark()
+		return
+	case fyne.KeySpace:
+		e.complete()
+		return
+	case fyne.KeyEqual, fyne.KeyPlus:
+		e.zoomBy(1)
+		return
+	case fyne.KeyMinus:
+		e.zoomBy(-1)
+		return
+	case fyne.Key0:
+		e.theme.size = 13
+		e.zoomBy(0)
+		return
+	default:
+		return
+	}
+	e.refresh()
+}
+
+// AcceptsTab keeps Tab inside the editor so it indents instead of moving focus.
+func (e *codeEditor) AcceptsTab() bool { return true }
 
 // TypedRune inserts a typed character.
 func (e *codeEditor) TypedRune(r rune) {
@@ -196,29 +259,22 @@ func (e *codeEditor) TypedRune(r rune) {
 	e.refresh()
 }
 
-// TypedKey handles navigation and editing keys.
+// TypedKey handles navigation and editing keys that carry no modifier.
 func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
-	ctrl := currentModifiers()&fyne.KeyModifierControl != 0
 	switch ev.Name {
 	case fyne.KeyBackspace:
 		e.snapshot()
-		switch {
-		case e.hasSel:
+		if e.hasSel {
 			e.deleteSelection()
-		case ctrl:
-			e.deleteWordBack()
-		default:
+		} else {
 			e.backspace()
 		}
 		e.clearSel()
 	case fyne.KeyDelete:
 		e.snapshot()
-		switch {
-		case e.hasSel:
+		if e.hasSel {
 			e.deleteSelection()
-		case ctrl:
-			e.deleteWordForward()
-		default:
+		} else {
 			e.deleteForward()
 		}
 		e.clearSel()
@@ -235,20 +291,9 @@ func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
 	case fyne.KeyPageDown:
 		e.moveCursor(e.pageRows(), 0)
 	case fyne.KeyHome:
-		if ctrl {
-			e.row, e.col = 0, 0
-			e.clearSel()
-		} else {
-			e.moveCursor(0, -e.col)
-		}
+		e.moveCursor(0, -e.col)
 	case fyne.KeyEnd:
-		if ctrl {
-			e.row = len(e.lines) - 1
-			e.col = len([]rune(e.lines[e.row]))
-			e.clearSel()
-		} else {
-			e.moveCursor(0, len([]rune(e.lines[e.row]))-e.col)
-		}
+		e.moveCursor(0, len([]rune(e.lines[e.row]))-e.col)
 	case fyne.KeyReturn, fyne.KeyEnter:
 		e.snapshot()
 		e.deleteSelection()
@@ -265,53 +310,23 @@ func (e *codeEditor) TypedKey(ev *fyne.KeyEvent) {
 		}
 		e.clearSel()
 	case fyne.KeyF2:
-		if ctrl {
-			e.toggleBookmark()
-		} else {
-			e.nextBookmark()
-		}
+		e.nextBookmark()
 	case fyne.KeySpace:
-		if ctrl {
-			e.complete()
-			return
-		}
 		e.snapshot()
 		e.deleteSelection()
 		e.insertRune(' ')
 		e.clearSel()
-	case fyne.KeyEqual, fyne.KeyPlus:
-		if ctrl {
-			e.zoomBy(1)
-			return
-		}
-		return
-	case fyne.KeyMinus:
-		if ctrl {
-			e.zoomBy(-1)
-			return
-		}
-		return
-	case fyne.KeyY:
-		if ctrl {
-			e.snapshot()
-			e.deleteLine()
-			e.refresh()
-		}
-		return
-	case fyne.Key0:
-		if ctrl {
-			e.theme.size = 13
-			e.zoomBy(0)
-		}
-		return
 	default:
 		return
 	}
 	e.refresh()
 }
 
-// Tapped moves the cursor to the tapped cell and clears the selection.
+// Tapped focuses the editor and moves the cursor to the tapped cell.
 func (e *codeEditor) Tapped(ev *fyne.PointEvent) {
+	if c := fyne.CurrentApp().Driver().CanvasForObject(e); c != nil {
+		c.Focus(e)
+	}
 	rc := e.position(ev.Position)
 	e.row, e.col = rc.row, rc.col
 	e.clearSel()

@@ -38,6 +38,15 @@ func (e *toolTipEntry) MouseMoved(ev *desktop.MouseEvent) {
 }
 func (e *toolTipEntry) MouseOut() { e.ToolTipWidgetExtend.MouseOut() }
 
+// TypedShortcut gives the application shortcuts a chance to run while the
+// entry has focus, since Fyne does not fall through to canvas shortcuts then.
+func (e *toolTipEntry) TypedShortcut(s fyne.Shortcut) {
+	if appShortcutDispatch != nil && appShortcutDispatch(s) {
+		return
+	}
+	e.Entry.TypedShortcut(s)
+}
+
 // toolTipper is the subset of a tooltip-enabled widget used to attach hints.
 type toolTipper interface {
 	SetToolTip(string)
