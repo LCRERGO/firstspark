@@ -20,8 +20,8 @@ func ParseAOB(s string) (*AOBPattern, error) {
 	s = strings.TrimSpace(s)
 	s = strings.ReplaceAll(s, ",", " ")
 	fields := strings.Fields(s)
-	if len(fields) == 1 && len(fields[0]) > 2 && !strings.ContainsAny(fields[0], "?*") {
-		// Compact form without separators, e.g. 488BE5.
+	if len(fields) == 1 && len(fields[0]) > 2 && isCompactAOB(fields[0]) {
+		// Compact form without separators, e.g. 488BE5 or 488B??E5.
 		raw := fields[0]
 		if len(raw)%2 != 0 {
 			return nil, fmt.Errorf("scan: aob %q has odd length", s)
@@ -57,6 +57,19 @@ func ParseAOB(s string) (*AOBPattern, error) {
 		p.Mask[i] = 0xFF
 	}
 	return p, nil
+}
+
+// isCompactAOB reports whether s is an unseparated run of hex digits and
+// wildcards, so it can be split into bytes.
+func isCompactAOB(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'f', r >= 'A' && r <= 'F', r == '?', r == '*':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // Match reports whether data starts with the pattern.
