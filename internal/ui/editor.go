@@ -60,8 +60,8 @@ type codeEditor struct {
 	status    *widget.Label
 	bookmarks map[int]bool
 
-	findEntry *widget.Entry
-	replEntry *widget.Entry
+	findEntry *toolTipEntry
+	replEntry *toolTipEntry
 	content   *fyne.Container
 }
 
@@ -81,19 +81,19 @@ func newCodeEditor(onChange func(string)) *codeEditor {
 	e.scroll = container.NewScroll(e.themed)
 	e.status = widget.NewLabel("Ln 1, Col 1")
 
-	e.findEntry = widget.NewEntry()
+	e.findEntry = newHintEntry("editor.hint.find")
 	e.findEntry.SetPlaceHolder("find")
-	e.replEntry = widget.NewEntry()
+	e.replEntry = newHintEntry("editor.hint.replace")
 	e.replEntry.SetPlaceHolder("replace")
 	findRow := container.NewHBox(
 		e.findEntry,
-		widget.NewButton("Prev", e.findPrev),
-		widget.NewButton("Next", e.findNext),
+		newHintButton("Prev", "editor.hint.prev", e.findPrev),
+		newHintButton("Next", "editor.hint.next", e.findNext),
 		e.replEntry,
-		widget.NewButton("Replace", e.replaceOne),
-		widget.NewButton("All", e.replaceAll),
-		widget.NewButton("Go to...", e.gotoDialog),
-		widget.NewButton("Comment", e.ToggleComment),
+		newHintButton("Replace", "editor.hint.replace_one", e.replaceOne),
+		newHintButton("All", "editor.hint.replace_all", e.replaceAll),
+		newHintButton("Go to...", "editor.hint.goto", e.gotoDialog),
+		newHintButton("Comment", "editor.hint.comment", e.ToggleComment),
 	)
 	e.content = container.NewBorder(findRow, e.status, nil, nil, e.scroll)
 	e.ExtendBaseWidget(e)
