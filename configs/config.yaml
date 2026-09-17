@@ -40,3 +40,12 @@ ui:
   font_size: 14
   # Show per-process icons in the process list (resolved from the icon theme).
   process_icons: true
+
+# Diagnostic logging.
+log:
+  # Level: debug, info, warn or error.
+  level: info
+  # Log file. Empty uses $XDG_STATE_HOME/firstspark/firstspark.log
+  # (~/.local/state/firstspark/firstspark.log by default). One previous file
+  # is kept when the log grows past 2 MiB.
+  file: ""

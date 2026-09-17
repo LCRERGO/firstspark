@@ -17,6 +17,15 @@ type Config struct {
 	Debugger  DebuggerConfig  `yaml:"debugger"`
 	Speedhack SpeedhackConfig `yaml:"speedhack"`
 	UI        UIConfig        `yaml:"ui"`
+	Log       LogConfig       `yaml:"log"`
+}
+
+// LogConfig controls diagnostic logging.
+type LogConfig struct {
+	// Level is one of debug, info, warn or error.
+	Level string `yaml:"level"`
+	// File overrides the default log path when non-empty.
+	File string `yaml:"file"`
 }
 
 // ScanConfig holds memory scanning defaults.
@@ -63,6 +72,7 @@ func Default() Config {
 		Debugger:  DebuggerConfig{Backend: "ptrace", GDBPath: "gdb"},
 		Speedhack: SpeedhackConfig{Enabled: false, Scale: 1.0},
 		UI:        UIConfig{ResultLimit: 1000, Theme: "light", Language: "en", Scale: 1.0, FontSize: 14, ProcessIcons: true},
+		Log:       LogConfig{Level: "info"},
 	}
 }
 
@@ -148,6 +158,19 @@ func CacheDir() string {
 	}
 	return filepath.Join(base, "firstspark")
 }
+
+// StateDir returns the state directory ($XDG_STATE_HOME/firstspark), used for
+// logs and other runtime state.
+func StateDir() string {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		base = filepath.Join(homeDir(), ".local", "state")
+	}
+	return filepath.Join(base, "firstspark")
+}
+
+// LogPath returns the default log file path.
+func LogPath() string { return filepath.Join(StateDir(), "firstspark.log") }
 
 // DataDir returns the data directory used for saved scan sessions
 // ($XDG_DATA_HOME/firstspark).

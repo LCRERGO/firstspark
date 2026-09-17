@@ -14,6 +14,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/cheattable"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -34,6 +35,7 @@ func Run(args []string) error {
 	compare := fs.String("compare", "", "comparison operator (== != > >= < <=)")
 	next := fs.String("next", "", "next scan mode (changed|unchanged|increased|decreased|...)")
 	export := fs.String("export", "", "export results to a .CT file")
+	logLevel := fs.String("log-level", "", "log level (debug|info|warn|error)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -50,6 +52,21 @@ func Run(args []string) error {
 	if err := i18n.Init(cfg.UI.Language); err != nil {
 		return err
 	}
+
+	level := cfg.Log.Level
+	if *logLevel != "" {
+		level = *logLevel
+	}
+	logPath := cfg.Log.File
+	if logPath == "" {
+		logPath = config.LogPath()
+	}
+	headless := *showList || *pid > 0
+	if err := log.Setup(level, logPath, headless || os.Getenv("DISPLAY") == ""); err != nil {
+		fmt.Fprintln(os.Stderr, "firstspark: log:", err)
+	}
+	defer log.Close()
+	log.Info("firstspark starting", "version", Version, "level", level, "log", logPath)
 
 	if *showList {
 		return listProcesses()
@@ -85,6 +102,7 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 	if err != nil {
 		return err
 	}
+	log.Info("headless scan", "pid", pid, "type", typ, "mode", mode, "next", next)
 	opts := scan.DefaultOptions()
 	opts.Alignment = cfg.Scan.Alignment
 	opts.SnapshotLimit = cfg.Scan.SnapshotLimit
