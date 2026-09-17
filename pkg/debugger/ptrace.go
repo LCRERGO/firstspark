@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
@@ -100,13 +101,16 @@ func (b *ptraceBackend) attach() error {
 		return nil
 	}
 	if err := unix.PtraceAttach(b.pid); err != nil {
+		log.Debug("ptrace attach failed", "pid", b.pid, "err", err)
 		return translatePtrace(err)
 	}
 	var ws unix.WaitStatus
 	if _, err := unix.Wait4(b.pid, &ws, 0, nil); err != nil {
+		log.Debug("ptrace wait after attach failed", "pid", b.pid, "err", err)
 		return fmt.Errorf("debugger: wait after attach: %w", err)
 	}
 	b.attached = true
+	log.Debug("ptrace attached", "pid", b.pid)
 	return nil
 }
 
@@ -121,15 +125,21 @@ func (b *ptraceBackend) detach() error {
 		return nil
 	}
 	for addr := range b.breakpoints {
-		_ = b.clearBreakpoint(addr)
+		if err := b.clearBreakpoint(addr); err != nil {
+			log.Debug("clearing breakpoint on detach failed", "pid", b.pid, "addr", addr, "err", err)
+		}
 	}
 	for addr := range b.watchpoints {
-		_ = b.clearWatchpoint(addr)
+		if err := b.clearWatchpoint(addr); err != nil {
+			log.Debug("clearing watchpoint on detach failed", "pid", b.pid, "addr", addr, "err", err)
+		}
 	}
 	if err := unix.PtraceDetach(b.pid); err != nil {
+		log.Debug("ptrace detach failed", "pid", b.pid, "err", err)
 		return translatePtrace(err)
 	}
 	b.attached = false
+	log.Debug("ptrace detached", "pid", b.pid)
 	return nil
 }
 

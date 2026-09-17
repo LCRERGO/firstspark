@@ -280,6 +280,7 @@ func (a *App) firstScan() {
 		a.fail(err)
 		return
 	}
+	log.Info("first scan", "pid", a.proc.PID, "mode", opts.Mode, "type", opts.Type)
 	a.runScan(scan.NewSession(a.proc, opts), true)
 }
 
@@ -296,6 +297,7 @@ func (a *App) nextScan() {
 		a.fail(err)
 		return
 	}
+	log.Info("next scan", "pid", a.proc.PID, "mode", opts.Mode)
 	a.session.SetMode(opts.Mode)
 	a.session.SetCompare(opts.Compare)
 	if modeNeedsValue(opts.Mode) {
@@ -375,11 +377,13 @@ func (a *App) finishScan(s *scan.Session, first bool, err error) {
 	if a.scanStatus != nil {
 		a.scanStatus.SetText(i18n.Tf("scan.results_count", map[string]any{"Count": len(a.results)}))
 	}
+	log.Info("scan finished", "first", first, "results", len(a.results), "err", err)
 	a.updateScanControls()
 }
 
 func (a *App) stopScan() {
 	if a.scanCancel != nil {
+		log.Info("scan cancel requested")
 		a.scanCancel()
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/LCRERGO/firstspark/internal/i18n"
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/pointerscan"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -70,6 +71,7 @@ func (a *App) showPointerScan() {
 
 func (a *App) runPointerScan(target uint64, level int, maxOffset uint64, aligned, staticOnly, writable bool) {
 	proc := a.proc
+	log.Info("pointer scan started", "pid", proc.PID, "target", fmt.Sprintf("0x%x", target), "level", level, "max_offset", maxOffset)
 	progress := dialog.NewProgressInfinite(i18n.T("pointerscan.title"), i18n.T("pointerscan.building"), a.win)
 	progress.Show()
 	go func() {
@@ -79,6 +81,7 @@ func (a *App) runPointerScan(target uint64, level int, maxOffset uint64, aligned
 			MaxBytes:     1 << 30,
 		})
 		if err != nil {
+			log.Warn("pointer scan failed", "pid", proc.PID, "err", err)
 			fyne.Do(func() { progress.Hide(); a.fail(err) })
 			return
 		}
@@ -92,6 +95,7 @@ func (a *App) runPointerScan(target uint64, level int, maxOffset uint64, aligned
 		opts.Aligned = aligned
 		opts.StaticOnly = staticOnly
 		chains := pm.Scan(target, opts)
+		log.Info("pointer scan finished", "pid", proc.PID, "chains", len(chains))
 		fyne.Do(func() { progress.Hide(); a.showPointerResults(chains) })
 	}()
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
+	"github.com/LCRERGO/firstspark/pkg/log"
 )
 
 const defaultAAScript = `[ENABLE]
@@ -62,17 +63,24 @@ func (a *App) runAutoAssemble() {
 		a.fail(err)
 		return
 	}
+	if a.asmBackend != nil {
+		_ = a.asmBackend.Close()
+		a.asmBackend = nil
+	}
 	be, err := debugger.New(a.cfg.Debugger.Backend, a.proc.PID, debugger.Options{GDBPath: a.cfg.Debugger.GDBPath})
 	if err != nil {
 		a.fail(err)
 		return
 	}
+	a.asmBackend = be
 	exec := autoasm.NewExecutor(a.proc, be, script)
 	if err := exec.Apply(true); err != nil {
+		log.Warn("auto assemble apply failed", "pid", a.proc.PID, "err", err)
 		a.fail(err)
 		return
 	}
 	a.asmExec = exec
+	log.Info("auto assemble applied", "pid", a.proc.PID, "symbols", len(exec.Symbols()))
 	a.asmStatus.SetText(fmt.Sprintf("applied; %d symbols", len(exec.Symbols())))
 }
 
@@ -82,8 +90,10 @@ func (a *App) revertAutoAssemble() {
 		return
 	}
 	if err := a.asmExec.Revert(); err != nil {
+		log.Warn("auto assemble revert failed", "pid", a.proc.PID, "err", err)
 		a.fail(err)
 		return
 	}
+	log.Info("auto assemble reverted", "pid", a.proc.PID)
 	a.asmStatus.SetText("reverted")
 }

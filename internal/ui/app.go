@@ -137,10 +137,11 @@ type App struct {
 	dbgBPLabels    []string
 	dbgRegEdit     *toolTipEntry
 
-	asmWin    fyne.Window
-	asmEditor *codeEditor
-	asmStatus *widget.Label
-	asmExec   *autoasm.Executor
+	asmWin     fyne.Window
+	asmEditor  *codeEditor
+	asmStatus  *widget.Label
+	asmExec    *autoasm.Executor
+	asmBackend debugger.Backend
 
 	ctWin       fyne.Window
 	ctList      *widget.List
@@ -545,6 +546,10 @@ func (a *App) shutdown() {
 		}
 		_ = a.dbgSession.Close()
 		a.dbgSession = nil
+	}
+	if a.asmBackend != nil {
+		_ = a.asmBackend.Close()
+		a.asmBackend = nil
 	}
 	log.Info("firstspark stopped")
 }
