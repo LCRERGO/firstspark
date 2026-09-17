@@ -18,6 +18,9 @@ type Config struct {
 	Speedhack SpeedhackConfig `yaml:"speedhack"`
 	UI        UIConfig        `yaml:"ui"`
 	Log       LogConfig       `yaml:"log"`
+	// Hotkeys maps an action id (for example "speedhack.toggle") to a combo
+	// such as "Ctrl+Alt+S" or "F5". Unassigned actions are absent.
+	Hotkeys map[string]string `yaml:"hotkeys"`
 }
 
 // LogConfig controls diagnostic logging.
@@ -47,6 +50,8 @@ type DebuggerConfig struct {
 type SpeedhackConfig struct {
 	Enabled bool    `yaml:"enabled"`
 	Scale   float64 `yaml:"scale"`
+	// Delta is how much the speedhack +/- hotkeys change the scale.
+	Delta float64 `yaml:"delta"`
 }
 
 // UIConfig holds presentation defaults.
@@ -70,7 +75,7 @@ func Default() Config {
 			FloatEpsilon:  1e-6,
 		},
 		Debugger:  DebuggerConfig{Backend: "ptrace", GDBPath: "gdb"},
-		Speedhack: SpeedhackConfig{Enabled: false, Scale: 1.0},
+		Speedhack: SpeedhackConfig{Enabled: false, Scale: 1.0, Delta: 0.5},
 		UI:        UIConfig{ResultLimit: 1000, Theme: "light", Language: "en", Scale: 1.0, FontSize: 14, ProcessIcons: true},
 		Log:       LogConfig{Level: "info"},
 	}

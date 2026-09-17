@@ -25,6 +25,8 @@ speedhack:
   enabled: false
   # Time scale factor: 1.0 is real time, 2.0 is twice as fast, 0.5 half speed.
   scale: 1.0
+  # Step used by the "Speedhack speed +/-" hotkeys.
+  delta: 0.5
 
 # User interface.
 ui:
@@ -49,3 +51,12 @@ log:
   # (~/.local/state/firstspark/firstspark.log by default). One previous file
   # is kept when the log grows past 2 MiB.
   file: ""
+
+# Global hotkeys (X11 only; unavailable under native Wayland). Values are
+# combos such as "Ctrl+Alt+S" or "F5"; a letter or digit needs a modifier,
+# function keys may stand alone. All actions are unassigned by default and
+# are configured from Tools > Hotkeys. Example:
+#   hotkeys:
+#     speedhack.toggle: Ctrl+Alt+K
+#     process.pause: F8
+hotkeys: {}
