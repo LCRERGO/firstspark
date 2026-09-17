@@ -126,7 +126,7 @@ type App struct {
 	dbgHits        *widget.List
 	dbgRegVals     []string
 	dbgHitLabels   []string
-	dbgAddrEntry   *widget.Entry
+	dbgAddrEntry   *toolTipEntry
 	dbgStatus      *widget.Label
 	dbgStop        chan struct{}
 	dbgBreakpoints map[uint64]bool
@@ -134,7 +134,7 @@ type App struct {
 	dbgWatchWrite  map[uint64]bool
 	dbgBPList      *widget.List
 	dbgBPLabels    []string
-	dbgRegEdit     *widget.Entry
+	dbgRegEdit     *toolTipEntry
 
 	asmWin    fyne.Window
 	asmEditor *codeEditor

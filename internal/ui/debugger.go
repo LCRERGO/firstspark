@@ -15,6 +15,8 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
@@ -42,7 +44,7 @@ func (a *App) openDebugger() {
 func (a *App) buildDebugger() {
 	a.dbgStatus = widget.NewLabel(i18n.T("debugger.not_attached"))
 	a.dbgRegVals = make([]string, len(dbgRegNames))
-	a.dbgAddrEntry = widget.NewEntry()
+	a.dbgAddrEntry = newHintEntry("debugger.hint.address")
 	a.dbgAddrEntry.SetPlaceHolder(i18n.T("debugger.address_placeholder"))
 	a.dbgBreakpoints = map[uint64]bool{}
 	a.dbgWatchpoints = map[uint64]int{}
@@ -95,30 +97,30 @@ func (a *App) buildDebugger() {
 	)
 
 	controls := container.NewHBox(
-		widget.NewButton(i18n.T("debugger.attach"), a.debuggerAttach),
-		widget.NewButton(i18n.T("debugger.detach"), a.debuggerDetach),
-		widget.NewButton(i18n.T("debugger.continue"), a.debuggerContinue),
-		widget.NewButton(i18n.T("debugger.step"), a.debuggerStep),
-		widget.NewButton(i18n.T("debugger.step_over"), a.debuggerStepOver),
-		widget.NewButton(i18n.T("debugger.call"), a.debuggerCallDialog),
+		newHintButton(i18n.T("debugger.attach"), "debugger.hint.attach", a.debuggerAttach),
+		newHintButton(i18n.T("debugger.detach"), "debugger.hint.detach", a.debuggerDetach),
+		newHintButton(i18n.T("debugger.continue"), "debugger.hint.continue", a.debuggerContinue),
+		newHintButton(i18n.T("debugger.step"), "debugger.hint.step", a.debuggerStep),
+		newHintButton(i18n.T("debugger.step_over"), "debugger.hint.step_over", a.debuggerStepOver),
+		newHintButton(i18n.T("debugger.call"), "debugger.hint.call", a.debuggerCallDialog),
 	)
 	watch := container.NewHBox(
 		a.dbgAddrEntry,
-		widget.NewButton(i18n.T("debugger.toggle_breakpoint"), a.debuggerToggleBreakpoint),
-		widget.NewButton(i18n.T("debugger.find_writes"), func() { a.debuggerWatch(true) }),
-		widget.NewButton(i18n.T("debugger.find_accesses"), func() { a.debuggerWatch(false) }),
-		widget.NewButton(i18n.T("debugger.stop_watch"), a.debuggerStopWatch),
+		newHintButton(i18n.T("debugger.toggle_breakpoint"), "debugger.hint.toggle_breakpoint", a.debuggerToggleBreakpoint),
+		newHintButton(i18n.T("debugger.find_writes"), "debugger.hint.find_writes", func() { a.debuggerWatch(true) }),
+		newHintButton(i18n.T("debugger.find_accesses"), "debugger.hint.find_accesses", func() { a.debuggerWatch(false) }),
+		newHintButton(i18n.T("debugger.stop_watch"), "debugger.hint.stop_watch", a.debuggerStopWatch),
 	)
-	a.dbgRegEdit = widget.NewEntry()
+	a.dbgRegEdit = newHintEntry("debugger.hint.register_edit")
 	a.dbgRegEdit.SetPlaceHolder(i18n.T("debugger.register_edit_placeholder"))
 	register := container.NewHBox(
 		a.dbgRegEdit,
-		widget.NewButton(i18n.T("debugger.set_register"), a.debuggerSetRegister),
+		newHintButton(i18n.T("debugger.set_register"), "debugger.hint.set_register", a.debuggerSetRegister),
 	)
 	top := container.NewVBox(controls, watch, register, a.dbgStatus)
 	lists := container.NewVSplit(a.dbgRegs, container.NewVSplit(a.dbgBPList, a.dbgHits))
 	lists.SetOffset(0.5)
-	a.dbgWin.SetContent(container.NewBorder(top, nil, nil, nil, lists))
+	a.dbgWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(top, nil, nil, nil, lists), a.dbgWin.Canvas()))
 }
 
 func (a *App) ensureDebuggerSession() bool {
