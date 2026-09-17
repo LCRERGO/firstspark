@@ -176,8 +176,8 @@ type App struct {
 	disasmList   *widget.List
 	hexList      *widget.List
 	hexLines     []string
-	memAddrEntry *widget.Entry
-	memType      *widget.Select
+	memAddrEntry *toolTipEntry
+	memType      *ttwidget.Select
 	searchPat    []byte
 	searchMask   []byte
 	searchNext   uint64

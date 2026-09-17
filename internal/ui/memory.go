@@ -13,6 +13,8 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/scan"
@@ -72,19 +74,19 @@ func (a *App) openMemoryViewer() {
 }
 
 func (a *App) buildMemoryViewer() {
-	a.memAddrEntry = widget.NewEntry()
+	a.memAddrEntry = newHintEntry("memory.hint.address")
 	a.memAddrEntry.SetText("0x0")
 	a.memAddrEntry.OnSubmitted = func(string) { a.goToAddress() }
 
-	a.memType = widget.NewSelect(memTypeLabels(), func(string) { a.reloadMemory() })
+	a.memType = newHintSelect(memTypeLabels(), "memory.hint.display", func(string) { a.reloadMemory() })
 	a.memType.SetSelected(memTypeLabel(scan.TypeDword))
 
 	bar := container.NewHBox(
 		widget.NewLabel(i18n.T("memory.address")), a.memAddrEntry,
-		widget.NewButton(i18n.T("memory.go"), a.goToAddress),
+		newHintButton(i18n.T("memory.go"), "memory.hint.go", a.goToAddress),
 		widget.NewSeparator(),
 		widget.NewLabel(i18n.T("memory.display")), a.memType,
-		widget.NewButton(i18n.T("memory.find"), a.findDialog),
+		newHintButton(i18n.T("memory.find"), "memory.hint.find", a.findDialog),
 	)
 
 	a.disasmList = widget.NewList(
@@ -121,7 +123,7 @@ func (a *App) buildMemoryViewer() {
 
 	split := container.NewVSplit(a.disasmList, a.hexList)
 	split.SetOffset(0.69)
-	a.memWin.SetContent(container.NewBorder(bar, nil, nil, nil, split))
+	a.memWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(bar, nil, nil, nil, split), a.memWin.Canvas()))
 	viewItems := make([]*fyne.MenuItem, len(memTypeOptions))
 	for i, o := range memTypeOptions {
 		opt := o

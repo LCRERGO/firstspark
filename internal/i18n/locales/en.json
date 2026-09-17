@@ -204,6 +204,10 @@
   "memory.type.8bytes": "8 Bytes",
   "memory.type.float": "Float",
   "memory.type.double": "Double",
+  "memory.hint.address": "Jump to an address. Accepts hexadecimal (0x...) or decimal.",
+  "memory.hint.display": "How to decode the value column: byte, 2/4/8 bytes, float or double.",
+  "memory.hint.go": "Read memory at the entered address.",
+  "memory.hint.find": "Search memory for an AOB pattern. ? and ?? are wildcards.",
 
   "settings.title": "Settings",
   "settings.theme": "Theme",
