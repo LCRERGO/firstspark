@@ -59,8 +59,9 @@ func compileExpr(e Expr) exprFn {
 	case *FuncLit:
 		return compileFuncLit(e)
 	default:
-		panic("script: unknown expression")
+		throw("unknown expression")
 	}
+	return nil
 }
 
 func compileMulti(e Expr) multiFn {
@@ -106,7 +107,7 @@ func compileCallMulti(c *Call) multiFn {
 	if c.Method != "" {
 		idx, ok := c.Fn.(*Index)
 		if !ok {
-			panic("script: malformed method call")
+			throw("malformed method call")
 		}
 		base := compileExpr(idx.X)
 		argFn := compileValues(c.Args)
@@ -214,8 +215,9 @@ func compileAssigner(t Expr) assigner {
 		keyFn := compileExpr(t.Key)
 		return func(env *Env, v Value) { setIndex(objFn(env), keyFn(env), v) }
 	default:
-		panic("script: invalid assignment target")
+		throw("invalid assignment target")
 	}
+	return nil
 }
 
 func compileStmts(stmts []Stmt) stmtFn {
@@ -283,7 +285,11 @@ func compileStmt(s Stmt) stmtFn {
 			return flowNormal, nil
 		}
 	case *CallStmt:
-		fn := compileCallMulti(s.Call.(*Call))
+		call, ok := s.Call.(*Call)
+		if !ok {
+			throw("malformed call statement")
+		}
+		fn := compileCallMulti(call)
 		return func(env *Env) (flow, []Value) {
 			fn(env)
 			return flowNormal, nil
@@ -405,8 +411,9 @@ func compileStmt(s Stmt) stmtFn {
 	case *BreakStmt:
 		return func(*Env) (flow, []Value) { return flowBreak, nil }
 	default:
-		panic("script: unknown statement")
+		throw("unknown statement")
 	}
+	return nil
 }
 
 func compileIf(s *IfStmt) stmtFn {

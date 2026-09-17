@@ -92,6 +92,9 @@ func (f Field) Format(i int) string {
 		return ""
 	}
 	b := f.Values[i]
+	if len(b) < f.Size {
+		return ""
+	}
 	switch f.Kind {
 	case KindPointer:
 		v := binary.LittleEndian.Uint64(b)

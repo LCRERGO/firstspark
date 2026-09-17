@@ -98,3 +98,30 @@ func TestBreakpointRoundTrip(t *testing.T) {
 		t.Fatalf("ClearBreakpoint: %v", err)
 	}
 }
+
+func TestCloseStopsWorker(t *testing.T) {
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), "FIRSTSPARK_DEBUG_HELPER=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	be, err := NewPtrace(cmd.Process.Pid)
+	if err != nil {
+		t.Fatalf("NewPtrace: %v", err)
+	}
+	if err := be.Attach(); err != nil {
+		t.Skipf("ptrace attach unavailable: %v", err)
+	}
+	if err := be.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := be.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+}

@@ -116,7 +116,7 @@ func Install(be debugger.Backend, target uint64, handler []byte) (*Hook, error) 
 		return nil, fmt.Errorf("inject: map code cave: %w", err)
 	}
 
-	jumpToCave, err := encodeJump(target, cave)
+	jumpToCave, err := encodeRelJump(target, cave)
 	if err != nil {
 		// The cave is out of rel32 range; overwrite more bytes for an
 		// absolute jump.
@@ -124,10 +124,7 @@ func Install(be debugger.Backend, target uint64, handler []byte) (*Hook, error) 
 		if err != nil {
 			return nil, err
 		}
-		jumpToCave, err = encodeJump(target, cave)
-		if err != nil {
-			return nil, err
-		}
+		jumpToCave = encodeAbsJump(cave)
 	}
 
 	original := append([]byte{}, probe[:size]...)
@@ -208,20 +205,35 @@ func writeText(alloc allocator, be debugger.Backend, addr uint64, data []byte) e
 	return alloc.Mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_EXEC)
 }
 
-// encodeJump builds a jump from address `from` to address `to`, using a
-// 5-byte relative jump when in range and a 14-byte absolute jump otherwise.
-func encodeJump(from, to uint64) ([]byte, error) {
+// encodeRelJump builds a 5-byte relative jump from `from` to `to`. It fails
+// when the target is outside the rel32 range, so callers can plan for an
+// absolute jump instead.
+func encodeRelJump(from, to uint64) ([]byte, error) {
 	rel := int64(to) - int64(from+relJumpLen)
-	if rel >= -1<<31 && rel < 1<<31 {
-		out := []byte{0xE9}
-		out = append(out, byte(rel), byte(rel>>8), byte(rel>>16), byte(rel>>24))
-		return out, nil
+	if rel < -1<<31 || rel >= 1<<31 {
+		return nil, errors.New("inject: jump target out of relative range")
 	}
+	out := []byte{0xE9}
+	out = append(out, byte(rel), byte(rel>>8), byte(rel>>16), byte(rel>>24))
+	return out, nil
+}
+
+// encodeAbsJump builds a 14-byte absolute indirect jump to `to`.
+func encodeAbsJump(to uint64) []byte {
 	out := []byte{0xFF, 0x25, 0x00, 0x00, 0x00, 0x00}
 	for i := 0; i < 8; i++ {
 		out = append(out, byte(to>>(8*i)))
 	}
-	return out, nil
+	return out
+}
+
+// encodeJump builds a jump from address `from` to address `to`, preferring a
+// 5-byte relative jump and falling back to a 14-byte absolute jump.
+func encodeJump(from, to uint64) ([]byte, error) {
+	if b, err := encodeRelJump(from, to); err == nil {
+		return b, nil
+	}
+	return encodeAbsJump(to), nil
 }
 
 func padTo(b []byte, size int) []byte {

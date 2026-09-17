@@ -54,6 +54,15 @@ func TestFormat(t *testing.T) {
 	}
 }
 
+func TestFormatShortRead(t *testing.T) {
+	for _, kind := range []Kind{KindPointer, KindDouble, KindQword, KindFloat, KindDword, KindWord, KindByte, KindBytes} {
+		f := Field{Kind: kind, Size: 8, Values: [][]byte{nil}}
+		if got := f.Format(0); got != "" {
+			t.Errorf("Format(%v) with short read = %q, want empty", kind, got)
+		}
+	}
+}
+
 func TestScanTypeMapping(t *testing.T) {
 	if KindPointer.ScanType() != 8 && KindPointer.ScanType().String() != "qword" {
 		t.Fatalf("pointer scan type = %v", KindPointer.ScanType())

@@ -412,8 +412,16 @@ func (s *Session) scanRegion(ctx context.Context, r mem.Region, out *[]Result, s
 			}
 		}
 		if err != nil {
+			// A fault ends the contiguous run. Advance past what was read
+			// before falling back to page-sized reads, otherwise the prefix
+			// would be read and scanned twice.
 			if chunked {
 				chunked = false
+				if len(data) > 0 {
+					off += uint64(len(data))
+				} else {
+					off += page
+				}
 				continue
 			}
 			off += page

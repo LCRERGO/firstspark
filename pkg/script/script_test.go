@@ -123,3 +123,23 @@ func TestParseErrorHasPosition(t *testing.T) {
 		t.Fatal("expected a parse error")
 	}
 }
+
+func TestStringRepNonPositive(t *testing.T) {
+	p := mustCompile(t, `function f(n) return string.rep("ab", n) end`)
+	for _, n := range []int64{-3, 0} {
+		out := call(t, p, "f", Int(n))
+		if len(out) != 1 || out[0].Str() != "" {
+			t.Fatalf("rep(%d) = %v, want empty string", n, out)
+		}
+	}
+	out := call(t, p, "f", Int(3))
+	if out[0].Str() != "ababab" {
+		t.Fatalf("rep(3) = %q", out[0].Str())
+	}
+}
+
+func TestInvalidAssignmentIsError(t *testing.T) {
+	if _, err := Compile(`f() = 1`); err == nil {
+		t.Fatal("expected an error for an invalid assignment target")
+	}
+}

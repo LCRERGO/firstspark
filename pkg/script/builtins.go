@@ -184,7 +184,15 @@ func installString() {
 		return []Value{Str(string(r))}
 	})
 	reg("rep", func(_ *Env, a []Value) []Value {
-		return []Value{Str(strings.Repeat(argString(a, 0), int(argInt(a, 1))))}
+		s := argString(a, 0)
+		n := int(argInt(a, 1))
+		if n <= 0 || s == "" {
+			return []Value{Str("")}
+		}
+		if n > (1<<31)/len(s) {
+			throw("string.rep result too large")
+		}
+		return []Value{Str(strings.Repeat(s, n))}
 	})
 	reg("sub", func(_ *Env, a []Value) []Value {
 		r := []rune(argString(a, 0))

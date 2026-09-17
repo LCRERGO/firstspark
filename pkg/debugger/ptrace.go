@@ -30,6 +30,7 @@ type ptraceBackend struct {
 	ops           chan func()
 	workerStarted bool
 	workerStop    chan struct{}
+	closed        bool
 }
 
 // NewPtrace returns a ptrace based backend for pid.
@@ -49,6 +50,10 @@ func NewPtrace(pid int) (Backend, error) {
 // do runs f on the dedicated ptrace worker thread.
 func (b *ptraceBackend) do(f func()) {
 	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return
+	}
 	if !b.workerStarted {
 		b.ops = make(chan func())
 		b.workerStop = make(chan struct{})
@@ -305,7 +310,19 @@ func (b *ptraceBackend) reason(ws unix.WaitStatus) StopReason {
 	return reason
 }
 
-func (b *ptraceBackend) Close() error { return b.Detach() }
+// Close detaches and stops the dedicated ptrace worker so its goroutine and
+// locked OS thread are released.
+func (b *ptraceBackend) Close() error {
+	err := b.Detach()
+	b.mu.Lock()
+	if b.workerStarted {
+		close(b.workerStop)
+		b.workerStarted = false
+	}
+	b.closed = true
+	b.mu.Unlock()
+	return err
+}
 
 // RemoteSyscall executes a single syscall inside the traced process. The
 // process must be attached and stopped. It returns the value left in RAX.

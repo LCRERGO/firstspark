@@ -40,3 +40,15 @@ func TestPlanSizeRejectsRelativeJump(t *testing.T) {
 		t.Errorf("err = %v, want ErrUnrelocatable", err)
 	}
 }
+
+func TestEncodeRelJumpRange(t *testing.T) {
+	if _, err := encodeRelJump(0x1000, 0x2000); err != nil {
+		t.Fatalf("near jump: %v", err)
+	}
+	if _, err := encodeRelJump(0x1000, 0x1_0000_0000); err == nil {
+		t.Fatal("far jump should not fit in rel32")
+	}
+	if got := encodeAbsJump(0x1_0000_0000); len(got) != absJumpLen {
+		t.Fatalf("abs jump length = %d, want %d", len(got), absJumpLen)
+	}
+}
