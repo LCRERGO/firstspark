@@ -31,13 +31,33 @@ power is `^`. When the Hex box is ticked it only rewrites a bare hex literal, so
 `0xFF + 1` is evaluated as an expression rather than corrupted into `0x0xFF + 1`.
 
 **Hover hints.** The GUI uses `github.com/dweymouth/fyne-tooltip` v0.4.0 (the
-only maintained Fyne tooltip library; BSD-3-Clause, pure Go). The main window
-content is wrapped with `fynetooltip.AddWindowToolTipLayer`, the scan/value-type
-dropdowns use `ttwidget.Select`, and a small `toolTipEntry` wrapper adds hover
-support to the value, upper-bound and compare entries. Hints are translated and
-live in `en.json`. The Scan Value hint is dynamic: it describes the syntax of the
-currently selected value type (notably the AOB wildcard pattern), while the
-Compare hint lists the accepted operators.
+only maintained Fyne tooltip library; BSD-3-Clause, pure Go). Every window is
+wrapped with `fynetooltip.AddWindowToolTipLayer` (the main window plus the
+process list, memory viewer, debugger, dissect, custom type and auto-assemble
+windows), because the library needs one layer per window. Fyne's buttons,
+checks and selects are replaced with the library's `ttwidget.*` drop-ins, a
+small `toolTipEntry` wrapper adds hover support to entries (the library has no
+entry drop-in), and custom widgets (`tapLabel`, `treeToggle`) embed
+`ttwidget.ToolTipWidgetExtend`. Helper constructors (`newHintEntry`,
+`newHintButton`, `newHintCheck`, `newHintSelect`) keep the call sites short.
+Hints are translated and live in `en.json`. The Scan Value hint is dynamic: it
+describes the syntax of the currently selected value type (notably the AOB
+wildcard pattern), while the Compare hint lists the accepted operators.
+
+Coverage extends across the app: the scan options, process list (filter, tree,
+sort headers, disclosure triangles), memory viewer, debugger (execution,
+watchpoints, register editing), dissect, custom type manager, auto-assemble
+window, code editor toolbar, and the main results/cheat-table controls.
+
+Two surfaces remain unhinted because the library cannot reach them:
+
+- **Dialogs** (`dialog.NewCustom*`): the tooltip layer is attached to the
+  underlying `*widget.PopUp`, which Fyne does not expose, so Settings, Pointer
+  Scan, Regions, Add Address, bitfield, hotkey and the call-function dialogs
+  have no hints. Converting them to windows would enable hints.
+- **Icon-only toolbar actions** (`widget.ToolbarAction`): the toolbar renders a
+  private, non-extensible button. Hints would require rebuilding the toolbar
+  from `ttwidget.Button`s.
 
 **AOB compact patterns.** `ParseAOB` now splits an unseparated run of hex digits
 and wildcards, so `488B??E5` parses as its documentation always claimed.
@@ -48,8 +68,9 @@ and wildcards, so `488B??E5` parses as its documentation always claimed.
   are pure Go and remain in the headless build.
 - Expression evaluation compiles a small Lua chunk per parse; this happens once
   per scan, not per byte, so the cost is negligible.
-- Dialogs are not wrapped with a tooltip layer because none of them carry hints;
-  a dialog opened while a hint is visible may log a benign missing-layer error
-  from the library.
-- New scan controls should attach hints through `setHint` and the dynamic value
-  hint through `updateValueHint`.
+- Dialogs are not wrapped with a tooltip layer because the library cannot reach
+  them; a dialog opened while a hint is visible may log a benign missing-layer
+  error from the library.
+- New controls should attach hints through `newHint*` helpers, `setHint`, or the
+  dynamic value hint (`updateValueHint`). New windows must be wrapped with
+  `AddWindowToolTipLayer` or their hints will not appear.

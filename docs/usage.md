@@ -53,9 +53,10 @@ AOB patterns accept spaces or compact hex and `??` wildcards, e.g.
 
 Numeric scan values may be a single Lua expression (the `pkg/script` subset),
 e.g. `360 * (10 ^ 6)` or `math.floor(10 / 3)`. Integer types require an
-integral result; power is `^`. Hovering the Scan Value, Compare, Scan Type and
-Value Type controls in the GUI shows a hint describing the accepted syntax,
-including the AOB wildcard pattern.
+integral result; power is `^`. Most controls in the GUI show a hint on hover,
+including the scan value/compare/type fields (with the AOB wildcard syntax),
+the process list, memory viewer, debugger, dissect, custom type and
+auto-assemble windows.
 
 ## Scan modes
 
