@@ -81,6 +81,33 @@ func TestSaveLoad(t *testing.T) {
 	}
 }
 
+func TestPointermapCacheRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pm.json")
+	pm := testMap()
+	if err := savePointermap(path, pm); err != nil {
+		t.Fatalf("savePointermap: %v", err)
+	}
+	got, err := loadPointermap(path)
+	if err != nil {
+		t.Fatalf("loadPointermap: %v", err)
+	}
+	if len(got.entries) != len(pm.entries) || got.entries[0].value != pm.entries[0].value {
+		t.Fatalf("entries = %+v", got.entries)
+	}
+	if len(got.statics) != 1 || got.statics[0].Module != "libtest.so" {
+		t.Fatalf("statics = %+v", got.statics)
+	}
+}
+
+func TestCachePathKeyedByRegions(t *testing.T) {
+	regions := []mem.Region{{Start: 0x1000, End: 0x2000, Path: "/lib/a.so"}}
+	other := []mem.Region{{Start: 0x3000, End: 0x4000, Path: "/lib/a.so"}}
+	o := BuildOptions{WritableOnly: true, Aligned: true}
+	if CachePath(1, regions, o) == CachePath(1, other, o) {
+		t.Fatal("cache path should change when the region map changes")
+	}
+}
+
 func TestBuildPointermapSelf(t *testing.T) {
 	p, err := mem.Find(os.Getpid())
 	if err != nil {

@@ -5,13 +5,16 @@
 package pointerscan
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 
+	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
@@ -114,6 +117,81 @@ func BuildPointermap(p *mem.Process, o BuildOptions) (*Pointermap, error) {
 		pm.entries = append(pm.entries, entry{value: v, addrs: addrs})
 	}
 	sort.Slice(pm.entries, func(i, j int) bool { return pm.entries[i].value < pm.entries[j].value })
+	return pm, nil
+}
+
+// wireEntry is the JSON form of an index entry.
+type wireEntry struct {
+	Value uint64   `json:"value"`
+	Addrs []uint64 `json:"addrs"`
+}
+
+type pointermapJSON struct {
+	Entries []wireEntry    `json:"entries"`
+	Statics []StaticRegion `json:"statics"`
+}
+
+// BuildOrLoad returns a pointermap, reusing an on-disk cache keyed by the
+// target's region map and the build options. A stale cache (different region
+// map) is ignored.
+func BuildOrLoad(p *mem.Process, o BuildOptions) (*Pointermap, error) {
+	regions, err := mem.Regions(p.PID)
+	if err != nil {
+		return nil, err
+	}
+	path := CachePath(p.PID, regions, o)
+	if pm, err := loadPointermap(path); err == nil {
+		return pm, nil
+	}
+	pm, err := BuildPointermap(p, o)
+	if err != nil {
+		return nil, err
+	}
+	_ = savePointermap(path, pm)
+	return pm, nil
+}
+
+// CachePath returns the on-disk cache path for a pointermap built from regions
+// with the given options.
+func CachePath(pid int, regions []mem.Region, o BuildOptions) string {
+	h := sha256.New()
+	for _, r := range regions {
+		fmt.Fprintf(h, "%x-%x-%s\n", r.Start, r.End, r.Path)
+	}
+	fmt.Fprintf(h, "writable=%t aligned=%t", o.WritableOnly, o.Aligned)
+	sum := hex.EncodeToString(h.Sum(nil))[:16]
+	return filepath.Join(config.CacheDir(), fmt.Sprintf("pointermap-%d-%s.json", pid, sum))
+}
+
+func savePointermap(path string, pm *Pointermap) error {
+	entries := make([]wireEntry, len(pm.entries))
+	for i, e := range pm.entries {
+		entries[i] = wireEntry{Value: e.value, Addrs: e.addrs}
+	}
+	data, err := json.Marshal(pointermapJSON{Entries: entries, Statics: pm.statics})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+func loadPointermap(path string) (*Pointermap, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var doc pointermapJSON
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	pm := &Pointermap{statics: doc.Statics}
+	pm.entries = make([]entry, len(doc.Entries))
+	for i, e := range doc.Entries {
+		pm.entries[i] = entry{value: e.Value, addrs: e.Addrs}
+	}
 	return pm, nil
 }
 

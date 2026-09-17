@@ -44,6 +44,7 @@ type SpeedhackConfig struct {
 type UIConfig struct {
 	ResultLimit  int     `yaml:"result_limit"`
 	Theme        string  `yaml:"theme"`
+	Language     string  `yaml:"language"`
 	Scale        float64 `yaml:"scale"`
 	FontSize     float64 `yaml:"font_size"`
 	ProcessIcons bool    `yaml:"process_icons"`
@@ -61,7 +62,7 @@ func Default() Config {
 		},
 		Debugger:  DebuggerConfig{Backend: "ptrace", GDBPath: "gdb"},
 		Speedhack: SpeedhackConfig{Enabled: false, Scale: 1.0},
-		UI:        UIConfig{ResultLimit: 1000, Theme: "light", Scale: 1.0, FontSize: 14, ProcessIcons: true},
+		UI:        UIConfig{ResultLimit: 1000, Theme: "light", Language: "en", Scale: 1.0, FontSize: 14, ProcessIcons: true},
 	}
 }
 
@@ -138,6 +139,15 @@ func DefaultPath() string { return filepath.Join(Dir(), "config.yaml") }
 
 // CustomTypesPath returns the default user-defined value types file path.
 func CustomTypesPath() string { return filepath.Join(Dir(), "customtypes.yaml") }
+
+// CacheDir returns the cache directory ($XDG_CACHE_HOME/firstspark).
+func CacheDir() string {
+	base := os.Getenv("XDG_CACHE_HOME")
+	if base == "" {
+		base = filepath.Join(homeDir(), ".cache")
+	}
+	return filepath.Join(base, "firstspark")
+}
 
 // DataDir returns the data directory used for saved scan sessions
 // ($XDG_DATA_HOME/firstspark).
