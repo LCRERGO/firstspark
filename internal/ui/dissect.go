@@ -12,6 +12,8 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+
 	"github.com/LCRERGO/firstspark/pkg/dissect"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
@@ -32,7 +34,7 @@ func (a *App) openDissect() {
 
 func (a *App) buildDissect() {
 	a.dissectStatus = widget.NewLabel("no data")
-	a.dissectBaseEntry = widget.NewEntry()
+	a.dissectBaseEntry = newHintEntry("dissect.hint.base")
 	a.dissectBaseEntry.SetPlaceHolder("0x1234")
 	switch {
 	case a.tableSel >= 0 && a.tableSel < len(a.entries):
@@ -40,9 +42,9 @@ func (a *App) buildDissect() {
 	case len(a.results) > 0:
 		a.dissectBaseEntry.SetText(fmt.Sprintf("0x%x", a.results[0].Addr))
 	}
-	a.dissectSizeEntry = widget.NewEntry()
+	a.dissectSizeEntry = newHintEntry("dissect.hint.size")
 	a.dissectSizeEntry.SetText("128")
-	a.dissectInstEntry = widget.NewEntry()
+	a.dissectInstEntry = newHintEntry("dissect.hint.instance")
 	a.dissectInstEntry.SetPlaceHolder("instance address")
 	a.dissectSel = -1
 
@@ -66,18 +68,18 @@ func (a *App) buildDissect() {
 	bar := container.NewHBox(
 		widget.NewLabel("Base"), a.dissectBaseEntry,
 		widget.NewLabel("Size"), a.dissectSizeEntry,
-		widget.NewButton("Dissect", a.runDissect),
+		newHintButton("Dissect", "dissect.hint.dissect", a.runDissect),
 	)
 	inst := container.NewHBox(
 		widget.NewLabel("Instance"), a.dissectInstEntry,
-		widget.NewButton("Add Instance", a.addDissectInstance),
+		newHintButton("Add Instance", "dissect.hint.add_instance", a.addDissectInstance),
 	)
 	footer := container.NewHBox(
-		widget.NewButton("Edit Value...", a.dissectEdit),
-		widget.NewButton("Follow Pointer", a.dissectFollow),
+		newHintButton("Edit Value...", "dissect.hint.edit", a.dissectEdit),
+		newHintButton("Follow Pointer", "dissect.hint.follow", a.dissectFollow),
 	)
-	a.dissectWin.SetContent(container.NewBorder(
-		container.NewVBox(bar, inst, a.dissectStatus), footer, nil, nil, a.dissectTable))
+	a.dissectWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(
+		container.NewVBox(bar, inst, a.dissectStatus), footer, nil, nil, a.dissectTable), a.dissectWin.Canvas()))
 }
 
 func (a *App) dissectHeader(col int) string {

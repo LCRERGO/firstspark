@@ -164,9 +164,9 @@ type App struct {
 	dissectBases     []uint64
 	dissectBase      uint64
 	dissectSel       int
-	dissectBaseEntry *widget.Entry
-	dissectSizeEntry *widget.Entry
-	dissectInstEntry *widget.Entry
+	dissectBaseEntry *toolTipEntry
+	dissectSizeEntry *toolTipEntry
+	dissectInstEntry *toolTipEntry
 	dissectStatus    *widget.Label
 
 	memWin       fyne.Window
