@@ -295,6 +295,8 @@
   "customtypes.hint.save": "Register the type and write customtypes.yaml.",
   "customtypes.hint.delete": "Remove the selected type.",
   "customtypes.hint.check": "Validate the script without saving.",
+  "autoasm.hint.execute": "Apply the [ENABLE] section of the script to the target.",
+  "autoasm.hint.revert": "Undo the applied script and restore the original code.",
   "error.attach_first": "attach first",
   "error.register_edit": "expected NAME=value, e.g. RAX=0x10",
   "error.invalid_argument": "invalid argument {{.Arg}}",

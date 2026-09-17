@@ -9,6 +9,8 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
 )
@@ -44,11 +46,11 @@ func (a *App) buildAutoAssemble() {
 	a.asmEditor.SetText(defaultAAScript)
 	a.asmStatus = widget.NewLabel("ready")
 	bar := container.NewHBox(
-		widget.NewButton("Execute", a.runAutoAssemble),
-		widget.NewButton("Revert", a.revertAutoAssemble),
+		newHintButton("Execute", "autoasm.hint.execute", a.runAutoAssemble),
+		newHintButton("Revert", "autoasm.hint.revert", a.revertAutoAssemble),
 	)
-	a.asmWin.SetContent(container.NewBorder(
-		container.NewVBox(bar, a.asmStatus), nil, nil, nil, a.asmEditor))
+	a.asmWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(
+		container.NewVBox(bar, a.asmStatus), nil, nil, nil, a.asmEditor), a.asmWin.Canvas()))
 }
 
 func (a *App) runAutoAssemble() {
