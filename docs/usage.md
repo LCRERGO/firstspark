@@ -86,7 +86,8 @@ speedhack:
   delta: 0.5
 ui:
   result_limit: 1000
-  theme: dark
+  theme: nord
+  theme_variant: dark
   language: en
 log:
   level: info
@@ -96,8 +97,11 @@ hotkeys:
 ```
 
 `ui.language` selects an embedded catalog from `internal/i18n/locales`; the
-change applies on the next launch. `ui.theme` accepts `light`, `dark` or
-`system`.
+change applies on the next launch. `ui.theme` is the palette family
+(`cyberpunk`, `nord`, `dracula`, `tokyo-night`) and `ui.theme_variant` is
+`light`, `dark` or `system`. Both are also switchable from View ▸ Theme ▸
+\<Family\> and from Edit ▸ Settings. An old `ui.theme: light|dark|system` is
+migrated to the cyberpunk family with that variant.
 
 ## Global hotkeys
 
