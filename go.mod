@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	fyne.io/fyne/v2 v2.8.1
+	github.com/dweymouth/fyne-tooltip v0.4.0
 	github.com/jezek/xgb v1.3.1
 	github.com/jezek/xgbutil v0.0.0-20260124183602-9fd151d6a51a
 	github.com/nicksnyder/go-i18n/v2 v2.5.1

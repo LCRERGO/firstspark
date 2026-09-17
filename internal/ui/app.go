@@ -19,6 +19,9 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
+
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
@@ -84,12 +87,12 @@ type App struct {
 	table    *widget.Table
 	tableSel int
 
-	scanType     *widget.Select
-	valueType    *widget.Select
+	scanType     *ttwidget.Select
+	valueType    *ttwidget.Select
 	hexBox       *widget.Check
-	valueEntry   *widget.Entry
-	value2Entry  *widget.Entry
-	compareEntry *widget.Entry
+	valueEntry   *toolTipEntry
+	value2Entry  *toolTipEntry
+	compareEntry *toolTipEntry
 	writable     *widget.Check
 	speedhack    *widget.Check
 	speedScale   *widget.Entry
@@ -231,7 +234,7 @@ func (a *App) build() {
 	a.win.CenterOnScreen()
 	a.buildWidgets()
 	a.win.SetMainMenu(a.mainMenu())
-	a.win.SetContent(a.content())
+	a.win.SetContent(fynetooltip.AddWindowToolTipLayer(a.content(), a.win.Canvas()))
 	a.installShortcuts()
 	a.updateScanControls()
 }
@@ -241,23 +244,24 @@ func (a *App) buildWidgets() {
 	a.foundCount = widget.NewLabel(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.status = widget.NewLabel("")
 
-	a.valueEntry = widget.NewEntry()
+	a.valueEntry = newToolTipEntry()
 	a.valueEntry.SetPlaceHolder(i18n.T("app.value_placeholder"))
 	a.valueEntry.OnSubmitted = func(string) { a.scanAction() }
 
-	a.value2Entry = widget.NewEntry()
+	a.value2Entry = newToolTipEntry()
 	a.value2Entry.SetPlaceHolder(i18n.T("app.upper_bound_placeholder"))
 	a.value2Entry.OnSubmitted = func(string) { a.scanAction() }
 
-	a.compareEntry = widget.NewEntry()
+	a.compareEntry = newToolTipEntry()
 	a.compareEntry.SetText("==")
 
-	a.scanType = widget.NewSelect(scanTypeLabels(), func(string) { a.updateScanControls() })
+	a.scanType = ttwidget.NewSelect(scanTypeLabels(), func(string) { a.updateScanControls() })
 	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
-	a.valueType = widget.NewSelect(valueTypeOptions(), func(label string) {
+	a.valueType = ttwidget.NewSelect(valueTypeOptions(), func(label string) {
 		if n := customTypeAlignment(label); n > 0 {
 			a.alignEntry.SetText(strconv.Itoa(n))
 		}
+		a.updateValueHint()
 	})
 	a.valueType.SetSelected(ceValueTypeLabel(a.defaultValueType()))
 
@@ -274,6 +278,7 @@ func (a *App) buildWidgets() {
 
 	a.buildFoundList()
 	a.buildCheatTable()
+	a.applyHints()
 }
 
 func (a *App) defaultValueType() scan.ValueType {
