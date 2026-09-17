@@ -52,3 +52,42 @@ func TestRemoteCall(t *testing.T) {
 		t.Fatalf("Call returned %d, want 42", got)
 	}
 }
+
+func TestRemoteCallDouble(t *testing.T) {
+	cmd := exec.Command("sleep", "10")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start sleep: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	be, err := NewPtrace(cmd.Process.Pid)
+	if err != nil {
+		t.Fatalf("NewPtrace: %v", err)
+	}
+	if err := be.Attach(); err != nil {
+		t.Skipf("ptrace attach unavailable: %v", err)
+	}
+	defer be.Detach()
+
+	pb := be.(*ptraceBackend)
+	page, err := pb.Mmap(0x1000, unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC,
+		unix.MAP_PRIVATE|unix.MAP_ANONYMOUS)
+	if err != nil {
+		t.Fatalf("Mmap: %v", err)
+	}
+	// addsd xmm0, xmm0 ; ret  -> doubles the first double argument.
+	if err := pb.proc.Write(page, []byte{0xF2, 0x0F, 0x58, 0xC0, 0xC3}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	res, err := pb.CallWithArgs(page, []CallArg{{Kind: ArgDouble, Float: 1.5}})
+	if err != nil {
+		t.Fatalf("CallWithArgs: %v", err)
+	}
+	if res.Double() != 3.0 {
+		t.Fatalf("double result = %v, want 3", res.Double())
+	}
+}

@@ -5,6 +5,7 @@ package debugger
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -15,39 +16,63 @@ import (
 // original registers restored. A scratch page holds a return stub (int3) and a
 // private stack, so the target's own stack is not disturbed.
 func (b *ptraceBackend) Call(fn uint64, args []uint64) (uint64, error) {
-	var ret uint64
-	var err error
-	b.do(func() { ret, err = b.call(fn, args) })
-	return ret, err
+	cargs := make([]CallArg, len(args))
+	for i, a := range args {
+		cargs[i] = CallArg{Kind: ArgInt, Uint: a}
+	}
+	res, err := b.CallWithArgs(fn, cargs)
+	return res.RAX, err
 }
 
-func (b *ptraceBackend) call(fn uint64, args []uint64) (uint64, error) {
+// CallWithArgs invokes fn with typed integer and floating point arguments
+// following the System V AMD64 ABI, returning RAX and XMM0.
+func (b *ptraceBackend) CallWithArgs(fn uint64, args []CallArg) (CallResult, error) {
+	var res CallResult
+	var err error
+	b.do(func() { res, err = b.callWithArgs(fn, args) })
+	return res, err
+}
+
+func (b *ptraceBackend) callWithArgs(fn uint64, args []CallArg) (CallResult, error) {
+	var res CallResult
 	if !b.attached {
-		return 0, ErrNotAttached
+		return res, ErrNotAttached
 	}
-	if len(args) > 6 {
-		return 0, fmt.Errorf("debugger: at most 6 arguments are supported")
+	ngp, nxmm := 0, 0
+	for _, a := range args {
+		if a.Kind == ArgInt {
+			ngp++
+		} else {
+			nxmm++
+		}
 	}
+	if ngp > 6 {
+		return res, fmt.Errorf("debugger: at most 6 integer arguments are supported")
+	}
+	if nxmm > 8 {
+		return res, fmt.Errorf("debugger: at most 8 floating point arguments are supported")
+	}
+
 	scratch, err := b.scratchPage()
 	if err != nil {
-		return 0, fmt.Errorf("call: scratch page: %w", err)
+		return res, fmt.Errorf("call: scratch page: %w", err)
 	}
 	stub := scratch + 0x100
 	stackTop := scratch + 0x1000
 
 	if err := b.proc.Write(stub, []byte{0xCC}); err != nil {
-		return 0, fmt.Errorf("call: write stub: %w", err)
+		return res, fmt.Errorf("call: write stub: %w", err)
 	}
 	retSlot := stackTop - 8
 	var buf [8]byte
 	binary.LittleEndian.PutUint64(buf[:], stub)
 	if err := b.proc.Write(retSlot, buf[:]); err != nil {
-		return 0, fmt.Errorf("call: write return slot: %w", err)
+		return res, fmt.Errorf("call: write return slot: %w", err)
 	}
 
 	saved, err := b.registers()
 	if err != nil {
-		return 0, fmt.Errorf("call: read registers: %w", err)
+		return res, fmt.Errorf("call: read registers: %w", err)
 	}
 	call := saved
 	call.RIP = fn
@@ -55,53 +80,80 @@ func (b *ptraceBackend) call(fn uint64, args []uint64) (uint64, error) {
 	// Clearing RAX avoids the kernel restarting an interrupted syscall when we
 	// resume at a different instruction.
 	call.RAX = 0
-	if len(args) > 0 {
-		call.RDI = args[0]
-	}
-	if len(args) > 1 {
-		call.RSI = args[1]
-	}
-	if len(args) > 2 {
-		call.RDX = args[2]
-	}
-	if len(args) > 3 {
-		call.RCX = args[3]
-	}
-	if len(args) > 4 {
-		call.R8 = args[4]
-	}
-	if len(args) > 5 {
-		call.R9 = args[5]
+	gpVals := []*uint64{&call.RDI, &call.RSI, &call.RDX, &call.RCX, &call.R8, &call.R9}
+	gi := 0
+	var savedXMM [8][16]byte
+	var usedXMM int
+	for _, a := range args {
+		if a.Kind == ArgInt {
+			*gpVals[gi] = a.Uint
+			gi++
+		}
 	}
 	if err := b.setRegisters(call); err != nil {
-		return 0, fmt.Errorf("call: set registers: %w", err)
+		return res, fmt.Errorf("call: set registers: %w", err)
+	}
+	for _, a := range args {
+		if a.Kind == ArgInt {
+			continue
+		}
+		orig, xerr := b.getXMM(usedXMM)
+		if xerr != nil {
+			return res, fmt.Errorf("call: read xmm%d: %w", usedXMM, xerr)
+		}
+		savedXMM[usedXMM] = orig
+		var v [16]byte
+		if a.Kind == ArgFloat {
+			binary.LittleEndian.PutUint32(v[:4], math.Float32bits(float32(a.Float)))
+		} else {
+			binary.LittleEndian.PutUint64(v[:8], math.Float64bits(a.Float))
+		}
+		if xerr := b.setXMM(usedXMM, v); xerr != nil {
+			return res, fmt.Errorf("call: set xmm%d: %w", usedXMM, xerr)
+		}
+		usedXMM++
+	}
+	restoreXMM := func() {
+		for i := 0; i < usedXMM; i++ {
+			_ = b.setXMM(i, savedXMM[i])
+		}
 	}
 	if check, cerr := b.registers(); cerr == nil && (check.RIP != fn || check.RSP != retSlot) {
-		return 0, fmt.Errorf("call: register write did not take effect (rip=0x%x rsp=0x%x)", check.RIP, check.RSP)
+		restoreXMM()
+		return res, fmt.Errorf("call: register write did not take effect (rip=0x%x rsp=0x%x)", check.RIP, check.RSP)
 	}
 	if err := b.cont(); err != nil {
-		return 0, fmt.Errorf("call: continue: %w", err)
+		restoreXMM()
+		return res, fmt.Errorf("call: continue: %w", err)
 	}
 
 	reason, err := b.waitTimeout(2 * time.Second)
 	if err != nil {
 		b.stopOnTimeout()
 		_ = b.setRegisters(saved)
-		return 0, err
+		restoreXMM()
+		return res, err
 	}
 	if reason.Event != EventStopped {
 		_ = b.setRegisters(saved)
-		return 0, fmt.Errorf("call: target did not return (event %d, signal %v)", reason.Event, reason.Signal)
+		restoreXMM()
+		return res, fmt.Errorf("call: target did not return (event %d, signal %v)", reason.Event, reason.Signal)
 	}
 	after, rerr := b.registers()
+	xmm0, xerr := b.getXMM(0)
 	_ = b.setRegisters(saved)
+	restoreXMM()
 	if rerr != nil {
-		return 0, fmt.Errorf("call: read result after stop (signal %v): %w", reason.Signal, rerr)
+		return res, fmt.Errorf("call: read result after stop (signal %v): %w", reason.Signal, rerr)
 	}
 	if after.RIP != stub+1 {
-		return 0, fmt.Errorf("call: stopped unexpectedly at 0x%x (signal %v)", after.RIP, reason.Signal)
+		return res, fmt.Errorf("call: stopped unexpectedly at 0x%x (signal %v)", after.RIP, reason.Signal)
 	}
-	return after.RAX, nil
+	res.RAX = after.RAX
+	if xerr == nil {
+		res.XMM0 = xmm0
+	}
+	return res, nil
 }
 
 func (b *ptraceBackend) scratchPage() (uint64, error) {

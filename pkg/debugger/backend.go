@@ -4,8 +4,10 @@
 package debugger
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"syscall"
 )
 
@@ -74,6 +76,49 @@ type Backend interface {
 type RemoteCaller interface {
 	// Call invokes fn with up to six integer arguments and returns RAX.
 	Call(fn uint64, args []uint64) (uint64, error)
+}
+
+// CallArgKind selects the register class of a remote-call argument.
+type CallArgKind int
+
+const (
+	// ArgInt passes an integer or pointer in a general purpose register.
+	ArgInt CallArgKind = iota
+	// ArgFloat passes a 32-bit float in an SSE register.
+	ArgFloat
+	// ArgDouble passes a 64-bit double in an SSE register.
+	ArgDouble
+)
+
+// CallArg is one argument to a typed remote call.
+type CallArg struct {
+	Kind  CallArgKind
+	Uint  uint64
+	Float float64
+}
+
+// CallResult carries the outcome of a typed remote call.
+type CallResult struct {
+	// RAX holds the integer return value.
+	RAX uint64
+	// XMM0 holds the raw SSE return value.
+	XMM0 [16]byte
+}
+
+// Float returns the 32-bit SSE return value.
+func (r CallResult) Float() float32 {
+	return math.Float32frombits(binary.LittleEndian.Uint32(r.XMM0[:4]))
+}
+
+// Double returns the 64-bit SSE return value.
+func (r CallResult) Double() float64 {
+	return math.Float64frombits(binary.LittleEndian.Uint64(r.XMM0[:8]))
+}
+
+// FloatCaller is implemented by backends that support typed remote calls with
+// integer and floating point arguments (System V AMD64 ABI).
+type FloatCaller interface {
+	CallWithArgs(fn uint64, args []CallArg) (CallResult, error)
 }
 
 // WatchpointBackend is implemented by backends that support hardware data

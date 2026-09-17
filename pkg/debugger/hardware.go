@@ -5,6 +5,7 @@ package debugger
 import (
 	"encoding/binary"
 	"errors"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -40,6 +41,63 @@ const (
 )
 
 func drOffset(slot int) uintptr { return dr0Offset + uintptr(slot)*8 }
+
+// SSE state is read and written through PTRACE_GETREGSET/SETREGSET with the
+// NT_PRFPREG regset (the fxsave layout), where xmm_space starts at offset
+// userXMM0 and each register is 16 bytes.
+const (
+	ntPRFPREG   = 2
+	userXMM0    = 0xA0
+	fpregsBytes = 512
+)
+
+func (b *ptraceBackend) fpRegs() ([]byte, error) {
+	buf := make([]byte, fpregsBytes)
+	iov := unix.Iovec{Base: &buf[0], Len: uint64(len(buf))}
+	_, _, errno := unix.Syscall6(unix.SYS_PTRACE, unix.PTRACE_GETREGSET,
+		uintptr(b.pid), ntPRFPREG, uintptr(unsafe.Pointer(&iov)), 0, 0)
+	if errno != 0 {
+		return nil, errno
+	}
+	return buf, nil
+}
+
+func (b *ptraceBackend) writeFPRegs(buf []byte) error {
+	iov := unix.Iovec{Base: &buf[0], Len: uint64(len(buf))}
+	_, _, errno := unix.Syscall6(unix.SYS_PTRACE, unix.PTRACE_SETREGSET,
+		uintptr(b.pid), ntPRFPREG, uintptr(unsafe.Pointer(&iov)), 0, 0)
+	if errno != 0 {
+		return errno
+	}
+	return nil
+}
+
+func (b *ptraceBackend) getXMM(index int) ([16]byte, error) {
+	var out [16]byte
+	buf, err := b.fpRegs()
+	if err != nil {
+		return out, err
+	}
+	off := userXMM0 + index*16
+	if off+16 > len(buf) {
+		return out, errors.New("debugger: xmm index out of range")
+	}
+	copy(out[:], buf[off:off+16])
+	return out, nil
+}
+
+func (b *ptraceBackend) setXMM(index int, value [16]byte) error {
+	buf, err := b.fpRegs()
+	if err != nil {
+		return err
+	}
+	off := userXMM0 + index*16
+	if off+16 > len(buf) {
+		return errors.New("debugger: xmm index out of range")
+	}
+	copy(buf[off:off+16], value[:])
+	return b.writeFPRegs(buf)
+}
 
 // SetWatchpoint arms one of the four hardware watchpoints on addr.
 func (b *ptraceBackend) SetWatchpoint(addr uint64, size int, writeOnly bool) error {

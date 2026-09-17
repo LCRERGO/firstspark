@@ -54,6 +54,16 @@ func (s *Session) Continue() error { return s.backend.Continue() }
 // Step single-steps the target.
 func (s *Session) Step() error { return s.backend.Step() }
 
+// Call invokes a function in the target with typed arguments. It returns
+// ErrNotSupported when the backend cannot call into the target.
+func (s *Session) Call(fn uint64, args []CallArg) (CallResult, error) {
+	fc, ok := s.backend.(FloatCaller)
+	if !ok {
+		return CallResult{}, ErrNotSupported
+	}
+	return fc.CallWithArgs(fn, args)
+}
+
 // Wait blocks until the target stops.
 func (s *Session) Wait() (StopReason, error) { return s.backend.Wait() }
 
