@@ -455,7 +455,7 @@ func (a *App) hexValue(raw string) string {
 	case scan.TypeFloat, scan.TypeDouble, scan.TypeString, scan.TypeAOB, scan.TypeBinary:
 		return s
 	}
-	if s == "" {
+	if !isBareHexLiteral(s) {
 		return s
 	}
 	neg := strings.HasPrefix(s, "-")
@@ -469,6 +469,26 @@ func (a *App) hexValue(raw string) string {
 		s = "-" + s
 	}
 	return s
+}
+
+// isBareHexLiteral reports whether s is a single optionally-signed hex literal
+// rather than an expression, so the Hex toggle does not corrupt inputs such as
+// "0xFF + 1".
+func isBareHexLiteral(s string) bool {
+	if s == "" {
+		return false
+	}
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "-"), "+")
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *App) undoScan() {
