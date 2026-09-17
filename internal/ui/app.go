@@ -59,9 +59,9 @@ type App struct {
 	procRows       []procRow
 	procSortCol    int
 	procSortAsc    bool
-	procHeaderBtns []*widget.Button
-	procFilter     *widget.Entry
-	procTree       *widget.Check
+	procHeaderBtns []*ttwidget.Button
+	procFilter     *toolTipEntry
+	procTree       *ttwidget.Check
 	procList       *widget.List
 	procWin        fyne.Window
 	processLabel   *tapLabel

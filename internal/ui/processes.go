@@ -12,7 +12,11 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
+
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
+	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/mem"
@@ -47,6 +51,7 @@ type procRow struct {
 // treeToggle is a clickable disclosure triangle for the process tree.
 type treeToggle struct {
 	widget.BaseWidget
+	ttwidget.ToolTipWidgetExtend
 	label *widget.Label
 	onTap func()
 }
@@ -54,8 +59,18 @@ type treeToggle struct {
 func newTreeToggle() *treeToggle {
 	t := &treeToggle{label: widget.NewLabel("")}
 	t.ExtendBaseWidget(t)
+	t.SetToolTip(i18n.T("process.hint.expand"))
 	return t
 }
+
+func (t *treeToggle) ExtendBaseWidget(wid fyne.Widget) {
+	t.ExtendToolTipWidget(wid)
+	t.BaseWidget.ExtendBaseWidget(wid)
+}
+
+func (t *treeToggle) MouseIn(e *desktop.MouseEvent)    { t.ToolTipWidgetExtend.MouseIn(e) }
+func (t *treeToggle) MouseMoved(e *desktop.MouseEvent) { t.ToolTipWidgetExtend.MouseMoved(e) }
+func (t *treeToggle) MouseOut()                        { t.ToolTipWidgetExtend.MouseOut() }
 
 func (t *treeToggle) SetText(s string) { t.label.SetText(s) }
 
@@ -81,11 +96,11 @@ func (a *App) openProcessList() {
 }
 
 func (a *App) buildProcessList() {
-	a.procFilter = widget.NewEntry()
+	a.procFilter = newHintEntry("process.hint.filter")
 	a.procFilter.SetPlaceHolder(i18n.T("process.filter_placeholder"))
 	a.procFilter.OnChanged = func(string) { a.applyFilter() }
 
-	a.procTree = widget.NewCheck(i18n.T("process.tree"), func(on bool) {
+	a.procTree = newHintCheck(i18n.T("process.tree"), "process.hint.tree", func(on bool) {
 		a.treeMode = on
 		a.applyFilter()
 	})
@@ -107,13 +122,13 @@ func (a *App) buildProcessList() {
 	filterRow := container.NewBorder(nil, nil, nil, a.procTree, a.procFilter)
 	body := container.NewBorder(filterRow, nil, nil, nil,
 		container.NewBorder(a.procHeader(), nil, nil, nil, a.procList))
-	a.procWin.SetContent(body)
+	a.procWin.SetContent(fynetooltip.AddWindowToolTipLayer(body, a.procWin.Canvas()))
 }
 
 func (a *App) procHeader() fyne.CanvasObject {
 	labels := procColumnLabels()
 	widths := []float32{procNameW, procPIDW, procUserW}
-	a.procHeaderBtns = make([]*widget.Button, len(labels))
+	a.procHeaderBtns = make([]*ttwidget.Button, len(labels))
 	row := container.NewHBox(
 		container.NewGridWrap(fyne.NewSize(procTreeIndent, procRowH), canvas.NewRectangle(nil)),
 		container.NewGridWrap(fyne.NewSize(18, procRowH), canvas.NewRectangle(nil)),
@@ -121,7 +136,7 @@ func (a *App) procHeader() fyne.CanvasObject {
 	)
 	for i, label := range labels {
 		col := i
-		btn := widget.NewButton(label, func() { a.sortProcs(col) })
+		btn := newHintButton(label, "process.hint.sort", func() { a.sortProcs(col) })
 		btn.Importance = widget.LowImportance
 		a.procHeaderBtns[i] = btn
 		row.Add(fixedWidth(widths[i], btn))

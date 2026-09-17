@@ -273,5 +273,9 @@
   "process.column.name": "Name",
   "process.column.pid": "PID",
   "process.column.user": "User",
-  "process.label": "Process: {{.Name}} ({{.PID}})"
+  "process.label": "Process: {{.Name}} ({{.PID}})",
+  "process.hint.filter": "Filter by name, command line, user or PID.",
+  "process.hint.tree": "Show processes as a parent/child tree instead of a flat list.",
+  "process.hint.sort": "Click to sort by this column; click again to reverse the order.",
+  "process.hint.expand": "Expand or collapse child processes."
 }
