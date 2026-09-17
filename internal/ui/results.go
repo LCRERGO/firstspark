@@ -149,7 +149,7 @@ func (a *App) foundPanel() fyne.CanvasObject {
 	head := container.NewHBox(
 		a.th.heading(i18n.T("results.found"), a.th.size+2, a.pal().primary),
 		layout.NewSpacer(),
-		widget.NewButton(i18n.T("results.add_to_table"), func() { a.addResultToTable(a.foundSel) }),
+		newHintButton(i18n.T("results.add_to_table"), "results.hint.add_to_table", func() { a.addResultToTable(a.foundSel) }),
 	)
 	return container.NewBorder(head, nil, nil, nil, a.foundList)
 }
@@ -210,8 +210,8 @@ func (a *App) cheatPanel() fyne.CanvasObject {
 		nil, nil,
 		a.th.heading(i18n.T("results.cheat_table"), a.th.size+2, a.pal().primary),
 		container.NewHBox(
-			widget.NewButton(i18n.T("results.add_address_manually"), a.addAddressDialog),
-			widget.NewButton(i18n.T("results.clear_list"), a.clearTable),
+			newHintButton(i18n.T("results.add_address_manually"), "results.hint.add_address", a.addAddressDialog),
+			newHintButton(i18n.T("results.clear_list"), "results.hint.clear", a.clearTable),
 		),
 	)
 	return container.NewBorder(head, nil, nil, nil, a.table)

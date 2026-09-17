@@ -240,7 +240,7 @@ func (a *App) build() {
 }
 
 func (a *App) buildWidgets() {
-	a.processLabel = &tapLabel{Label: widget.NewLabel(i18n.T("app.no_process")), onTap: a.openProcessList}
+	a.processLabel = newTapLabel(i18n.T("app.no_process"), a.openProcessList)
 	a.foundCount = widget.NewLabel(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.status = widget.NewLabel("")
 
@@ -560,8 +560,25 @@ func (a *App) freezeLoop() {
 // tapLabel is a label that runs a callback when tapped.
 type tapLabel struct {
 	*widget.Label
+	ttwidget.ToolTipWidgetExtend
 	onTap func()
 }
+
+func newTapLabel(text string, onTap func()) *tapLabel {
+	t := &tapLabel{Label: widget.NewLabel(text), onTap: onTap}
+	t.ExtendBaseWidget(t)
+	t.SetToolTip(i18n.T("app.hint.process_label"))
+	return t
+}
+
+func (t *tapLabel) ExtendBaseWidget(wid fyne.Widget) {
+	t.ExtendToolTipWidget(wid)
+	t.Label.ExtendBaseWidget(wid)
+}
+
+func (t *tapLabel) MouseIn(e *desktop.MouseEvent)    { t.ToolTipWidgetExtend.MouseIn(e) }
+func (t *tapLabel) MouseMoved(e *desktop.MouseEvent) { t.ToolTipWidgetExtend.MouseMoved(e) }
+func (t *tapLabel) MouseOut()                        { t.ToolTipWidgetExtend.MouseOut() }
 
 func (t *tapLabel) Tapped(*fyne.PointEvent) {
 	if t.onTap != nil {

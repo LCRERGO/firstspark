@@ -5,6 +5,7 @@
 
   "app.title": "Firstspark",
   "app.no_process": "No Process Selected",
+  "app.hint.process_label": "Click to choose the target process.",
   "app.found_count": "Found: {{.Count}}",
   "app.value_placeholder": "value or AOB pattern",
   "app.upper_bound_placeholder": "upper bound (Value between)",
@@ -161,6 +162,9 @@
   "results.cheat_table": "Cheat Table",
   "results.add_address_manually": "Add Address Manually",
   "results.clear_list": "Clear List",
+  "results.hint.add_to_table": "Add the selected scan result to the cheat table.",
+  "results.hint.add_address": "Add an address manually, optionally with pointer offsets.",
+  "results.hint.clear": "Remove every entry from the cheat table.",
   "menu.change_value": "Change Value...",
   "menu.change_description": "Change Description...",
   "menu.configure_bitfield": "Configure Bitfield...",
