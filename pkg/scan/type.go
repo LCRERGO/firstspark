@@ -2,12 +2,14 @@ package scan
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf16"
 )
 
 // Kind is the comparison class of a value type.
@@ -268,6 +270,23 @@ func registerBuiltins() {
 		Encode:  func(n int64) []byte { return []byte{byte(n)} },
 		Numeric: func(v Value) float64 { return 0 },
 	})
+	stringType := func(id ValueType, name, label string, enc func(string) []byte, dec func([]byte) string) {
+		RegisterType(&Type{
+			ID: id, Name: name, Label: label, Variable: true, Kind: KindString,
+			Parse: func(input string) (Value, error) {
+				input = strings.Trim(strings.TrimSpace(input), `"`)
+				return NewValue(id, enc(input)), nil
+			},
+			Format:  func(v Value) string { return dec(v.Raw) },
+			Encode:  func(n int64) []byte { return enc(strconv.FormatInt(n, 10)) },
+			Numeric: func(v Value) float64 { return 0 },
+			Text:    func(v Value) string { return dec(v.Raw) },
+		})
+	}
+	stringType(TypeUTF16LE, "utf16le", "UTF-16 LE", encodeUTF16LE, decodeUTF16LE)
+	stringType(TypeUTF16BE, "utf16be", "UTF-16 BE", encodeUTF16BE, decodeUTF16BE)
+	stringType(TypeUTF32LE, "utf32le", "UTF-32 LE", encodeUTF32LE, decodeUTF32LE)
+	stringType(TypeUTF32BE, "utf32be", "UTF-32 BE", encodeUTF32BE, decodeUTF32BE)
 	RegisterType(&Type{
 		ID: TypeAll, Name: "all", Label: "All", Size: 8, Kind: KindInt,
 		Parse: func(input string) (Value, error) {
@@ -282,6 +301,74 @@ func registerBuiltins() {
 		Int64:   func(v Value) int64 { return v.Int64() },
 		Numeric: func(v Value) float64 { return float64(v.Int64()) },
 	})
+}
+
+func encodeUTF16LE(s string) []byte {
+	units := utf16.Encode([]rune(s))
+	b := make([]byte, len(units)*2)
+	for i, u := range units {
+		binary.LittleEndian.PutUint16(b[i*2:], u)
+	}
+	return b
+}
+
+func encodeUTF16BE(s string) []byte {
+	units := utf16.Encode([]rune(s))
+	b := make([]byte, len(units)*2)
+	for i, u := range units {
+		binary.BigEndian.PutUint16(b[i*2:], u)
+	}
+	return b
+}
+
+func decodeUTF16LE(b []byte) string {
+	units := make([]uint16, 0, len(b)/2)
+	for i := 0; i+2 <= len(b); i += 2 {
+		units = append(units, binary.LittleEndian.Uint16(b[i:]))
+	}
+	return string(utf16.Decode(units))
+}
+
+func decodeUTF16BE(b []byte) string {
+	units := make([]uint16, 0, len(b)/2)
+	for i := 0; i+2 <= len(b); i += 2 {
+		units = append(units, binary.BigEndian.Uint16(b[i:]))
+	}
+	return string(utf16.Decode(units))
+}
+
+func encodeUTF32LE(s string) []byte {
+	runes := []rune(s)
+	b := make([]byte, len(runes)*4)
+	for i, r := range runes {
+		binary.LittleEndian.PutUint32(b[i*4:], uint32(r))
+	}
+	return b
+}
+
+func encodeUTF32BE(s string) []byte {
+	runes := []rune(s)
+	b := make([]byte, len(runes)*4)
+	for i, r := range runes {
+		binary.BigEndian.PutUint32(b[i*4:], uint32(r))
+	}
+	return b
+}
+
+func decodeUTF32LE(b []byte) string {
+	var sb strings.Builder
+	for i := 0; i+4 <= len(b); i += 4 {
+		sb.WriteRune(rune(binary.LittleEndian.Uint32(b[i:])))
+	}
+	return sb.String()
+}
+
+func decodeUTF32BE(b []byte) string {
+	var sb strings.Builder
+	for i := 0; i+4 <= len(b); i += 4 {
+		sb.WriteRune(rune(binary.BigEndian.Uint32(b[i:])))
+	}
+	return sb.String()
 }
 
 func init() { registerBuiltins() }

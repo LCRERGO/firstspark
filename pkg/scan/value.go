@@ -25,6 +25,10 @@ const (
 	TypeAOB
 	TypeBinary
 	TypeAll
+	TypeUTF16LE
+	TypeUTF16BE
+	TypeUTF32LE
+	TypeUTF32BE
 )
 
 // Size returns the width in bytes for fixed-width types and 0 for the

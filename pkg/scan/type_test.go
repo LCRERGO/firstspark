@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"bytes"
 	"strconv"
 	"strings"
 	"testing"
@@ -68,4 +69,28 @@ func decodeU24(v Value) int64 {
 		return 0
 	}
 	return int64(v.Raw[0]) | int64(v.Raw[1])<<8 | int64(v.Raw[2])<<16
+}
+
+func TestStringEncodings(t *testing.T) {
+	cases := []struct {
+		typ ValueType
+		raw []byte
+	}{
+		{TypeUTF16LE, []byte{'h', 0, 'i', 0}},
+		{TypeUTF16BE, []byte{0, 'h', 0, 'i'}},
+		{TypeUTF32LE, []byte{'h', 0, 0, 0, 'i', 0, 0, 0}},
+		{TypeUTF32BE, []byte{0, 0, 0, 'h', 0, 0, 0, 'i'}},
+	}
+	for _, c := range cases {
+		v, err := ParseValue(c.typ, "hi")
+		if err != nil {
+			t.Fatalf("ParseValue(%s): %v", c.typ, err)
+		}
+		if !bytes.Equal(v.Raw, c.raw) {
+			t.Errorf("%s encoded % x, want % x", c.typ, v.Raw, c.raw)
+		}
+		if got := v.String(); got != "hi" {
+			t.Errorf("%s formatted %q, want hi", c.typ, got)
+		}
+	}
 }
