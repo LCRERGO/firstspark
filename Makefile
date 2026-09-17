@@ -6,7 +6,10 @@ TEST_DIR := test
 GO ?= go
 GOFLAGS ?=
 
-.PHONY: all build build/gui build/headless gui run test lint fmt vet fixtures clean tidy
+.PHONY: all build build/gui build/headless gui run test test/race fuzz lint fmt vet fixtures clean tidy
+
+# How long each fuzz target runs under `make fuzz`.
+FUZZTIME ?= 15s
 
 # `make` builds the runnable GUI. On a machine without CGO or the
 # OpenGL/X11 headers, use `make build/headless` instead.
@@ -34,6 +37,20 @@ run: build/gui
 
 test:
 	$(GO) test $(GOFLAGS) ./...
+
+# Run the tests under the race detector.
+test/race:
+	$(GO) test $(GOFLAGS) -race ./...
+
+# Fuzz every FuzzXxx target in pkg/... for FUZZTIME each. `go test -fuzz`
+# accepts only one target at a time, so iterate over them.
+fuzz:
+	@for pkg in $$($(GO) list ./pkg/...); do \
+		for target in $$($(GO) test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz'); do \
+			echo "==> $$target ($$pkg)"; \
+			$(GO) test -run '^$$' -fuzz "^$$target$$" -fuzztime $(FUZZTIME) $$pkg || exit 1; \
+		done; \
+	done
 
 lint: fmt vet
 

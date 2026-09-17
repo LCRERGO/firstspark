@@ -15,7 +15,9 @@ make                # runnable GUI -> bin/firstspark (CGO + OpenGL/X11 headers)
 make build/gui      # same as `make`
 make build/headless # headless binary (no CGO, no GUI)
 make run            # build the GUI and run it
-make test           # unit + integration tests
+make test           # unit + integration tests (property tests included)
+make test/race      # the same under the race detector
+make fuzz           # fuzz every FuzzXxx target for FUZZTIME (default 15s)
 make lint           # gofmt + go vet (default and gui tags)
 make tidy           # go mod tidy
 ```
