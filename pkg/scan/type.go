@@ -3,7 +3,6 @@ package scan
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -199,7 +198,7 @@ func registerBuiltins() {
 		return &Type{
 			ID: id, Name: name, Label: label, Size: size, Kind: KindInt,
 			Parse: func(input string) (Value, error) {
-				n, err := parseInteger(input)
+				n, err := parseIntInput(input)
 				if err != nil {
 					return Value{}, err
 				}
@@ -215,9 +214,9 @@ func registerBuiltins() {
 		return &Type{
 			ID: id, Name: name, Label: label, Size: size, Kind: KindFloat,
 			Parse: func(input string) (Value, error) {
-				f, err := strconv.ParseFloat(strings.TrimSpace(input), 64)
+				f, err := parseFloatInput(input)
 				if err != nil {
-					return Value{}, fmt.Errorf("scan: parse float %q: %w", input, err)
+					return Value{}, err
 				}
 				return encodeFloat(id, f), nil
 			},
@@ -290,7 +289,7 @@ func registerBuiltins() {
 	RegisterType(&Type{
 		ID: TypeAll, Name: "all", Label: "All", Size: 8, Kind: KindInt,
 		Parse: func(input string) (Value, error) {
-			n, err := parseInteger(input)
+			n, err := parseIntInput(input)
 			if err != nil {
 				return Value{}, err
 			}
