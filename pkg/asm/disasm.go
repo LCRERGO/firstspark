@@ -16,13 +16,25 @@ type Instruction struct {
 	Len   int
 }
 
+// decode wraps x86asm.Decode. The upstream decoder can panic on truncated
+// VEX/AVX encodings, and Firstspark disassembles arbitrary target memory, so a
+// panic is converted into a decode error and the caller emits a db pseudo-op.
+func decode(code []byte) (inst x86asm.Inst, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("asm: decode failed: %v", r)
+		}
+	}()
+	return x86asm.Decode(code, 64)
+}
+
 // Disassemble decodes code as 64-bit x86 starting at virtual address base.
 // Bytes that fail to decode are emitted one at a time as `db` pseudo-ops so
 // the output always covers the full input.
 func Disassemble(code []byte, base uint64) []Instruction {
 	out := make([]Instruction, 0, len(code)/2)
 	for off := 0; off < len(code); {
-		inst, err := x86asm.Decode(code[off:], 64)
+		inst, err := decode(code[off:])
 		if err != nil || inst.Len == 0 || off+inst.Len > len(code) {
 			out = append(out, Instruction{
 				Addr:  base + uint64(off),
@@ -51,7 +63,7 @@ func DecodeOne(code []byte, base uint64) Instruction {
 	if len(code) == 0 {
 		return Instruction{Addr: base, Text: "db 0x??", Len: 1}
 	}
-	inst, err := x86asm.Decode(code, 64)
+	inst, err := decode(code)
 	if err != nil || inst.Len == 0 || inst.Len > len(code) {
 		return Instruction{
 			Addr:  base,
@@ -71,7 +83,7 @@ func DecodeOne(code []byte, base uint64) Instruction {
 // InstructionLen returns the length of the instruction at the start of code.
 // It returns 1 when the bytes cannot be decoded.
 func InstructionLen(code []byte) int {
-	inst, err := x86asm.Decode(code, 64)
+	inst, err := decode(code)
 	if err != nil || inst.Len == 0 {
 		return 1
 	}
