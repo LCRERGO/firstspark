@@ -517,6 +517,7 @@ func (a *App) selectProcessObj(p mem.Process) {
 	a.regionSel = nil
 	a.results = nil
 	a.foundSel = -1
+	a.foundMulti = nil
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}

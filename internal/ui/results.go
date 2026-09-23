@@ -122,27 +122,122 @@ func binaryOf(v scan.Value) string {
 }
 
 func (a *App) buildFoundList() {
-	a.foundList = widget.NewList(
-		func() int { return len(a.results) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.results) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			r := a.results[id]
-			t.Text = fmt.Sprintf("0x%012x  %s", r.Addr, r.Prev.String())
-			if int(id) == a.foundSel {
-				t.Color = a.pal().primary
-			} else {
-				t.Color = a.pal().text
-			}
-			t.Refresh()
+	a.foundList = widget.NewTable(
+		func() (int, int) { return len(a.results), 1 },
+		func() fyne.CanvasObject {
+			c := &foundCell{Label: widget.NewLabel(""), app: a}
+			c.TextStyle = fyne.TextStyle{Monospace: true}
+			return c
 		},
+		func(id widget.TableCellID, o fyne.CanvasObject) { a.updateFoundCell(id, o) },
 	)
-	a.foundList.OnSelected = func(id widget.ListItemID) { a.selectFound(int(id)) }
+	a.foundList.SetColumnWidth(0, 320)
+}
+
+func (a *App) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
+	c := o.(*foundCell)
+	c.row = id.Row
+	if id.Row < 0 || id.Row >= len(a.results) {
+		c.SetText("")
+		c.Refresh()
+		return
+	}
+	r := a.results[id.Row]
+	c.SetText(fmt.Sprintf("0x%012x  %s", r.Addr, r.Prev.String()))
+	if a.isFoundSelected(id.Row) {
+		c.Importance = widget.HighImportance
+	} else {
+		c.Importance = widget.MediumImportance
+	}
+	c.Refresh()
+}
+
+// foundCell is a tappable Found-list row that reports clicks with modifiers.
+type foundCell struct {
+	*widget.Label
+	app *App
+	row int
+}
+
+func (c *foundCell) Tapped(*fyne.PointEvent) { c.app.foundTapped(c.row) }
+
+func (c *foundCell) MouseDown(e *desktop.MouseEvent) {
+	c.app.clickMod = e.Modifier
+	c.app.selectFoundRow(c.row, e.Modifier)
+}
+
+// selectFoundRow updates the Found-list selection: plain selects one row, Ctrl
+// toggles and Shift selects a contiguous range.
+func (a *App) selectFoundRow(id int, mod fyne.KeyModifier) {
+	if id < 0 || id >= len(a.results) {
+		return
+	}
+	a.activePanel = panelFound
+	switch {
+	case mod&fyne.KeyModifierControl != 0:
+		if a.foundMulti == nil {
+			a.foundMulti = map[int]bool{}
+			if a.foundSel >= 0 {
+				a.foundMulti[a.foundSel] = true
+			}
+		}
+		if a.foundMulti[id] {
+			delete(a.foundMulti, id)
+		} else {
+			a.foundMulti[id] = true
+		}
+		a.foundSel = id
+	case mod&fyne.KeyModifierShift != 0 && a.foundSel >= 0:
+		lo, hi := a.foundSel, id
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		m := map[int]bool{}
+		for i := lo; i <= hi; i++ {
+			m[i] = true
+		}
+		a.foundMulti = m
+	default:
+		a.foundMulti = nil
+		a.foundSel = id
+	}
+	if a.foundList != nil {
+		a.foundList.Refresh()
+	}
+}
+
+// isFoundSelected reports whether result id is selected.
+func (a *App) isFoundSelected(id int) bool {
+	if a.foundMulti != nil && a.foundMulti[id] {
+		return true
+	}
+	return id == a.foundSel
+}
+
+// selectedFoundIndices returns the selected result indices in order.
+func (a *App) selectedFoundIndices() []int {
+	var out []int
+	if a.foundMulti != nil {
+		for i := range a.results {
+			if a.foundMulti[i] {
+				out = append(out, i)
+			}
+		}
+	}
+	if len(out) == 0 && a.foundSel >= 0 && a.foundSel < len(a.results) {
+		out = append(out, a.foundSel)
+	}
+	return out
+}
+
+// foundTapped handles a plain click: select and browse the address.
+func (a *App) foundTapped(id int) {
+	mod := a.clickMod
+	a.clickMod = 0
+	if mod != 0 {
+		return
+	}
+	a.selectFound(id)
 }
 
 func (a *App) foundPanel() fyne.CanvasObject {
@@ -159,6 +254,7 @@ func (a *App) selectFound(id int) {
 		return
 	}
 	a.foundSel = id
+	a.foundMulti = nil
 	a.activePanel = panelFound
 	if a.foundList != nil {
 		a.foundList.Refresh()
@@ -172,6 +268,7 @@ func (a *App) setResults(r []scan.Result) {
 	}
 	a.results = r
 	a.foundSel = -1
+	a.foundMulti = nil
 	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))
 	if a.foundList != nil {
 		a.foundList.Refresh()
@@ -652,6 +749,19 @@ func parseOffsets(base uint64, s string) (*pointerChain, error) {
 }
 
 func (a *App) addResultToTable(i int) {
+	sel := a.selectedFoundIndices()
+	if len(sel) > 1 {
+		typ := a.foundValueType()
+		for _, idx := range sel {
+			r := a.results[idx]
+			a.entryRoots = append(a.entryRoots, &tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
+		}
+		a.rebuildVisible()
+		a.table.Refresh()
+		a.setStatusText(i18n.Tf("status.added_to_table", map[string]any{"Addr": fmt.Sprintf("%d results", len(sel))}))
+		a.updateScanControls()
+		return
+	}
 	if i < 0 || i >= len(a.results) {
 		a.setStatusText(i18n.T("status.select_found"))
 		return
@@ -749,6 +859,11 @@ func (a *App) promptValue(current string, onOK func(string)) {
 // Engine's Ctrl+E on the results list. It writes memory once and updates the
 // row; it does not touch a cheat-table entry for the same address.
 func (a *App) changeFoundValue(i int) {
+	sel := a.selectedFoundIndices()
+	if len(sel) > 1 {
+		a.changeFoundValues(sel)
+		return
+	}
 	if i < 0 || i >= len(a.results) {
 		a.setStatusText(i18n.T("status.select_found"))
 		return
@@ -775,6 +890,32 @@ func (a *App) changeFoundValue(i int) {
 		if a.foundList != nil {
 			a.foundList.Refresh()
 		}
+	})
+}
+
+// changeFoundValues applies one input to every selected Found result.
+func (a *App) changeFoundValues(sel []int) {
+	typ := a.foundValueType()
+	a.promptValue("", func(input string) {
+		written := 0
+		for _, i := range sel {
+			if i < 0 || i >= len(a.results) {
+				continue
+			}
+			v, err := scan.ParseValue(typ, a.expandFoundInput(input, i))
+			if err != nil {
+				continue
+			}
+			if err := a.writeValue(a.results[i].Addr, v); err != nil {
+				continue
+			}
+			a.results[i].Prev = v
+			written++
+		}
+		if a.foundList != nil {
+			a.foundList.Refresh()
+		}
+		a.setStatusText(i18n.Tf("status.values_set", map[string]any{"Count": written}))
 	})
 }
 

@@ -108,8 +108,9 @@ type App struct {
 	session    *scan.Session
 	regionSel  []mem.Region
 	results    []scan.Result
-	foundList  *widget.List
+	foundList  *widget.Table
 	foundSel   int
+	foundMulti map[int]bool
 	foundCount *widget.Label
 	status     *widget.Label
 
