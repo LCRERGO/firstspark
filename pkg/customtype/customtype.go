@@ -4,6 +4,7 @@
 package customtype
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,6 +65,68 @@ func Save(path string, defs []Definition) error {
 		return fmt.Errorf("customtype: write %s: %w", path, err)
 	}
 	return nil
+}
+
+// RegisterRaw registers a passthrough integer type of the given size without a
+// conversion script. It is used for Cheat Engine custom types whose Auto
+// Assembler conversion routine cannot be translated yet (ADR 0037 S5): the
+// width and name are preserved, the value is shown and edited raw.
+func RegisterRaw(name string, size int) (*scan.Type, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("customtype: name is required")
+	}
+	if size != 1 && size != 2 && size != 4 && size != 8 {
+		return nil, fmt.Errorf("customtype: %s: unsupported size %d", name, size)
+	}
+	decode := func(raw []byte) int64 {
+		switch len(raw) {
+		case 1:
+			return int64(int8(raw[0]))
+		case 2:
+			return int64(int16(binary.LittleEndian.Uint16(raw)))
+		case 4:
+			return int64(int32(binary.LittleEndian.Uint32(raw)))
+		case 8:
+			return int64(binary.LittleEndian.Uint64(raw))
+		}
+		return 0
+	}
+	encode := func(n int64) []byte {
+		b := make([]byte, size)
+		switch size {
+		case 1:
+			b[0] = byte(n)
+		case 2:
+			binary.LittleEndian.PutUint16(b, uint16(n))
+		case 4:
+			binary.LittleEndian.PutUint32(b, uint32(n))
+		case 8:
+			binary.LittleEndian.PutUint64(b, uint64(n))
+		}
+		return b
+	}
+	t := &scan.Type{
+		ID:        scan.NextTypeID(),
+		Name:      strings.ToLower(name),
+		Label:     name,
+		Size:      size,
+		Alignment: size,
+		Kind:      scan.KindInt,
+	}
+	t.Int64 = func(v scan.Value) int64 { return decode(v.Raw) }
+	t.Numeric = func(v scan.Value) float64 { return float64(decode(v.Raw)) }
+	t.Format = func(v scan.Value) string { return strconv.FormatInt(decode(v.Raw), 10) }
+	t.Parse = func(input string) (scan.Value, error) {
+		n, err := strconv.ParseInt(strings.TrimSpace(input), 0, 64)
+		if err != nil {
+			return scan.Value{}, err
+		}
+		return scan.Value{Type: t.ID, Raw: encode(n)}, nil
+	}
+	t.Encode = encode
+	scan.RegisterType(t)
+	return t, nil
 }
 
 // Register compiles a definition and registers it as a scan type.

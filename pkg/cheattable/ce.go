@@ -45,7 +45,77 @@ func parseCE(data []byte) (*Table, error) {
 	}
 	t := &Table{Version: SchemaVersion, Stats: ImportStats{Reasons: map[string]int{}}}
 	t.Entries = convertCE(raw.Entries, &t.Stats)
+	t.CustomTypes = extractCustomTypes(raw.Entries)
 	return t, nil
+}
+
+// extractCustomTypes walks the CE entries' scripts for
+// registerCustomTypeAutoAssembler definitions.
+func extractCustomTypes(entries []ceEntry) []CustomTypeDef {
+	var out []CustomTypeDef
+	var walk func([]ceEntry)
+	walk = func(es []ceEntry) {
+		for i := range es {
+			if es[i].Script != "" {
+				out = append(out, parseCustomTypeDefs(es[i].Script)...)
+			}
+			walk(es[i].Entries)
+		}
+	}
+	walk(entries)
+	return out
+}
+
+// parseCustomTypeDefs finds each registerCustomTypeAutoAssembler block and
+// reads its TypeName and ByteSize.
+func parseCustomTypeDefs(script string) []CustomTypeDef {
+	var out []CustomTypeDef
+	const marker = "registerCustomTypeAutoAssembler"
+	for {
+		i := strings.Index(script, marker)
+		if i < 0 {
+			return out
+		}
+		script = script[i+len(marker):]
+		if name, size := customTypeFromAA(script); name != "" && size > 0 {
+			out = append(out, CustomTypeDef{Name: name, Size: size})
+		}
+	}
+}
+
+func customTypeFromAA(s string) (string, int) {
+	name := ""
+	size := 0
+	lines := strings.Split(s, "\n")
+	for i := 0; i < len(lines); i++ {
+		l := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(l, "TypeName:") {
+			for j := i; j < len(lines) && j < i+4; j++ {
+				if p := strings.Index(lines[j], "db '"); p >= 0 {
+					rest := lines[j][p+4:]
+					if q := strings.IndexByte(rest, '\''); q >= 0 {
+						name = rest[:q]
+					}
+					break
+				}
+			}
+		}
+		if strings.HasPrefix(l, "ByteSize:") {
+			for j := i; j < len(lines) && j < i+4; j++ {
+				f := strings.Fields(lines[j])
+				if len(f) >= 2 && f[0] == "dd" {
+					if n, err := strconv.Atoi(f[1]); err == nil {
+						size = n
+					}
+					break
+				}
+			}
+		}
+		if name != "" && size > 0 {
+			break
+		}
+	}
+	return name, size
 }
 
 func (s *ImportStats) skip(reason string) {

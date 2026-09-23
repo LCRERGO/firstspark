@@ -114,6 +114,18 @@ func findEntryDeep(entries []Entry, desc string) *Entry {
 	return nil
 }
 
+func TestParseCustomTypeDefs(t *testing.T) {
+	s := "registerCustomTypeAutoAssembler([[\nalloc(TypeName,256)\nTypeName:\ndb 'Integer4 (x1000)',0\nByteSize:\ndd 4\n]])\n" +
+		"registerCustomTypeAutoAssembler([[\nalloc(TypeName,256)\nTypeName:\ndb 'CK3 Date',0\nByteSize:\ndd 4\n]])"
+	got := parseCustomTypeDefs(s)
+	if len(got) != 2 || got[0].Name != "Integer4 (x1000)" || got[0].Size != 4 {
+		t.Fatalf("custom types = %+v", got)
+	}
+	if got[1].Name != "CK3 Date" || got[1].Size != 4 {
+		t.Fatalf("second custom type = %+v", got[1])
+	}
+}
+
 func TestExportCERoundTrip(t *testing.T) {
 	tbl := &Table{Version: SchemaVersion}
 	tbl.Entries = []Entry{

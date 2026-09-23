@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted. Staged work; S0–S4 and S6 landed, S5 (CE custom types) planned. Relates
-to ADR 0038 (groups) and ADR 0039 (script execution).
+Accepted. Staged work; S0–S6 landed. Relates to ADR 0038 (groups) and ADR 0039
+(script execution).
 
 ## Context
 
@@ -54,7 +54,13 @@ Commit to Cheat Engine `.CT` compatibility as a dependency-ordered program:
   (`AddressList`/`MemoryRecord`, memory/process helpers, `openProcess`, …) with a
   UI bridge, so the CK3 orchestrator evaluates; the remaining CE AA/Lua surface
   grows incrementally (ADR 0039).
-- **S5** — import CE custom types into `pkg/customtype`.
+- **S5 (done, bounded)** — `registerCustomTypeAutoAssembler` blocks in a
+  table's scripts are parsed for their `TypeName` and `ByteSize`, and
+  `pkg/customtype.RegisterRaw` registers a passthrough integer type of that
+  width (the `Custom` entries keep their name and size). CE's x86
+  `ConvertRoutine`/`ConvertBackRoutine` use a different calling convention than
+  firstspark's AA types (ADR 0023), so the conversion (scaling, dates) is not
+  applied yet; that translation remains a follow-up.
 - **S6 (done)** — `Table.MarshalCE`/`ExportCE` write a real Cheat Engine
   element document (types mapped back, pointer chains split into
   address/offsets, groups and scripts preserved); `File ▸ Save as Cheat Engine

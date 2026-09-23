@@ -12,6 +12,8 @@ import (
 
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/cheattable"
+	"github.com/LCRERGO/firstspark/pkg/customtype"
+	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
@@ -36,6 +38,14 @@ func (a *App) loadTable() {
 		if perr != nil {
 			a.fail(perr)
 			return
+		}
+		for _, ct := range tbl.CustomTypes {
+			if _, ok := scan.LookupType(ct.Name); ok {
+				continue
+			}
+			if _, err := customtype.RegisterRaw(ct.Name, ct.Size); err != nil {
+				log.Warn("custom type import failed", "name", ct.Name, "err", err)
+			}
 		}
 		a.applyTable(tbl)
 		a.reportCEImport(tbl.Stats)

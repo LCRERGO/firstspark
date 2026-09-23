@@ -134,6 +134,9 @@ type Table struct {
 	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries"`
 	// Stats summarises a Cheat Engine conversion. It is not serialized.
 	Stats ImportStats `xml:"-" json:"-"`
+	// CustomTypes lists Cheat Engine custom type definitions found in the
+	// table's scripts. It is not serialized.
+	CustomTypes []CustomTypeDef `xml:"-" json:"-"`
 }
 
 // ImportStats reports the outcome of converting a Cheat Engine .CT file into
@@ -143,6 +146,13 @@ type ImportStats struct {
 	Imported int
 	Skipped  int
 	Reasons  map[string]int
+}
+
+// CustomTypeDef is a Cheat Engine custom type definition extracted from a
+// table's scripts (ADR 0037 S5).
+type CustomTypeDef struct {
+	Name string
+	Size int
 }
 
 // PointerChain is a parsed pointer path. When Module is set, Offset is relative
