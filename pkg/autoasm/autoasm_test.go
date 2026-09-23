@@ -1,6 +1,9 @@
 package autoasm
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseSectionsAndDirectives(t *testing.T) {
 	src := `[ENABLE]
@@ -40,6 +43,29 @@ dealloc(newmem)`
 	}
 	if s.Sections[1].Enable {
 		t.Fatal("second section should be DISABLE")
+	}
+}
+
+func TestParseLuaAndSections(t *testing.T) {
+	src := "{$lua}\nif syntaxcheck then return end\n[ENABLE]\nshowMessage('on')\n[DISABLE]\nshowMessage('off')\n{$asm}\nunregistersymbol(foo)\n"
+	s, err := Parse(src)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(s.Sections) != 3 {
+		t.Fatalf("sections = %d, want 3: %+v", len(s.Sections), s.Sections)
+	}
+	if !s.Sections[0].Enable || s.Sections[0].Items[0].Kind != KindLua ||
+		!strings.Contains(s.Sections[0].Items[0].Text, "syntaxcheck") {
+		t.Fatalf("section 0 = %+v", s.Sections[0])
+	}
+	if !s.Sections[1].Enable || s.Sections[1].Items[0].Kind != KindLua ||
+		!strings.Contains(s.Sections[1].Items[0].Text, "showMessage('on')") {
+		t.Fatalf("section 1 = %+v", s.Sections[1])
+	}
+	last := s.Sections[2]
+	if last.Enable || len(last.Items) != 2 || last.Items[0].Kind != KindLua || last.Items[1].Kind != KindUnregisterSymbol {
+		t.Fatalf("section 2 = %+v", last)
 	}
 }
 

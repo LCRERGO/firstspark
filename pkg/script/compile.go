@@ -489,6 +489,8 @@ func typeName(v Value) string {
 		return "table"
 	case KindFunction:
 		return "function"
+	case KindObject:
+		return "userdata"
 	default:
 		return "?"
 	}
@@ -498,21 +500,37 @@ func index(obj, key Value) Value {
 	if obj.kind == KindTable {
 		return obj.t.Get(key)
 	}
+	if obj.kind == KindObject {
+		if v, ok := obj.obj.Index(key); ok {
+			return v
+		}
+		throw("attempt to index a %s value", typeName(obj))
+	}
 	throw("attempt to index a %s value", typeName(obj))
 	return Nil()
 }
 
 func setIndex(obj, key, v Value) {
-	if obj.kind != KindTable {
+	switch obj.kind {
+	case KindTable:
+		obj.t.Set(key, v)
+	case KindObject:
+		if err := obj.obj.SetIndex(key, v); err != nil {
+			throw("%s", err.Error())
+		}
+	default:
 		throw("attempt to index a %s value", typeName(obj))
 	}
-	obj.t.Set(key, v)
 }
 
 func methodLookup(self Value, name string) Value {
 	switch self.kind {
 	case KindTable:
 		return self.t.Get(Str(name))
+	case KindObject:
+		if fn, ok := self.obj.Index(Str(name)); ok {
+			return fn
+		}
 	case KindString:
 		if fn := stringLib.Get(Str(name)); !fn.IsNil() {
 			return fn

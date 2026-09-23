@@ -18,8 +18,9 @@ this subset: `alloc`/`dealloc`, `label`, `define`, `db`/`dd`/`dw`, raw
 instruction writes, `nop`, `jmp`, `aobscan`/`aobscanmodule`, `registersymbol`,
 and `[enable]`/`[disable]` sections.
 
-Deferred: `createthread`, `{$lua}` blocks, structure definitions, and the
-broader AA command set.
+Deferred: `createthread`, structure definitions, and the broader AA command set.
+`{$lua}` blocks are segmented and dispatched to a runner (ADR 0039); the core
+Cheat Engine Lua API lives in `pkg/celua`.
 
 ## Consequences
 

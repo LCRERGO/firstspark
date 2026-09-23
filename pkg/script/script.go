@@ -6,6 +6,46 @@ package script
 
 import "fmt"
 
+// Call invokes a Lua function value. The function keeps its captured
+// environment; runtime errors are recovered and returned.
+func CallValue(fn Value, args ...Value) (rets []Value, err error) {
+	if fn.kind != KindFunction {
+		return nil, fmt.Errorf("script: attempt to call a %s value", typeName(fn))
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			re, ok := r.(runtimeError)
+			if !ok {
+				panic(r)
+			}
+			err = fmt.Errorf("script: %s", re.msg)
+		}
+	}()
+	env := newEnv(nil)
+	installBuiltins(env)
+	return fn.fn.call(env, args), nil
+}
+
+// CompileWithGlobals compiles and runs src with the given globals installed.
+// Unlike SetGlobal, the globals are visible while the top-level chunk runs,
+// which callers need to provide APIs the chunk references immediately.
+func CompileWithGlobals(src string, globals map[string]Value) (*Program, error) {
+	chunk, err := parse(src)
+	if err != nil {
+		return nil, err
+	}
+	env := newEnv(nil)
+	installBuiltins(env)
+	for name, v := range globals {
+		env.setLocal(name, v)
+	}
+	p := &Program{globals: env}
+	if err := p.run(chunk); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 // Program is a compiled script with its globals.
 type Program struct {
 	globals *Env
@@ -48,6 +88,16 @@ func (p *Program) Has(name string) bool {
 
 // Global returns a global value, or nil.
 func (p *Program) Global(name string) Value { return p.globals.get(name) }
+
+// Globals returns a copy of the program's global scope, for callers that keep
+// state across chunks.
+func (p *Program) Globals() map[string]Value {
+	out := make(map[string]Value, len(p.globals.vars))
+	for k, v := range p.globals.vars {
+		out[k] = v
+	}
+	return out
+}
 
 // Func returns a global function for direct (non-recovering) calls.
 func (p *Program) Func(name string) (*Function, error) {

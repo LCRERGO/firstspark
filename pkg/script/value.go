@@ -18,7 +18,17 @@ const (
 	KindString
 	KindTable
 	KindFunction
+	// KindObject is a Go-backed value exposed to Lua.
+	KindObject
 )
+
+// Foreign is a Go object exposed to Lua. Index reads a member (a field or a
+// bound method) and SetIndex writes one; returning ok=false makes the access
+// raise a Lua error.
+type Foreign interface {
+	Index(key Value) (Value, bool)
+	SetIndex(key, value Value) error
+}
 
 // Value is a Lua value. It is comparable so it can be used as a table key.
 type Value struct {
@@ -29,6 +39,7 @@ type Value struct {
 	s    string
 	t    *Table
 	fn   *Function
+	obj  Foreign
 }
 
 // Nil returns the nil value.
@@ -51,6 +62,24 @@ func TableVal(t *Table) Value { return Value{kind: KindTable, t: t} }
 
 // FuncVal wraps a function as a value.
 func FuncVal(fn *Function) Value { return Value{kind: KindFunction, fn: fn} }
+
+// ObjectVal wraps a Go-backed object as a value.
+func ObjectVal(o Foreign) Value { return Value{kind: KindObject, obj: o} }
+
+// Object returns the Go-backed object payload, or nil.
+func (v Value) Object() Foreign { return v.obj }
+
+// GoFunc wraps a Go function as a Lua callable. A returned error raises a Lua
+// error at the call site.
+func GoFunc(name string, fn func(args []Value) ([]Value, error)) Value {
+	return FuncVal(&Function{Name: name, call: func(_ *Env, args []Value) []Value {
+		rets, err := fn(args)
+		if err != nil {
+			throw("%s", err.Error())
+		}
+		return rets
+	}})
+}
 
 // Kind reports the value's runtime type.
 func (v Value) Kind() Kind { return v.kind }

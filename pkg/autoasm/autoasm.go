@@ -32,8 +32,12 @@ const (
 	KindDefine
 	// KindRegisterSymbol is a registersymbol(name) directive.
 	KindRegisterSymbol
+	// KindUnregisterSymbol is an unregistersymbol(name) directive.
+	KindUnregisterSymbol
 	// KindAOBScan is an aobscan(name, pattern) directive.
 	KindAOBScan
+	// KindLua is a {$lua} block executed by a Lua runner.
+	KindLua
 )
 
 // Item is one parsed line.
@@ -57,7 +61,10 @@ type Script struct {
 	Sections []Section
 }
 
-// Parse reads an Auto Assembler script.
+// Parse reads an Auto Assembler script. `{$lua}` switches to Lua until
+// `{$asm}`; the Lua source is kept as KindLua items and executed by a runner
+// (see Executor.SetLuaRunner). [ENABLE]/[DISABLE] still split sections, so a
+// Lua block can be phase-specific.
 func Parse(src string) (*Script, error) {
 	sections := []Section{}
 	var cur *Section
@@ -70,19 +77,60 @@ func Parse(src string) (*Script, error) {
 	}
 	defines := map[string]string{}
 
+	inLua := false
+	var luaBuf []string
+	luaLine := 0
+	flushLua := func() {
+		if len(luaBuf) == 0 {
+			return
+		}
+		add(Item{Kind: KindLua, Text: strings.Join(luaBuf, "\n"), Line: luaLine})
+		luaBuf = nil
+	}
+	startSection := func(enable bool) {
+		sections = append(sections, Section{Enable: enable})
+		cur = &sections[len(sections)-1]
+	}
+
 	for i, raw := range strings.Split(src, "\n") {
+		if inLua {
+			switch strings.ToLower(strings.TrimSpace(raw)) {
+			case "{$asm}":
+				flushLua()
+				inLua = false
+				continue
+			case "[enable]":
+				flushLua()
+				startSection(true)
+				continue
+			case "[disable]":
+				flushLua()
+				startSection(false)
+				continue
+			}
+			if luaBuf == nil {
+				luaLine = i + 1
+			}
+			luaBuf = append(luaBuf, raw)
+			continue
+		}
+
 		line := strings.TrimSpace(stripComment(raw))
 		if line == "" {
 			continue
 		}
 		switch strings.ToLower(line) {
+		case "{$lua}":
+			inLua = true
+			luaBuf = nil
+			continue
+		case "{$asm}":
+			continue
 		case "[enable]":
-			sections = append(sections, Section{Enable: true})
-			cur = &sections[len(sections)-1]
+			startSection(true)
 			continue
 		case "[disable]":
-			sections = append(sections, Section{Enable: false})
-			cur = &sections[len(sections)-1]
+			startSection(false)
 			continue
 		}
 		line = substituteWords(line, defines)
@@ -106,6 +154,9 @@ func Parse(src string) (*Script, error) {
 				continue
 			case "registersymbol":
 				add(Item{Kind: KindRegisterSymbol, Name: arg(args, 0), Args: args, Line: i + 1})
+				continue
+			case "unregistersymbol":
+				add(Item{Kind: KindUnregisterSymbol, Name: arg(args, 0), Args: args, Line: i + 1})
 				continue
 			case "aobscan", "aobscanmodule":
 				add(Item{Kind: KindAOBScan, Name: arg(args, 0), Args: args, Line: i + 1})
@@ -131,6 +182,7 @@ func Parse(src string) (*Script, error) {
 		}
 		add(Item{Kind: KindInstruction, Text: line, Line: i + 1})
 	}
+	flushLua()
 	return &Script{Sections: sections}, nil
 }
 
