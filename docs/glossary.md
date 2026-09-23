@@ -29,7 +29,9 @@ Terms used across the codebase, ADRs and UI.
   group header) and may express its address relative to it (ADR 0038).
 - **Change value** — the one-shot manual edit of a value (`Ctrl+E`). On a
   cheat-table entry it also updates the frozen value and undo value; on a Found
-  scan result it writes memory once and updates the row (ADR 0035).
+  scan result it writes memory once and updates the row (ADR 0035). It accepts
+  `(description)` references and `value`/`oldvalue` expressions. The Memory
+  Viewer has its own Change Value form with a type selector.
 - **Cheat table** — the list of tracked addresses, values, pointer chains,
   hotkeys and metadata (`pkg/cheattable`).
 - **Code cave** — executable memory allocated in the target to hold a hook

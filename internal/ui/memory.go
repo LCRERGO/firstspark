@@ -87,6 +87,7 @@ func (a *App) buildMemoryViewer() {
 		widget.NewSeparator(),
 		widget.NewLabel(i18n.T("memory.display")), a.memType,
 		newHintButton(i18n.T("memory.find"), "memory.hint.find", a.findDialog),
+		newHintButton(i18n.T("memory.change_value"), "memory.hint.change_value", a.changeMemoryValue),
 	)
 
 	a.disasmList = widget.NewList(
@@ -291,4 +292,139 @@ func matchAt(data []byte, off int, pat, mask []byte) bool {
 		}
 	}
 	return true
+}
+
+// memValueOption is one entry of the Change value form's type list.
+type memValueOption struct {
+	label   string
+	typ     scan.ValueType
+	integer bool
+	text    bool
+}
+
+func memValueOptions() []memValueOption {
+	return []memValueOption{
+		{i18n.T("memory.type.byte"), scan.TypeByte, true, false},
+		{i18n.T("memory.type.2bytes"), scan.TypeWord, true, false},
+		{i18n.T("memory.type.4bytes"), scan.TypeDword, true, false},
+		{i18n.T("memory.type.8bytes"), scan.TypeQword, true, false},
+		{i18n.T("memory.type.float"), scan.TypeFloat, false, false},
+		{i18n.T("memory.type.double"), scan.TypeDouble, false, false},
+		{i18n.T("memory.type.text"), scan.TypeString, false, true},
+		{i18n.T("memory.type.aob"), scan.TypeAOB, false, false},
+	}
+}
+
+// readMemoryValue reads a value of the given type at addr. Variable-width
+// types use a default window (64 bytes for text, 8 for AOB).
+func (a *App) readMemoryValue(addr uint64, typ scan.ValueType) (scan.Value, error) {
+	if a.proc == nil {
+		return scan.Value{}, fmt.Errorf("%s", i18n.T("error.no_process"))
+	}
+	size := typ.Size()
+	if size <= 0 {
+		if typ == scan.TypeAOB {
+			size = 8
+		} else {
+			size = 64
+		}
+	}
+	raw, err := a.proc.Read(addr, size)
+	if err != nil {
+		return scan.Value{}, err
+	}
+	return scan.NewValue(typ, raw), nil
+}
+
+// changeMemoryValue opens Cheat Engine's Memory Viewer change-value form: a
+// value field, a type selector and a Hexadecimal/Unicode checkbox that depends
+// on the type. It reads the address fresh when the type changes and writes on
+// OK (ADR 0037 value-changer phase 2).
+func (a *App) changeMemoryValue() {
+	if a.proc == nil {
+		a.setStatusText(i18n.T("error.no_process"))
+		return
+	}
+	addr, err := parseAddress(a.memAddrEntry.Text)
+	if err != nil {
+		a.fail(err)
+		return
+	}
+	opts := memValueOptions()
+	labels := make([]string, len(opts))
+	for i, o := range opts {
+		labels[i] = o.label
+	}
+	valueEntry := widget.NewEntry()
+	typeSel := widget.NewSelect(labels, nil)
+	typeSel.SetSelected(labels[2])
+	check := widget.NewCheck(i18n.T("memory.hexadecimal"), nil)
+
+	selected := func() memValueOption {
+		for _, o := range opts {
+			if o.label == typeSel.Selected {
+				return o
+			}
+		}
+		return opts[2]
+	}
+	effectiveType := func() scan.ValueType {
+		o := selected()
+		if o.text && check.Checked {
+			return scan.TypeUTF16LE
+		}
+		return o.typ
+	}
+	refresh := func() {
+		o := selected()
+		switch {
+		case o.integer:
+			check.SetText(i18n.T("memory.hexadecimal"))
+			check.Enable()
+		case o.text:
+			check.SetText(i18n.T("memory.unicode"))
+			check.Enable()
+		default:
+			check.SetText(i18n.T("memory.hexadecimal"))
+			check.Disable()
+		}
+		v, rerr := a.readMemoryValue(addr, effectiveType())
+		if rerr != nil {
+			valueEntry.SetText("")
+			return
+		}
+		if o.integer && check.Checked {
+			valueEntry.SetText(hexOf(v))
+		} else {
+			valueEntry.SetText(v.String())
+		}
+	}
+	typeSel.OnChanged = func(string) { refresh() }
+	check.OnChanged = func(bool) { refresh() }
+	refresh()
+
+	form := widget.NewForm(
+		widget.NewFormItem(i18n.T("field.value"), valueEntry),
+		widget.NewFormItem(i18n.T("field.type"), typeSel),
+		widget.NewFormItem("", check),
+	)
+	d := dialog.NewCustomConfirm(i18n.T("dialog.change_value.title"), i18n.T("action.apply"), i18n.T("action.cancel"),
+		form, func(ok bool) {
+			if !ok || a.proc == nil {
+				return
+			}
+			v, perr := scan.ParseValue(effectiveType(), valueEntry.Text)
+			if perr != nil {
+				a.fail(perr)
+				return
+			}
+			if werr := a.proc.Write(addr, v.Raw); werr != nil {
+				a.fail(werr)
+				return
+			}
+			a.loadMemory(a.hexAddr)
+			a.setStatusText(i18n.Tf("status.memory_changed", map[string]any{"Addr": fmt.Sprintf("%x", addr)}))
+		}, a.memWin)
+	d.Resize(fyne.NewSize(440, 280))
+	d.Show()
 }
