@@ -324,6 +324,7 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 		}
 		items = append(items,
 			fyne.NewMenuItem(i18n.T("menu.change_description"), func() { a.changeDescriptionDialog(row) }),
+			fyne.NewMenuItem(i18n.T("menu.set_children_value"), func() { a.setChildrenValueDialog(row) }),
 			fyne.NewMenuItem(i18n.T("menu.freeze"), func() { a.toggleFreezeRow(row) }),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem(i18n.T("menu.delete"), func() { a.deleteRow(row) }),
@@ -823,6 +824,59 @@ func valueIdentStart(c byte) bool {
 
 func valueIdentByte(c byte) bool {
 	return valueIdentStart(c) || (c >= '0' && c <= '9')
+}
+
+// setChildrenValueDialog prompts once and writes the value to every leaf under
+// a group, matching Cheat Engine's recursive set option.
+func (a *App) setChildrenValueDialog(row int) {
+	if row < 0 || row >= len(a.entries) || !a.entries[row].group {
+		return
+	}
+	root := a.entries[row]
+	a.promptValue("", func(input string) {
+		written, _ := a.setSubtreeValue(root, input)
+		if written > 0 && a.table != nil {
+			a.table.Refresh()
+		}
+		a.setStatusText(i18n.Tf("status.children_set", map[string]any{"Count": written}))
+	})
+}
+
+// setSubtreeValue writes input to every resolvable leaf below e, parsing it
+// with each leaf's own type.
+func (a *App) setSubtreeValue(e *tableEntry, input string) (written, failed int) {
+	for _, c := range e.children {
+		if c.group {
+			w, f := a.setSubtreeValue(c, input)
+			written += w
+			failed += f
+			continue
+		}
+		if c.expr != "" || c.addr == 0 {
+			failed++
+			continue
+		}
+		v, err := scan.ParseValue(c.typ, input)
+		if err != nil {
+			failed++
+			continue
+		}
+		if err := a.writeValue(c.addr, v); err != nil {
+			failed++
+			continue
+		}
+		c.hasUndo = true
+		c.undoValue = c.value
+		c.value = v
+		if c.frozen {
+			c.frozenValue = v
+		}
+		written++
+	}
+	if written > 0 {
+		a.syncFreezeTargets()
+	}
+	return written, failed
 }
 
 func (a *App) changeValueDialog(row int) {

@@ -3,10 +3,17 @@
 package ui
 
 import (
+	"encoding/binary"
+	"os"
+	"runtime"
 	"testing"
+	"unsafe"
 
+	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
+
+var childrenBuf = make([]byte, 8)
 
 func dword(t *testing.T, s string) scan.Value {
 	t.Helper()
@@ -36,6 +43,28 @@ func TestExpandValueInput(t *testing.T) {
 	if got := a.expandValueInput("(missing)+1", cur); got != "(missing)+1" {
 		t.Fatalf("missing ref = %q", got)
 	}
+}
+
+func TestSetSubtreeValue(t *testing.T) {
+	p, err := mem.Find(os.Getpid())
+	if err != nil {
+		t.Skipf("cannot open self: %v", err)
+	}
+	a := newTestApp(t)
+	a.proc = p
+	base := uint64(uintptr(unsafe.Pointer(&childrenBuf[0])))
+	c1 := &tableEntry{desc: "a", typ: scan.TypeDword, addr: base}
+	c2 := &tableEntry{desc: "b", typ: scan.TypeDword, addr: base + 4}
+	grp := &tableEntry{group: true, children: []*tableEntry{c1, c2}}
+
+	w, f := a.setSubtreeValue(grp, "7")
+	if w != 2 || f != 0 {
+		t.Fatalf("written=%d failed=%d", w, f)
+	}
+	if binary.LittleEndian.Uint32(childrenBuf[0:]) != 7 || binary.LittleEndian.Uint32(childrenBuf[4:]) != 7 {
+		t.Fatalf("buffer = %v", childrenBuf)
+	}
+	runtime.KeepAlive(childrenBuf)
 }
 
 func TestReplaceValueIdent(t *testing.T) {
