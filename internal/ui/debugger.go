@@ -634,7 +634,7 @@ func describeStop(reason debugger.StopReason) string {
 
 // findWhatWrites opens the debugger and watches a cheat-table row.
 func (a *App) findWhatWrites(row int, writeOnly bool) {
-	if row < 0 || row >= len(a.entries) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group || a.entries[row].expr != "" {
 		return
 	}
 	addr := a.entries[row].addr

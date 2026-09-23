@@ -25,6 +25,7 @@ import (
 	"github.com/LCRERGO/firstspark/internal/i18n"
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
+	"github.com/LCRERGO/firstspark/pkg/celua"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
@@ -36,18 +37,43 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
-// tableEntry is one row of the cheat table.
+// tableEntry is one row of the cheat table. Entries form a tree: a group holds
+// children and has no address or value, and a child's address may be expressed
+// relative to its parent.
 type tableEntry struct {
-	addr    uint64
-	typ     scan.ValueType
-	desc    string
-	value   scan.Value
-	orig    scan.Value
-	pointer *pointerChain
-	bit     *bitSpec
-	display displayFormat
-	hotkey  fyne.KeyName
+	addr        uint64
+	typ         scan.ValueType
+	desc        string
+	value       scan.Value
+	orig        scan.Value
+	frozen      bool
+	frozenValue scan.Value
+	undoValue   scan.Value
+	hasUndo     bool
+	pointer     *pointerChain
+	bit         *bitSpec
+	display     displayFormat
+	hotkey      fyne.KeyName
+	group       bool
+	expanded    bool
+	children    []*tableEntry
+	parent      *tableEntry
+	depth       int
+	expr        string
+	exprOffsets []string
+	script      string
+	scriptExec  *autoasm.Executor
+	scriptBE    debugger.Backend
 }
+
+// activePanel identifies which result list the focused shortcuts act on.
+// The cheat table is the default, preserving Ctrl+E's original target.
+type activePanel int
+
+const (
+	panelCheatTable activePanel = iota
+	panelFound
+)
 
 // App is the root UI state.
 type App struct {
@@ -58,6 +84,7 @@ type App struct {
 
 	procs          []mem.Process
 	proc           *mem.Process
+	symbols        map[string]uint64
 	procRows       []procRow
 	procSortCol    int
 	procSortAsc    bool
@@ -86,9 +113,11 @@ type App struct {
 	foundCount *widget.Label
 	status     *widget.Label
 
-	entries         []tableEntry
+	entries         []*tableEntry
+	entryRoots      []*tableEntry
 	table           *cheatTable
 	tableSel        int
+	activePanel     activePanel
 	hotkeyShortcuts map[uint64]fyne.Shortcut
 
 	scanType     *ttwidget.Select
@@ -146,6 +175,8 @@ type App struct {
 	asmExec    *autoasm.Executor
 	asmBackend debugger.Backend
 
+	luaRT *celua.Runtime
+
 	ctWin       fyne.Window
 	ctList      *widget.List
 	ctDefs      []customtype.Definition
@@ -188,10 +219,14 @@ type App struct {
 	searchNext   uint64
 
 	mu              sync.Mutex
-	frozen          map[uint64]scan.Value
+	freezeTargets   map[uint64]scan.Value
 	stop            chan struct{}
 	err             error
 	procWatchCancel context.CancelFunc
+
+	autoMu      sync.Mutex
+	autoPattern string
+	autoRegex   bool
 
 	hotkeys            *hotkey.Manager
 	hkWin              fyne.Window
@@ -208,19 +243,20 @@ func Run(cfg config.Config) error {
 		os.Setenv("FYNE_SCALE", strconv.FormatFloat(cfg.UI.Scale, 'g', -1, 64))
 	}
 	a := &App{
-		cfg:         cfg,
-		frozen:      map[uint64]scan.Value{},
-		stop:        make(chan struct{}),
-		foundSel:    -1,
-		tableSel:    -1,
-		procSortCol: 0,
-		procSortAsc: true,
-		showIcons:   cfg.UI.ProcessIcons,
-		expanded:    map[int]bool{},
-		treeMode:    true,
+		cfg:           cfg,
+		freezeTargets: map[uint64]scan.Value{},
+		stop:          make(chan struct{}),
+		foundSel:      -1,
+		tableSel:      -1,
+		procSortCol:   0,
+		procSortAsc:   true,
+		showIcons:     cfg.UI.ProcessIcons,
+		expanded:      map[int]bool{},
+		treeMode:      true,
 	}
 	a.icons = newIconResolver()
 	a.fapp = app.NewWithID("com.firstspark.app")
+	a.setAutoAttach(cfg.Process.AutoAttach, cfg.Process.AutoAttachRegex)
 	a.th = newTheme(parseFamily(cfg.UI.Theme), parseVariant(cfg.UI.ThemeVariant), cfg.UI.FontSize)
 	a.fapp.Settings().SetTheme(a.th)
 	loadErr := func() error {
@@ -235,6 +271,7 @@ func Run(cfg config.Config) error {
 	a.setupHotkeys()
 	a.refreshProcesses()
 	go a.freezeLoop()
+	go a.autoAttachLoop()
 	a.win.Show()
 	closeParentInstance()
 	a.maybeAskElevation()
@@ -390,7 +427,7 @@ func (a *App) updateScanControls() {
 		setEnabled(a.compareEntry, mode == scan.ModeExact)
 	}
 
-	hasTable := len(a.entries) > 0
+	hasTable := len(a.entryRoots) > 0
 	setActionEnabled(a.saveAction, hasTable)
 	setActionEnabled(a.saveAsAction, hasTable)
 	setActionEnabled(a.memViewAction, a.proc != nil)
@@ -560,11 +597,18 @@ func (a *App) fail(err error) {
 	dialog.ShowError(err, a.win)
 }
 
-func (a *App) isFrozen(addr uint64) bool {
+// syncFreezeTargets rebuilds the writer goroutine's view of the frozen
+// entries. It must run on the UI goroutine because it reads the entry tree.
+func (a *App) syncFreezeTargets() {
+	targets := make(map[uint64]scan.Value)
+	a.walkEntries(func(e *tableEntry) {
+		if e.frozen && !e.group && e.expr == "" {
+			targets[e.addr] = e.frozenValue
+		}
+	})
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	_, ok := a.frozen[addr]
-	return ok
+	a.freezeTargets = targets
+	a.mu.Unlock()
 }
 
 // shutdown releases everything bound to the target and stops the background
@@ -606,7 +650,7 @@ func (a *App) freezeLoop() {
 			a.mu.Lock()
 			proc := a.proc
 			if proc != nil {
-				for addr, v := range a.frozen {
+				for addr, v := range a.freezeTargets {
 					if err := proc.Write(addr, v.Raw); err != nil {
 						if time.Since(lastWriteErr) > 5*time.Second {
 							log.Warn("freeze write failed", "pid", proc.PID, "addr", fmt.Sprintf("0x%x", addr), "err", err)
@@ -619,7 +663,10 @@ func (a *App) freezeLoop() {
 			tick++
 			if tick%10 == 0 {
 				fyne.Do(func() {
-					if a.resolvePointers() && a.table != nil {
+					changed := a.refreshEntries()
+					a.syncFreezeTargets()
+					a.runLuaTimers()
+					if changed && a.table != nil {
 						a.table.Refresh()
 					}
 				})

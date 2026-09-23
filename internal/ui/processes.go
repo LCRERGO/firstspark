@@ -6,9 +6,11 @@ import (
 	"context"
 	"image/color"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -485,6 +487,12 @@ func (a *App) selectProcess(idx int) {
 	if idx < 0 || idx >= len(a.procs) {
 		return
 	}
+	a.selectProcessObj(a.procs[idx])
+}
+
+// selectProcessObj makes p the memory target. It is shared by manual selection
+// and the auto-attach poller.
+func (a *App) selectProcessObj(p mem.Process) {
 	if a.speedApplied {
 		a.removeSpeedhack()
 		a.speedApplied = false
@@ -496,7 +504,6 @@ func (a *App) selectProcess(idx int) {
 		_ = a.dbgSession.Close()
 		a.dbgSession = nil
 	}
-	p := a.procs[idx]
 	a.mu.Lock()
 	a.proc = &p
 	a.mu.Unlock()
@@ -516,6 +523,107 @@ func (a *App) selectProcess(idx int) {
 	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.setStatusText(i18n.Tf("status.selected_process", map[string]any{"Name": p.Name, "PID": p.PID}))
 	a.updateScanControls()
+}
+
+// autoAttachInterval is how often the auto-attach poller scans /proc. It
+// mirrors PINCE's poller but trades 100 ms for a lower idle cost.
+const autoAttachInterval = time.Second
+
+// matchAutoAttach returns the first process matching the auto-attach spec.
+// Substring entries are semicolon-separated and trimmed; earlier entries win,
+// and within an entry the first process in slice order wins. When regex is set
+// the whole pattern is a single regular expression. An invalid regex returns an
+// error.
+func matchAutoAttach(procs []mem.Process, pattern string, regex bool) (mem.Process, bool, error) {
+	if regex {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return mem.Process{}, false, err
+		}
+		for _, p := range procs {
+			if re.MatchString(p.Name) {
+				return p, true, nil
+			}
+		}
+		return mem.Process{}, false, nil
+	}
+	for _, target := range strings.Split(pattern, ";") {
+		target = strings.TrimSpace(target)
+		if target == "" {
+			continue
+		}
+		for _, p := range procs {
+			if strings.Contains(p.Name, target) {
+				return p, true, nil
+			}
+		}
+	}
+	return mem.Process{}, false, nil
+}
+
+// setAutoAttach updates the auto-attach snapshot read by the poller. It is
+// called at startup and whenever Settings are applied.
+func (a *App) setAutoAttach(pattern string, regex bool) {
+	a.autoMu.Lock()
+	a.autoPattern = pattern
+	a.autoRegex = regex
+	a.autoMu.Unlock()
+}
+
+func (a *App) autoAttachSpec() (string, bool) {
+	a.autoMu.Lock()
+	defer a.autoMu.Unlock()
+	return a.autoPattern, a.autoRegex
+}
+
+// autoAttachLoop selects the first matching process while no target is chosen,
+// so a restarted target is picked up again without a manual selection.
+func (a *App) autoAttachLoop() {
+	ticker := time.NewTicker(autoAttachInterval)
+	defer ticker.Stop()
+	lastErr := ""
+	for {
+		select {
+		case <-a.stop:
+			return
+		case <-ticker.C:
+		}
+		pattern, regex := a.autoAttachSpec()
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			lastErr = ""
+			continue
+		}
+		a.mu.Lock()
+		busy := a.proc != nil
+		a.mu.Unlock()
+		if busy {
+			continue
+		}
+		procs, err := mem.List()
+		if err != nil {
+			log.Debug("auto-attach: process list failed", "err", err)
+			continue
+		}
+		p, ok, err := matchAutoAttach(procs, pattern, regex)
+		if err != nil {
+			if err.Error() != lastErr {
+				lastErr = err.Error()
+				log.Warn("auto-attach pattern invalid", "pattern", pattern, "err", err)
+				msg := i18n.Tf("status.auto_attach_invalid", map[string]any{"Pattern": pattern})
+				fyne.Do(func() { a.setStatusText(msg) })
+			}
+			continue
+		}
+		lastErr = ""
+		if !ok {
+			continue
+		}
+		fyne.Do(func() {
+			a.selectProcessObj(p)
+			a.setStatusText(i18n.Tf("status.auto_attached", map[string]any{"Name": p.Name, "PID": p.PID}))
+		})
+	}
 }
 
 // watchProcess starts a background watcher that reports when the selected

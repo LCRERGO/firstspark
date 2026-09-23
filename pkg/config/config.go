@@ -16,6 +16,7 @@ type Config struct {
 	Scan      ScanConfig      `yaml:"scan"`
 	Debugger  DebuggerConfig  `yaml:"debugger"`
 	Speedhack SpeedhackConfig `yaml:"speedhack"`
+	Process   ProcessConfig   `yaml:"process"`
 	UI        UIConfig        `yaml:"ui"`
 	Log       LogConfig       `yaml:"log"`
 	// Hotkeys maps an action id (for example "speedhack.toggle") to a combo
@@ -52,6 +53,18 @@ type SpeedhackConfig struct {
 	Scale   float64 `yaml:"scale"`
 	// Delta is how much the speedhack +/- hotkeys change the scale.
 	Delta float64 `yaml:"delta"`
+}
+
+// ProcessConfig controls automatic target selection. Auto-attach mirrors PINCE:
+// while no target is selected, a poller attaches to the first process whose
+// name matches the pattern.
+type ProcessConfig struct {
+	// AutoAttach is a semicolon-separated list of process-name substrings,
+	// matched in order, or a single regular expression when AutoAttachRegex is
+	// set. Empty disables auto-attach.
+	AutoAttach string `yaml:"auto_attach"`
+	// AutoAttachRegex treats AutoAttach as a regular expression.
+	AutoAttachRegex bool `yaml:"auto_attach_regex"`
 }
 
 // UIConfig holds presentation defaults.

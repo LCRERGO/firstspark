@@ -40,6 +40,11 @@ func (a *App) showSettings() {
 	limit.SetText(strconv.Itoa(a.cfg.UI.ResultLimit))
 	icons := widget.NewCheck(i18n.T("settings.show_process_icons"), nil)
 	icons.SetChecked(a.cfg.UI.ProcessIcons)
+	autoAttach := widget.NewEntry()
+	autoAttach.SetText(a.cfg.Process.AutoAttach)
+	autoAttach.SetPlaceHolder(i18n.T("settings.auto_attach_placeholder"))
+	autoRegex := widget.NewCheck(i18n.T("settings.auto_attach_regex"), nil)
+	autoRegex.SetChecked(a.cfg.Process.AutoAttachRegex)
 
 	form := widget.NewForm(
 		widget.NewFormItem(i18n.T("settings.theme"), famSel),
@@ -52,6 +57,8 @@ func (a *App) showSettings() {
 		widget.NewFormItem(i18n.T("settings.alignment"), align),
 		widget.NewFormItem(i18n.T("settings.result_limit"), limit),
 		widget.NewFormItem(i18n.T("settings.process_list"), icons),
+		widget.NewFormItem(i18n.T("settings.auto_attach"), autoAttach),
+		widget.NewFormItem(i18n.T("settings.auto_attach_regex"), autoRegex),
 	)
 	d := dialog.NewCustomConfirm(i18n.T("settings.title"), i18n.T("action.apply"), i18n.T("action.cancel"), form, func(ok bool) {
 		if !ok {
@@ -79,6 +86,9 @@ func (a *App) showSettings() {
 		}
 		a.cfg.UI.ProcessIcons = icons.Checked
 		a.showIcons = icons.Checked
+		a.cfg.Process.AutoAttach = strings.TrimSpace(autoAttach.Text)
+		a.cfg.Process.AutoAttachRegex = autoRegex.Checked
+		a.setAutoAttach(a.cfg.Process.AutoAttach, a.cfg.Process.AutoAttachRegex)
 		a.applyTheme()
 		a.updateThemeChecks()
 		a.saveConfig()
@@ -93,7 +103,7 @@ func (a *App) showSettings() {
 			dialog.ShowInformation(i18n.T("settings.title"), i18n.T("settings.language_restart"), a.win)
 		}
 	}, a.win)
-	d.Resize(fyne.NewSize(460, 520))
+	d.Resize(fyne.NewSize(480, 640))
 	d.Show()
 }
 

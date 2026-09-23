@@ -88,7 +88,7 @@ func resolvePointer(p *mem.Process, c *pointerChain) (uint64, error) {
 }
 
 // formatEntryValue renders a value using the entry's display format.
-func (a *App) formatEntryValue(e tableEntry) string {
+func (a *App) formatEntryValue(e *tableEntry) string {
 	switch e.display {
 	case displayHex:
 		return hexOf(e.value)
@@ -159,6 +159,7 @@ func (a *App) selectFound(id int) {
 		return
 	}
 	a.foundSel = id
+	a.activePanel = panelFound
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}
@@ -244,17 +245,40 @@ func (a *App) cellText(id widget.TableCellID) string {
 	e := a.entries[id.Row]
 	switch id.Col {
 	case 0:
-		if a.isFrozen(e.addr) {
+		if e.frozen {
 			return "X"
 		}
 		return ""
 	case 1:
-		return e.desc
+		indent := strings.Repeat("  ", e.depth)
+		if e.group {
+			marker := "▾ "
+			if !e.expanded {
+				marker = "▸ "
+			}
+			if e.script != "" {
+				return indent + marker + e.desc + "  [script]"
+			}
+			return indent + marker + e.desc
+		}
+		return indent + e.desc
 	case 2:
-		return fmt.Sprintf("0x%x", e.addr)
+		if e.group {
+			return ""
+		}
+		if e.addr != 0 {
+			return fmt.Sprintf("0x%x", e.addr)
+		}
+		return e.expr
 	case 3:
+		if e.group {
+			return ""
+		}
 		return ceValueTypeLabel(e.typ)
 	case 4:
+		if e.group {
+			return ""
+		}
 		if e.bit != nil {
 			return e.bit.format(e.value.Raw)
 		}
@@ -268,7 +292,13 @@ func (a *App) tableTapped(row, col int) {
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
+	e := a.entries[row]
 	a.tableSel = row
+	a.activePanel = panelCheatTable
+	if col == 1 && e.group {
+		a.toggleExpand(row)
+		return
+	}
 	if col == 0 {
 		a.toggleFreezeRow(row)
 		return
@@ -281,6 +311,26 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 		return
 	}
 	a.tableSel = row
+	a.activePanel = panelCheatTable
+	if a.entries[row].group {
+		e := a.entries[row]
+		var items []*fyne.MenuItem
+		if e.script != "" {
+			items = append(items,
+				fyne.NewMenuItem(i18n.T("menu.run_script"), func() { a.runEntryScript(e) }),
+				fyne.NewMenuItem(i18n.T("menu.disable_script"), func() { a.disableEntryScript(e) }),
+				fyne.NewMenuItemSeparator(),
+			)
+		}
+		items = append(items,
+			fyne.NewMenuItem(i18n.T("menu.change_description"), func() { a.changeDescriptionDialog(row) }),
+			fyne.NewMenuItem(i18n.T("menu.freeze"), func() { a.toggleFreezeRow(row) }),
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem(i18n.T("menu.delete"), func() { a.deleteRow(row) }),
+		)
+		widget.ShowPopUpMenuAtRelativePosition(fyne.NewMenu("", items...), a.win.Canvas(), rel, anchor)
+		return
+	}
 	menu := fyne.NewMenu("",
 		fyne.NewMenuItem(i18n.T("menu.change_value"), func() { a.changeValueDialog(row) }),
 		fyne.NewMenuItem(i18n.T("menu.change_description"), func() { a.changeDescriptionDialog(row) }),
@@ -306,24 +356,70 @@ func (a *App) toggleFreezeRow(row int) {
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
-	e := a.entries[row]
-	a.mu.Lock()
-	if _, ok := a.frozen[e.addr]; ok {
-		delete(a.frozen, e.addr)
-	} else {
-		a.frozen[e.addr] = e.value
-	}
-	a.mu.Unlock()
+	a.toggleFreezeEntry(a.entries[row])
 	a.table.Refresh()
+}
+
+// toggleFreezeEntry freezes or unfreezes a record; a group applies to its whole
+// subtree.
+func (a *App) toggleFreezeEntry(e *tableEntry) {
+	if e.group {
+		on := !e.frozen
+		e.frozen = on
+		a.freezeSubtree(e.children, on)
+		a.syncFreezeTargets()
+		return
+	}
+	if e.expr != "" {
+		return
+	}
+	if e.frozen {
+		e.frozen = false
+		e.frozenValue = scan.Value{}
+		a.syncFreezeTargets()
+		return
+	}
+	v := e.value
+	if a.proc != nil {
+		w := e.typ.Size()
+		if w == 0 {
+			w = len(e.value.Raw)
+		}
+		if w > 0 {
+			if raw, err := a.proc.Read(e.addr, w); err == nil {
+				v = scan.NewValue(e.typ, raw)
+			}
+		}
+	}
+	if err := a.writeValue(e.addr, v); err != nil {
+		a.fail(err)
+		return
+	}
+	e.value = v
+	e.frozenValue = v
+	e.frozen = true
+	a.syncFreezeTargets()
+}
+
+func (a *App) freezeSubtree(nodes []*tableEntry, on bool) {
+	for _, c := range nodes {
+		if on {
+			c.frozen = false
+			a.toggleFreezeEntry(c)
+			continue
+		}
+		c.frozen = false
+		c.frozenValue = scan.Value{}
+	}
 }
 
 func (a *App) deleteRow(row int) {
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
-	a.unbindHotkey(a.entries[row].addr)
-	a.entries = append(a.entries[:row], a.entries[row+1:]...)
+	a.removeEntry(a.entries[row])
 	a.tableSel = -1
+	a.syncFreezeTargets()
 	a.table.Refresh()
 	a.updateScanControls()
 }
@@ -332,39 +428,72 @@ func (a *App) setDisplay(row int, d displayFormat) {
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
-	a.entries[row].display = d
+	e := a.entries[row]
+	if e.group {
+		return
+	}
+	e.display = d
 	a.table.Refresh()
 }
 
-// resolvePointers recomputes pointer-entry addresses and values. It must run
-// on the UI goroutine because it touches the entry slice.
-func (a *App) resolvePointers() bool {
+// refreshEntries re-reads every entry's value from the target process and
+// recomputes pointer-entry addresses. It must run on the UI goroutine because
+// it touches the entry slice.
+func (a *App) refreshEntries() bool {
 	if a.proc == nil {
 		return false
 	}
+	regions, _ := mem.Regions(a.proc.PID)
+	res := symbolResolver{symbols: a.symbols, regions: regions}
 	changed := false
-	for i := range a.entries {
-		e := &a.entries[i]
-		if e.pointer == nil {
-			continue
+	a.walkEntries(func(e *tableEntry) {
+		if e.expr != "" || e.pointer != nil {
+			a.resolveEntryAddr(e, res, &changed)
 		}
-		addr, err := resolvePointer(a.proc, e.pointer)
+		if e.group || e.addr == 0 {
+			return
+		}
+		w := e.typ.Size()
+		if w == 0 {
+			w = len(e.value.Raw)
+		}
+		if w <= 0 {
+			return
+		}
+		raw, err := a.proc.Read(e.addr, w)
 		if err != nil {
-			continue
+			return
 		}
-		e.addr = addr
-		if w := e.typ.Size(); w > 0 {
-			if raw, err := a.proc.Read(addr, w); err == nil {
-				e.value = scan.NewValue(e.typ, raw)
-			}
+		v := scan.NewValue(e.typ, raw)
+		if v.Type != e.value.Type || string(v.Raw) != string(e.value.Raw) {
+			e.value = v
+			changed = true
 		}
-		changed = true
-	}
+	})
 	return changed
 }
 
+// resolveEntryAddr recomputes an entry's address from its pointer chain or its
+// stored Cheat Engine expression.
+func (a *App) resolveEntryAddr(e *tableEntry, r symbolResolver, changed *bool) {
+	if e.expr != "" {
+		if addr, err := a.resolveExpression(e, r); err == nil && addr != e.addr {
+			e.addr = addr
+			*changed = true
+		}
+		return
+	}
+	if e.pointer == nil {
+		return
+	}
+	if addr, err := resolvePointer(a.proc, e.pointer); err == nil && addr != e.addr {
+		e.addr = addr
+		*changed = true
+	}
+}
+
 func (a *App) assignHotkey(row int) {
-	if row < 0 || row >= len(a.entries) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
 		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
@@ -417,12 +546,21 @@ func (a *App) unbindHotkey(addr uint64) {
 
 // toggleFreezeAddr toggles the frozen state of the entry at addr.
 func (a *App) toggleFreezeAddr(addr uint64) {
-	for i := range a.entries {
-		if a.entries[i].addr == addr {
-			a.toggleFreezeRow(i)
-			return
-		}
+	if e := a.findEntry(addr); e != nil {
+		a.toggleFreezeEntry(e)
+		a.table.Refresh()
 	}
+}
+
+// findEntry returns the first tree node at addr, or nil.
+func (a *App) findEntry(addr uint64) *tableEntry {
+	var found *tableEntry
+	a.walkEntries(func(e *tableEntry) {
+		if found == nil && e.addr == addr && !e.group {
+			found = e
+		}
+	})
+	return found
 }
 
 func displayName(d displayFormat) string {
@@ -490,14 +628,15 @@ func (a *App) addResultToTable(i int) {
 	if a.session != nil {
 		typ = a.session.Options().Type
 	}
-	a.entries = append(a.entries, tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
+	a.entryRoots = append(a.entryRoots, &tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
+	a.rebuildVisible()
 	a.table.Refresh()
 	a.setStatusText(i18n.Tf("status.added_to_table", map[string]any{"Addr": fmt.Sprintf("%x", r.Addr)}))
 	a.updateScanControls()
 }
 
 func (a *App) browseRow(row int) {
-	if row < 0 || row >= len(a.entries) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
 		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
@@ -509,59 +648,163 @@ func (a *App) disassembleRow(row int) {
 	a.browseRow(row)
 }
 
-func (a *App) changeValueDialog(row int) {
-	if row < 0 || row >= len(a.entries) {
-		a.setStatusText(i18n.T("status.select_cheat_row"))
+// changeValueSelected routes Ctrl+E to the selection in the active panel.
+func (a *App) changeValueSelected() {
+	if a.activePanel == panelFound {
+		a.changeFoundValue(a.foundSel)
 		return
 	}
-	e := a.entries[row]
+	a.changeValueDialog(a.tableSel)
+}
+
+// promptValue shows Cheat Engine's single-field Change value dialog.
+func (a *App) promptValue(current string, onOK func(string)) {
 	entry := widget.NewEntry()
-	if e.bit != nil {
-		entry.SetText(e.bit.format(e.value.Raw))
-	} else {
-		entry.SetText(e.value.String())
-	}
+	entry.SetText(current)
 	d := dialog.NewForm(i18n.T("dialog.change_value.title"), i18n.T("action.apply"), i18n.T("action.cancel"),
 		[]*widget.FormItem{widget.NewFormItem(i18n.T("field.value"), entry)},
 		func(ok bool) {
 			if !ok {
 				return
 			}
-			if e.bit != nil {
-				field, err := e.bit.parse(entry.Text)
-				if err != nil {
-					a.fail(err)
-					return
-				}
-				updated, err := a.writeBitfield(e.addr, *e.bit, field)
-				if err != nil {
-					a.fail(err)
-					return
-				}
-				a.entries[row].value = scan.NewValue(e.typ, updated)
-				a.entries[row].orig = a.entries[row].value
-				a.table.Refresh()
-				return
-			}
-			v, err := scan.ParseValue(e.typ, entry.Text)
-			if err != nil {
-				a.fail(err)
-				return
-			}
-			if err := a.writeValue(e.addr, v); err != nil {
-				a.fail(err)
-				return
-			}
-			a.entries[row].value = v
-			a.table.Refresh()
+			onOK(entry.Text)
 		}, a.win)
 	d.Resize(fyne.NewSize(360, 180))
 	d.Show()
 }
 
+// changeFoundValue edits a Found scan-result value in place, mirroring Cheat
+// Engine's Ctrl+E on the results list. It writes memory once and updates the
+// row; it does not touch a cheat-table entry for the same address.
+func (a *App) changeFoundValue(i int) {
+	if i < 0 || i >= len(a.results) {
+		a.setStatusText(i18n.T("status.select_found"))
+		return
+	}
+	typ := a.foundValueType()
+	a.promptValue(a.results[i].Prev.String(), func(input string) {
+		if i < 0 || i >= len(a.results) {
+			return
+		}
+		v, err := scan.ParseValue(typ, input)
+		if err != nil {
+			a.fail(err)
+			return
+		}
+		if err := a.writeValue(a.results[i].Addr, v); err != nil {
+			a.fail(err)
+			return
+		}
+		a.results[i].Prev = v
+		if a.foundList != nil {
+			a.foundList.Refresh()
+		}
+	})
+}
+
+// foundValueType is the type used to parse a Found-list edit: the type
+// selected in the scan panel, falling back to the session's scan type and then
+// the configured default.
+func (a *App) foundValueType() scan.ValueType {
+	if a.valueType != nil {
+		if t, ok := scan.LookupType(a.valueType.Selected); ok {
+			return t.ID
+		}
+		if a.session != nil {
+			return a.session.Options().Type
+		}
+	}
+	return a.defaultValueType()
+}
+
+func (a *App) changeValueDialog(row int) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
+		a.setStatusText(i18n.T("status.select_cheat_row"))
+		return
+	}
+	cur := a.entries[row]
+	text := cur.value.String()
+	if cur.bit != nil {
+		text = cur.bit.format(cur.value.Raw)
+	}
+	a.promptValue(text, func(input string) {
+		if row >= len(a.entries) {
+			return
+		}
+		e := a.entries[row]
+		if e.bit != nil {
+			field, err := e.bit.parse(input)
+			if err != nil {
+				a.fail(err)
+				return
+			}
+			updated, err := a.writeBitfield(e.addr, *e.bit, field)
+			if err != nil {
+				a.fail(err)
+				return
+			}
+			a.setEntryValue(row, scan.NewValue(e.typ, updated), true)
+			a.table.Refresh()
+			return
+		}
+		v, err := scan.ParseValue(e.typ, input)
+		if err != nil {
+			a.fail(err)
+			return
+		}
+		if err := a.writeValue(e.addr, v); err != nil {
+			a.fail(err)
+			return
+		}
+		a.setEntryValue(row, v, false)
+		a.table.Refresh()
+	})
+}
+
+// setEntryValue records the pre-edit value for undo, stores v as the current
+// value and moves the frozen target when the row is frozen. updateOrig keeps
+// the historical bitfield behaviour of refreshing the change-back baseline.
+func (a *App) setEntryValue(row int, v scan.Value, updateOrig bool) {
+	e := a.entries[row]
+	e.hasUndo = true
+	e.undoValue = e.value
+	e.value = v
+	if updateOrig {
+		e.orig = v
+	}
+	if e.frozen {
+		e.frozenValue = v
+		a.syncFreezeTargets()
+	}
+}
+
+// undoValue swaps the current value with the last pre-edit value, so pressing
+// Ctrl+Z again redoes the edit.
+func (a *App) undoValue(row int) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
+		return
+	}
+	e := a.entries[row]
+	if !e.hasUndo {
+		return
+	}
+	prev := e.value
+	if err := a.writeValue(e.addr, e.undoValue); err != nil {
+		a.fail(err)
+		return
+	}
+	e.value = e.undoValue
+	e.undoValue = prev
+	if e.frozen {
+		e.frozenValue = e.value
+		a.syncFreezeTargets()
+	}
+	a.table.Refresh()
+}
+
 // configureBitfieldDialog turns a row into a bitfield edit/display entry.
 func (a *App) configureBitfieldDialog(row int) {
-	if row < 0 || row >= len(a.entries) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
 		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
@@ -602,6 +845,10 @@ func (a *App) configureBitfieldDialog(row int) {
 				if raw, rerr := a.proc.Read(e.addr, size); rerr == nil {
 					a.entries[row].value = scan.NewValue(e.typ, raw)
 					a.entries[row].orig = a.entries[row].value
+					if a.entries[row].frozen {
+						a.entries[row].frozenValue = a.entries[row].value
+						a.syncFreezeTargets()
+					}
 				}
 			}
 			a.table.Refresh()
@@ -611,14 +858,19 @@ func (a *App) configureBitfieldDialog(row int) {
 }
 
 func (a *App) changeValueBack(row int) {
-	if row < 0 || row >= len(a.entries) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
 		return
 	}
-	if err := a.writeValue(a.entries[row].addr, a.entries[row].orig); err != nil {
+	e := a.entries[row]
+	if err := a.writeValue(e.addr, e.orig); err != nil {
 		a.fail(err)
 		return
 	}
-	a.entries[row].value = a.entries[row].orig
+	e.value = e.orig
+	if e.frozen {
+		e.frozenValue = e.orig
+		a.syncFreezeTargets()
+	}
 	a.table.Refresh()
 }
 
@@ -700,7 +952,7 @@ func (a *App) addAddressDialog() {
 					return
 				}
 			}
-			a.entries = append(a.entries, tableEntry{addr: target, typ: t, desc: desc.Text, value: v, orig: v, pointer: pc})
+			a.addRoot(&tableEntry{addr: target, typ: t, desc: desc.Text, value: v, orig: v, pointer: pc})
 			a.table.Refresh()
 			a.updateScanControls()
 		}, a.win)
@@ -709,8 +961,8 @@ func (a *App) addAddressDialog() {
 }
 
 func (a *App) clearTable() {
-	a.entries = nil
-	a.tableSel = -1
+	a.resetTree()
+	a.syncFreezeTargets()
 	a.table.Refresh()
 	a.updateScanControls()
 }

@@ -27,6 +27,7 @@ and leave shortcuts for unimplemented features unbound:
 | `Ctrl+B` | Browse this memory region |
 | `Ctrl+D` | Disassemble this memory region |
 | `Ctrl+E` | Change value of selected addresses |
+| `Ctrl+Z` | Undo last edit |
 | `Ctrl+Alt+E` | Change value back |
 | `Ctrl+Enter` | Change description |
 | `Ctrl+Alt+H` | Show the selected record as hexadecimal |

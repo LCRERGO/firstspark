@@ -38,74 +38,118 @@ func (a *App) loadTable() {
 			return
 		}
 		a.applyTable(tbl)
+		a.reportCEImport(tbl.Stats)
 	}, a.win)
 	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json"}))
 	d.Show()
 }
 
+// reportCEImport surfaces entries that a Cheat Engine conversion could not
+// represent, so an unsupported table is never imported silently.
+func (a *App) reportCEImport(stats cheattable.ImportStats) {
+	if stats.Skipped == 0 {
+		return
+	}
+	a.setStatusText(i18n.Tf("status.ce_imported", map[string]any{"Imported": stats.Imported, "Skipped": stats.Skipped}))
+	if stats.Imported == 0 {
+		dialog.ShowInformation(i18n.T("dialog.ce_import_title"),
+			i18n.Tf("dialog.ce_import_body", map[string]any{"Skipped": stats.Skipped}), a.win)
+	}
+}
+
 func (a *App) applyTable(tbl *cheattable.Table) {
-	a.entries = nil
-	for _, e := range tbl.Entries {
-		addr, err := e.AddressValue()
-		if err != nil {
-			continue
-		}
-		var typ scan.ValueType
-		var bit *bitSpec
-		if strings.EqualFold(e.Type, "bitfield") {
-			bit = &bitSpec{size: e.BitSize, offset: e.BitOffset, width: e.BitWidth, signed: e.BitSigned}
-			typ = typeForSize(bit.size)
-		} else if parsed, terr := scan.ParseValueType(e.Type); terr == nil {
-			typ = parsed
-		} else {
-			typ = a.defaultValueType()
-		}
-		entry := tableEntry{addr: addr, typ: typ, desc: e.Description, display: parseDisplay(e.Display), bit: bit}
-		if pc, ok := cheattable.ParsePointerChain(e.Pointer); ok {
-			upc := &pointerChain{module: pc.Module, base: pc.Base, offset: pc.Offset, offsets: pc.Offsets}
-			entry.pointer = upc
-			if a.proc != nil {
-				if resolved, rerr := resolvePointer(a.proc, upc); rerr == nil {
-					entry.addr = resolved
-				}
-			} else if pc.Module == "" {
-				entry.addr = pc.Base
+	a.resetTree()
+	for i := range tbl.Entries {
+		a.entryRoots = append(a.entryRoots, a.entryFromStored(&tbl.Entries[i]))
+	}
+	a.rebuildVisible()
+	a.syncFreezeTargets()
+	a.table.Refresh()
+	total := 0
+	a.walkEntries(func(*tableEntry) { total++ })
+	a.setStatusText(i18n.Tf("status.loaded_entries", map[string]any{"Count": total}))
+	a.updateScanControls()
+}
+
+// entryFromStored converts a stored (possibly nested) entry into a tree node.
+func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
+	node := &tableEntry{
+		desc:    e.Description,
+		group:   e.Group,
+		expr:    e.Expr,
+		script:  e.Script,
+		display: parseDisplay(e.Display),
+	}
+	if s := strings.TrimSpace(e.Offsets); s != "" {
+		for _, part := range strings.Split(s, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				node.exprOffsets = append(node.exprOffsets, part)
 			}
 		}
+	}
+	var typ scan.ValueType
+	var bit *bitSpec
+	if strings.EqualFold(e.Type, "bitfield") {
+		bit = &bitSpec{size: e.BitSize, offset: e.BitOffset, width: e.BitWidth, signed: e.BitSigned}
+		typ = typeForSize(bit.size)
+	} else if parsed, terr := scan.ParseValueType(e.Type); terr == nil {
+		typ = parsed
+	} else {
+		typ = a.defaultValueType()
+	}
+	node.typ = typ
+	node.bit = bit
+	if !node.group && node.expr == "" {
+		if addr, err := e.AddressValue(); err == nil {
+			node.addr = addr
+		}
+	}
+	if pc, ok := cheattable.ParsePointerChain(e.Pointer); ok {
+		upc := &pointerChain{module: pc.Module, base: pc.Base, offset: pc.Offset, offsets: pc.Offsets}
+		node.pointer = upc
+		if a.proc != nil {
+			if resolved, rerr := resolvePointer(a.proc, upc); rerr == nil {
+				node.addr = resolved
+			}
+		} else if pc.Module == "" {
+			node.addr = pc.Base
+		}
+	}
+	if !node.group {
 		var v scan.Value
 		if strings.TrimSpace(e.Value) != "" {
 			if parsed, perr := scan.ParseValue(typ, e.Value); perr == nil {
 				v = parsed
 			}
 		}
-		if len(v.Raw) == 0 && a.proc != nil && typ.Size() > 0 {
-			if raw, rerr := a.proc.Read(entry.addr, typ.Size()); rerr == nil {
+		if len(v.Raw) == 0 && a.proc != nil && node.expr == "" && typ.Size() > 0 {
+			if raw, rerr := a.proc.Read(node.addr, typ.Size()); rerr == nil {
 				v = scan.NewValue(typ, raw)
 			}
 		}
-		entry.value = v
-		entry.orig = v
-		a.entries = append(a.entries, entry)
-		if key, kerr := parseHotkey(e.Hotkey); kerr == nil {
-			a.bindHotkey(key, entry.addr)
-			a.entries[len(a.entries)-1].hotkey = key
-		}
+		node.value = v
+		node.orig = v
 		if e.Frozen {
-			a.mu.Lock()
-			a.frozen[entry.addr] = v
-			a.mu.Unlock()
+			node.frozen = true
+			node.frozenValue = v
+		}
+		if key, kerr := parseHotkey(e.Hotkey); kerr == nil && node.addr != 0 {
+			node.hotkey = key
+			a.bindHotkey(key, node.addr)
 		}
 	}
-	a.tableSel = -1
-	a.table.Refresh()
-	a.setStatusText(i18n.Tf("status.loaded_entries", map[string]any{"Count": len(a.entries)}))
-	a.updateScanControls()
+	for j := range e.Children {
+		child := a.entryFromStored(&e.Children[j])
+		child.parent = node
+		node.children = append(node.children, child)
+	}
+	return node
 }
 
 func (a *App) saveTable() { a.saveTableAs() }
 
 func (a *App) saveTableAs() {
-	if len(a.entries) == 0 {
+	if len(a.entryRoots) == 0 {
 		a.setStatusText(i18n.T("status.nothing_to_save"))
 		return
 	}
@@ -149,24 +193,41 @@ func (a *App) saveTableDialog(name string, tbl *cheattable.Table) {
 }
 
 func (a *App) tableFromEntries() *cheattable.Table {
-	t := &cheattable.Table{}
-	for _, e := range a.entries {
-		t.Add(e.desc, fmt.Sprintf("0x%x", e.addr), e.typ.String(), e.value.String())
-		last := &t.Entries[len(t.Entries)-1]
-		if e.hotkey != "" {
-			last.Hotkey = string(e.hotkey)
+	t := &cheattable.Table{Version: cheattable.SchemaVersion}
+	for _, root := range a.entryRoots {
+		t.Entries = append(t.Entries, *entryToStored(root))
+	}
+	return t
+}
+
+// entryToStored serialises a tree node and its children.
+func entryToStored(e *tableEntry) *cheattable.Entry {
+	out := &cheattable.Entry{Description: e.desc, Group: e.group, Expr: e.expr, Script: e.script}
+	if len(e.exprOffsets) > 0 {
+		out.Offsets = strings.Join(e.exprOffsets, ",")
+	}
+	if !e.group {
+		v := e.value
+		if e.frozen {
+			v = e.frozenValue
 		}
-		last.Display = displayName(e.display)
-		last.Frozen = a.isFrozen(e.addr)
+		out.Address = fmt.Sprintf("0x%x", e.addr)
+		out.Type = e.typ.String()
+		out.Value = v.String()
+		if e.hotkey != "" {
+			out.Hotkey = string(e.hotkey)
+		}
+		out.Display = displayName(e.display)
+		out.Frozen = e.frozen
 		if e.bit != nil {
-			last.Type = "bitfield"
-			last.BitSize = e.bit.size
-			last.BitOffset = e.bit.offset
-			last.BitWidth = e.bit.width
-			last.BitSigned = e.bit.signed
+			out.Type = "bitfield"
+			out.BitSize = e.bit.size
+			out.BitOffset = e.bit.offset
+			out.BitWidth = e.bit.width
+			out.BitSigned = e.bit.signed
 		}
 		if e.pointer != nil {
-			last.Pointer = cheattable.FormatPointerChain(cheattable.PointerChain{
+			out.Pointer = cheattable.FormatPointerChain(cheattable.PointerChain{
 				Module:  e.pointer.module,
 				Base:    e.pointer.base,
 				Offset:  e.pointer.offset,
@@ -174,7 +235,10 @@ func (a *App) tableFromEntries() *cheattable.Table {
 			})
 		}
 	}
-	return t
+	for _, c := range e.children {
+		out.Children = append(out.Children, *entryToStored(c))
+	}
+	return out
 }
 
 func (a *App) resultsTable() *cheattable.Table {

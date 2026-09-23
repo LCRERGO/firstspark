@@ -34,8 +34,10 @@ or GDB runtime dependency.
 | Speedhack (`clock_gettime`, `gettimeofday`), wired to the UI | implemented (experimental) |
 | Remote function calls (int/float/double arguments) | implemented |
 | Internationalization (go-i18n catalogs, `ui.language`) | implemented |
+| PINCE-style auto-attach to a process by name | implemented |
 | Fyne desktop GUI | implemented (build tag `gui`) |
-| Cheat Engine `.CT` import/export + JSON sessions | implemented |
+| Firstspark `.CT`/JSON sessions import/export | implemented |
+| Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, core Lua; ADR 0037) |
 
 ## Requirements
 
@@ -93,7 +95,11 @@ bin/firstspark --pid 1234 --type dword --mode exact --value 42 --export run.CT
 
 Settings are read from `$XDG_CONFIG_HOME/firstspark/config.yaml`; see
 [`configs/config.yaml`](configs/config.yaml) for the defaults. Saved scan
-sessions are written to `$XDG_DATA_HOME/firstspark/`.
+sessions are written to `$XDG_DATA_HOME/firstspark/`. Set
+`process.auto_attach` (with `process.auto_attach_regex` for a regular
+expression) to re-select a matching target automatically while none is chosen,
+so a relaunched process is picked up again; it can also be edited in
+**Edit → Settings**.
 
 User-defined value types live in `$XDG_CONFIG_HOME/firstspark/customtypes.yaml`
 and are edited from **Table → Custom Types** (or the "…" button beside the

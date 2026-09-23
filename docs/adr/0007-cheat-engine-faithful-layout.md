@@ -32,9 +32,10 @@ Reproduce CE's layout:
   top (~69%) and the hex dump below (~31%).
 - The main window has **no status bar**; state is shown by the process label
   and a "Found:" count, and failures use modal dialogs.
-- Scan results land in the Found list; the user copies them into the cheat
-  table with **Add to Table** (or the equivalent action), where freezing and
-  editing happen through the row context menu.
+- Scan results land in the Found list. Selecting a row and pressing `Ctrl+E`
+  changes its value in the target (ADR 0035); freezing and the richer per-row
+  editing (description, bitfield, pointer chains, hotkeys) happen on rows copied
+  into the cheat table with **Add to Table** (or the equivalent action).
 
 ## Consequences
 

@@ -28,6 +28,15 @@ speedhack:
   # Step used by the "Speedhack speed +/-" hotkeys.
   delta: 0.5
 
+# Automatic target selection (PINCE-style auto-attach). While no process is
+# selected, Firstspark polls for a process whose name matches the pattern and
+# selects it, so it re-attaches after the target restarts. Empty disables it.
+process:
+  # Semicolon-separated name substrings, matched in order, e.g. "game;server".
+  # When auto_attach_regex is true the whole value is one regular expression.
+  auto_attach: ""
+  auto_attach_regex: false
+
 # User interface.
 ui:
   # Number of scan results shown at once.

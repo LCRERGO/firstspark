@@ -40,6 +40,9 @@ process is selected and reacts to its exit:
 - clear the selected process, reset the process label and show a status line;
 - keep the scan results and cheat table, but stop acting on the dead pid.
 
+With the auto-attach poller (ADR 0036) enabled, clearing the selection lets it
+pick up a matching restarted instance on its next tick.
+
 Shutdown also releases these resources (`App.shutdown` via Fyne's
 `Lifecycle().SetOnStopped`), closing the debugger worker and auto-assemble
 backend that previously leaked.

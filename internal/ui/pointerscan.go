@@ -29,7 +29,8 @@ func (a *App) showPointerScan() {
 	}
 	target := widget.NewEntry()
 	switch {
-	case a.tableSel >= 0 && a.tableSel < len(a.entries):
+	case a.tableSel >= 0 && a.tableSel < len(a.entries) &&
+		!a.entries[a.tableSel].group && a.entries[a.tableSel].expr == "":
 		target.SetText(fmt.Sprintf("0x%x", a.entries[a.tableSel].addr))
 	case len(a.results) > 0:
 		target.SetText(fmt.Sprintf("0x%x", a.results[0].Addr))
@@ -186,11 +187,12 @@ func (a *App) addPointerChain(c pointerscan.Chain) {
 			v = scan.NewValue(typ, raw)
 		}
 	}
-	a.entries = append(a.entries, tableEntry{
+	a.addRoot(&tableEntry{
 		addr: base, typ: typ, desc: formatChain(c),
 		value: v, orig: v, pointer: pc,
 	})
-	a.resolvePointers()
+	a.refreshEntries()
+	a.syncFreezeTargets()
 	a.table.Refresh()
 	a.setStatusText(i18n.T("status.added_pointer_chain"))
 }

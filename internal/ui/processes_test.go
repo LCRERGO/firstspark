@@ -10,22 +10,23 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/LCRERGO/firstspark/pkg/config"
+	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 	a := &App{
-		cfg:         config.Default(),
-		frozen:      map[uint64]scan.Value{},
-		stop:        make(chan struct{}),
-		foundSel:    -1,
-		tableSel:    -1,
-		procSortCol: 0,
-		procSortAsc: true,
-		showIcons:   false,
-		expanded:    map[int]bool{},
-		treeMode:    true,
+		cfg:           config.Default(),
+		freezeTargets: map[uint64]scan.Value{},
+		stop:          make(chan struct{}),
+		foundSel:      -1,
+		tableSel:      -1,
+		procSortCol:   0,
+		procSortAsc:   true,
+		showIcons:     false,
+		expanded:      map[int]bool{},
+		treeMode:      true,
 	}
 	a.icons = newIconResolver()
 	a.fapp = test.NewApp()
@@ -33,6 +34,32 @@ func newTestApp(t *testing.T) *App {
 	a.fapp.Settings().SetTheme(a.th)
 	a.build()
 	return a
+}
+
+func TestMatchAutoAttach(t *testing.T) {
+	procs := []mem.Process{
+		{PID: 1, Name: "game"},
+		{PID: 2, Name: "game-launcher"},
+		{PID: 3, Name: "other"},
+	}
+	if p, ok, err := matchAutoAttach(procs, "launcher;other", false); err != nil || !ok || p.PID != 2 {
+		t.Fatalf("substring match = %+v, %v, %v; want PID 2", p, ok, err)
+	}
+	if p, ok, err := matchAutoAttach(procs, "game", false); err != nil || !ok || p.PID != 1 {
+		t.Fatalf("earlier process should win = %+v, %v, %v; want PID 1", p, ok, err)
+	}
+	if p, ok, err := matchAutoAttach(procs, "other;game", false); err != nil || !ok || p.PID != 3 {
+		t.Fatalf("earlier pattern should win = %+v, %v, %v; want PID 3", p, ok, err)
+	}
+	if p, ok, err := matchAutoAttach(procs, "launcher$", true); err != nil || !ok || p.PID != 2 {
+		t.Fatalf("regex match = %+v, %v, %v; want PID 2", p, ok, err)
+	}
+	if _, ok, err := matchAutoAttach(procs, "missing", false); err != nil || ok {
+		t.Fatalf("no match = %v, %v; want false", ok, err)
+	}
+	if _, _, err := matchAutoAttach(procs, "(", true); err == nil {
+		t.Fatal("expected an error for an invalid regex")
+	}
 }
 
 func TestProcessListBuildsAndRenders(t *testing.T) {

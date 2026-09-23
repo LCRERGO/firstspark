@@ -2,21 +2,50 @@
 
 Terms used across the codebase, ADRs and UI.
 
+- **Address expression** — a Cheat Engine address written as text (`+18`,
+  `module+0x10`, `pSelectedCharacter`) and resolved live against the parent
+  record, module map and symbol table, rather than stored as an absolute number
+  (ADR 0037).
 - **AOB** — *array of bytes*: a byte pattern with `??` wildcards used for
   signature scans (`pkg/scan/aob.go`).
 - **ASLR bookmark** — a pointer chain whose base is a module plus an offset, so
   it can be re-resolved after a restart even when the module is relocated
   (ADR 0030).
+- **Auto-attach** — selecting the first process whose name matches the
+  configured pattern while no target is chosen, so a restarted target comes
+  back by itself (ADR 0036). It selects the memory target; it does not attach
+  the ptrace debugger.
 - **Bitfield** — a value that occupies a range of bits inside a wider container;
   edited with read-modify-write so neighbouring bits are preserved (ADR 0030).
+- **CE core Lua API** — the bounded subset of Cheat Engine's Lua table-object
+  model Firstspark implements for scripts (`AddressList`, `MemoryRecord`,
+  `Memscan`, `Process`, memory helpers, timers); GUI and OS-integration units
+  are non-goals (ADR 0039).
+- **Cheat Engine table (`.CT`)** — Cheat Engine's XML format: an element-based
+  schema with a nested entry tree, per-type metadata and embedded Auto
+  Assembler/Lua scripts. Distinct from firstspark's own attribute-based schema
+  (ADR 0037).
+- **Child record** — an address-list entry that lives under a parent (usually a
+  group header) and may express its address relative to it (ADR 0038).
+- **Change value** — the one-shot manual edit of a value (`Ctrl+E`). On a
+  cheat-table entry it also updates the frozen value and undo value; on a Found
+  scan result it writes memory once and updates the row (ADR 0035).
 - **Cheat table** — the list of tracked addresses, values, pointer chains,
   hotkeys and metadata (`pkg/cheattable`).
 - **Code cave** — executable memory allocated in the target to hold a hook
   handler or relocated instructions (`pkg/inject`).
+- **Freeze (Active)** — holding a cheat-table entry at its frozen value by
+  rewriting it on a 50 ms timer; the Active column shows it.
+- **Frozen value** — the value a frozen entry is held at. Set by freezing (from
+  a fresh read) and by Change value; the live read never touches it.
+- **Group header** — a cheat-table entry that holds no address or value and
+  exists only to parent child records in the tree (ADR 0038).
 - **Hardware watchpoint** — a data breakpoint implemented with the x86 debug
   registers DR0–DR3 (`pkg/debugger/hardware.go`).
 - **Inline hook** — overwriting a function prologue with a jump into a code cave
   (`pkg/inject`).
+- **Live value** — the value last read from the target process, shown in the
+  cheat table's Value column; every row is re-read on the 500 ms UI tick.
 - **Pointermap** — a reverse index from pointer values to the addresses that
   contain them, used by the pointer scan (`pkg/pointerscan`).
 - **Pointer scan** — searching for a chain of pointers, starting at a module or
@@ -27,6 +56,11 @@ Terms used across the codebase, ADRs and UI.
   undo history (`pkg/scan/session.go`).
 - **Speedhack** — scaling a process's perceived time by hooking the libc time
   functions (`pkg/speedhack`).
+- **Symbol** — a named address registered by an Auto Assembler/Lua script (for
+  example `pSelectedCharacter`); cheat-table address expressions resolve against
+  the symbol table (ADR 0037).
 - **Track** — observing which instructions write or access an address, via a
   hardware watchpoint (`debugger.Session.Watch`).
+- **Undo value** — the value captured just before the last manual Change value;
+  `Ctrl+Z` restores it and moves the frozen value when the entry is frozen.
 - **Watchpoint** — see *Hardware watchpoint*.
