@@ -682,11 +682,15 @@ func (a *App) changeFoundValue(i int) {
 		return
 	}
 	typ := a.foundValueType()
-	a.promptValue(a.results[i].Prev.String(), func(input string) {
+	text := a.results[i].Prev.String()
+	if a.hexBox != nil && a.hexBox.Checked {
+		text = hexOf(a.results[i].Prev)
+	}
+	a.promptValue(text, func(input string) {
 		if i < 0 || i >= len(a.results) {
 			return
 		}
-		v, err := scan.ParseValue(typ, input)
+		v, err := scan.ParseValue(typ, a.expandFoundInput(input, i))
 		if err != nil {
 			a.fail(err)
 			return
@@ -717,13 +721,117 @@ func (a *App) foundValueType() scan.ValueType {
 	return a.defaultValueType()
 }
 
+// expandValueInput rewrites a Cheat Engine-style change-value input for a cheat
+// table row: it substitutes (description) references and the value/oldvalue
+// identifiers, and turns a bare hex entry into 0x form when the row is shown as
+// hexadecimal.
+func (a *App) expandValueInput(input string, cur *tableEntry) string {
+	input = a.substituteDescriptions(input)
+	if cur == nil {
+		return input
+	}
+	if d := scan.TypeByID(cur.typ); d != nil && (d.Kind == scan.KindInt || d.Kind == scan.KindFloat) {
+		curText := cur.value.String()
+		input = replaceValueIdent(input, "oldvalue", curText)
+		input = replaceValueIdent(input, "value", curText)
+	}
+	if cur.display == displayHex && cur.bit == nil {
+		input = asHexLiteral(input)
+	}
+	return input
+}
+
+// expandFoundInput is the Found-list equivalent; its hex handling follows the
+// scan panel's Hex toggle.
+func (a *App) expandFoundInput(input string, i int) string {
+	input = a.substituteDescriptions(input)
+	if d := scan.TypeByID(a.foundValueType()); d != nil && (d.Kind == scan.KindInt || d.Kind == scan.KindFloat) {
+		curText := a.results[i].Prev.String()
+		input = replaceValueIdent(input, "oldvalue", curText)
+		input = replaceValueIdent(input, "value", curText)
+	}
+	return a.hexValue(input)
+}
+
+// substituteDescriptions replaces (description) with the referenced record's
+// displayed value, leaving unmatched parentheses for the expression parser.
+func (a *App) substituteDescriptions(input string) string {
+	open := strings.IndexByte(input, '(')
+	if open < 0 {
+		return input
+	}
+	rel := strings.IndexByte(input[open:], ')')
+	if rel < 0 {
+		return input
+	}
+	close := open + rel
+	if ref := a.findEntryByDesc(input[open+1 : close]); ref != nil {
+		return input[:open] + a.formatEntryValue(ref) + a.substituteDescriptions(input[close+1:])
+	}
+	return input[:close+1] + a.substituteDescriptions(input[close+1:])
+}
+
+// findEntryByDesc returns the first non-group entry with the given description.
+func (a *App) findEntryByDesc(desc string) *tableEntry {
+	var found *tableEntry
+	a.walkEntries(func(e *tableEntry) {
+		if found == nil && !e.group && e.desc == desc {
+			found = e
+		}
+	})
+	return found
+}
+
+// asHexLiteral prefixes a bare hex string with 0x so it parses as hex.
+func asHexLiteral(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" || strings.HasPrefix(t, "0x") || strings.HasPrefix(t, "0X") {
+		return s
+	}
+	if isBareHexLiteral(t) {
+		return "0x" + t
+	}
+	return s
+}
+
+// replaceValueIdent replaces whole-word identifiers (not substrings).
+func replaceValueIdent(s, name, repl string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if valueIdentStart(s[i]) {
+			j := i
+			for j < len(s) && valueIdentByte(s[j]) {
+				j++
+			}
+			if s[i:j] == name {
+				b.WriteString(repl)
+			} else {
+				b.WriteString(s[i:j])
+			}
+			i = j
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
+func valueIdentStart(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func valueIdentByte(c byte) bool {
+	return valueIdentStart(c) || (c >= '0' && c <= '9')
+}
+
 func (a *App) changeValueDialog(row int) {
 	if row < 0 || row >= len(a.entries) || a.entries[row].group {
 		a.setStatusText(i18n.T("status.select_cheat_row"))
 		return
 	}
 	cur := a.entries[row]
-	text := cur.value.String()
+	text := a.formatEntryValue(cur)
 	if cur.bit != nil {
 		text = cur.bit.format(cur.value.Raw)
 	}
@@ -747,7 +855,7 @@ func (a *App) changeValueDialog(row int) {
 			a.table.Refresh()
 			return
 		}
-		v, err := scan.ParseValue(e.typ, input)
+		v, err := scan.ParseValue(e.typ, a.expandValueInput(input, e))
 		if err != nil {
 			a.fail(err)
 			return
