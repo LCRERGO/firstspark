@@ -91,6 +91,7 @@
   "status.script_reverted": "script reverted: {{.Name}}",
   "status.memory_changed": "wrote 0x{{.Addr}}",
   "status.children_set": "set {{.Count}} values",
+  "status.values_set": "set {{.Count}} values",
   "status.nothing_to_save": "nothing to save",
   "status.no_scan_results": "no scan results to save",
   "status.saved": "saved {{.Path}}",

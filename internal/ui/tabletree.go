@@ -2,6 +2,82 @@
 
 package ui
 
+import "fyne.io/fyne/v2"
+
+// selectTableRow updates the cheat-table selection for a click with modifiers:
+// plain selects one row, Ctrl toggles, Shift selects a contiguous range.
+func (a *App) selectTableRow(row int, mod fyne.KeyModifier) {
+	if row < 0 || row >= len(a.entries) {
+		return
+	}
+	e := a.entries[row]
+	switch {
+	case mod&fyne.KeyModifierControl != 0:
+		if a.tableMulti == nil {
+			a.tableMulti = map[*tableEntry]bool{}
+			if a.tableSel >= 0 && a.tableSel < len(a.entries) {
+				a.tableMulti[a.entries[a.tableSel]] = true
+			}
+		}
+		if a.tableMulti[e] {
+			delete(a.tableMulti, e)
+		} else {
+			a.tableMulti[e] = true
+		}
+		a.tableSel = row
+	case mod&fyne.KeyModifierShift != 0 && a.tableSel >= 0 && a.tableSel < len(a.entries):
+		lo, hi := a.tableSel, row
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		m := map[*tableEntry]bool{}
+		for i := lo; i <= hi; i++ {
+			m[a.entries[i]] = true
+		}
+		a.tableMulti = m
+	default:
+		a.tableMulti = nil
+		a.tableSel = row
+	}
+	if a.table != nil {
+		a.table.Refresh()
+	}
+}
+
+// isTableSelected reports whether e is in the current selection.
+func (a *App) isTableSelected(e *tableEntry) bool {
+	if a.tableMulti != nil && a.tableMulti[e] {
+		return true
+	}
+	return a.tableSel >= 0 && a.tableSel < len(a.entries) && a.entries[a.tableSel] == e
+}
+
+// selectedTableEntries returns the selected entries in visible order.
+func (a *App) selectedTableEntries() []*tableEntry {
+	var out []*tableEntry
+	if a.tableMulti != nil {
+		for _, e := range a.entries {
+			if a.tableMulti[e] {
+				out = append(out, e)
+			}
+		}
+	}
+	if len(out) == 0 && a.tableSel >= 0 && a.tableSel < len(a.entries) {
+		out = append(out, a.entries[a.tableSel])
+	}
+	return out
+}
+
+// rowOf returns the visible row index of e, or -1.
+func (a *App) rowOf(e *tableEntry) int {
+	for i, x := range a.entries {
+		if x == e {
+			return i
+		}
+	}
+	return -1
+}
+
 // rebuildVisible recomputes a.entries as the pre-order projection of the entry
 // tree, hiding the children of collapsed groups and recording each visible
 // node's depth for indentation. a.table row indices are indices into a.entries.

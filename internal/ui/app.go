@@ -117,6 +117,8 @@ type App struct {
 	entryRoots      []*tableEntry
 	table           *cheatTable
 	tableSel        int
+	tableMulti      map[*tableEntry]bool
+	clickMod        fyne.KeyModifier
 	activePanel     activePanel
 	hotkeyShortcuts map[uint64]fyne.Shortcut
 

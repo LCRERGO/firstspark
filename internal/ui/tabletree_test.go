@@ -5,8 +5,33 @@ package ui
 import (
 	"testing"
 
+	"fyne.io/fyne/v2"
+
 	"github.com/LCRERGO/firstspark/pkg/cheattable"
 )
+
+func TestTableMultiSelect(t *testing.T) {
+	a := newTestApp(t)
+	a.entryRoots = []*tableEntry{{desc: "a"}, {desc: "b"}, {desc: "c"}}
+	a.rebuildVisible()
+
+	a.selectTableRow(0, 0)
+	if got := a.selectedTableEntries(); len(got) != 1 || got[0].desc != "a" {
+		t.Fatalf("plain select = %v", got)
+	}
+	a.selectTableRow(2, fyne.KeyModifierShift)
+	if got := a.selectedTableEntries(); len(got) != 3 {
+		t.Fatalf("shift select = %d entries", len(got))
+	}
+	a.selectTableRow(1, fyne.KeyModifierControl)
+	if got := a.selectedTableEntries(); len(got) != 2 {
+		t.Fatalf("ctrl toggle = %d entries", len(got))
+	}
+	a.selectTableRow(1, 0)
+	if got := a.selectedTableEntries(); len(got) != 1 || got[0].desc != "b" {
+		t.Fatalf("plain reselect = %v", got)
+	}
+}
 
 func TestTreeProjectionAndCollapse(t *testing.T) {
 	a := newTestApp(t)

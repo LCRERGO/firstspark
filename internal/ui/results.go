@@ -233,6 +233,11 @@ func (a *App) updateDataCell(id widget.TableCellID, o fyne.CanvasObject) {
 		return
 	}
 	c.SetText(a.cellText(id))
+	if a.isTableSelected(a.entries[id.Row]) {
+		c.Importance = widget.HighImportance
+	} else {
+		c.Importance = widget.MediumImportance
+	}
 	if id.Col == 1 {
 		c.TextStyle = fyne.TextStyle{}
 	} else {
@@ -293,8 +298,14 @@ func (a *App) tableTapped(row, col int) {
 		return
 	}
 	e := a.entries[row]
+	mod := a.clickMod
+	a.clickMod = 0
 	a.tableSel = row
 	a.activePanel = panelCheatTable
+	if mod != 0 {
+		a.table.Refresh()
+		return
+	}
 	if col == 1 && e.group {
 		a.toggleExpand(row)
 		return
@@ -310,7 +321,10 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
-	a.tableSel = row
+	if !a.isTableSelected(a.entries[row]) {
+		a.tableMulti = nil
+		a.tableSel = row
+	}
 	a.activePanel = panelCheatTable
 	if a.entries[row].group {
 		e := a.entries[row]
@@ -354,6 +368,13 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 }
 
 func (a *App) toggleFreezeRow(row int) {
+	if a.tableMulti != nil && len(a.tableMulti) > 0 {
+		for _, e := range a.selectedTableEntries() {
+			a.toggleFreezeEntry(e)
+		}
+		a.table.Refresh()
+		return
+	}
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
@@ -415,6 +436,17 @@ func (a *App) freezeSubtree(nodes []*tableEntry, on bool) {
 }
 
 func (a *App) deleteRow(row int) {
+	if a.tableMulti != nil && len(a.tableMulti) > 0 {
+		for _, e := range a.selectedTableEntries() {
+			a.removeEntry(e)
+		}
+		a.tableMulti = nil
+		a.tableSel = -1
+		a.syncFreezeTargets()
+		a.table.Refresh()
+		a.updateScanControls()
+		return
+	}
 	if row < 0 || row >= len(a.entries) {
 		return
 	}
@@ -655,7 +687,46 @@ func (a *App) changeValueSelected() {
 		a.changeFoundValue(a.foundSel)
 		return
 	}
-	a.changeValueDialog(a.tableSel)
+	a.changeSelectedTableValues()
+}
+
+// changeSelectedTableValues edits one row or, when a multi-selection exists,
+// applies a single input to every selected leaf.
+func (a *App) changeSelectedTableValues() {
+	sel := a.selectedTableEntries()
+	if len(sel) == 0 {
+		a.setStatusText(i18n.T("status.select_cheat_row"))
+		return
+	}
+	if len(sel) == 1 {
+		a.changeValueDialog(a.rowOf(sel[0]))
+		return
+	}
+	a.promptValue("", func(input string) {
+		written := 0
+		for _, e := range sel {
+			if e.group || e.expr != "" || e.addr == 0 || e.bit != nil {
+				continue
+			}
+			v, err := scan.ParseValue(e.typ, a.expandValueInput(input, e))
+			if err != nil {
+				continue
+			}
+			if err := a.writeValue(e.addr, v); err != nil {
+				continue
+			}
+			e.hasUndo = true
+			e.undoValue = e.value
+			e.value = v
+			if e.frozen {
+				e.frozenValue = v
+			}
+			written++
+		}
+		a.syncFreezeTargets()
+		a.table.Refresh()
+		a.setStatusText(i18n.Tf("status.values_set", map[string]any{"Count": written}))
+	})
 }
 
 // promptValue shows Cheat Engine's single-field Change value dialog.
@@ -1152,5 +1223,8 @@ func (c *dataCell) Tapped(*fyne.PointEvent) {
 func (c *dataCell) MouseDown(e *desktop.MouseEvent) {
 	if e.Button == desktop.MouseButtonSecondary {
 		c.app.tableMenu(c.row, c.col, e.Position, c)
+		return
 	}
+	c.app.clickMod = e.Modifier
+	c.app.selectTableRow(c.row, e.Modifier)
 }
