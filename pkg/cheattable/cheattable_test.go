@@ -5,6 +5,146 @@ import (
 	"testing"
 )
 
+func TestParseCheatEngineTable(t *testing.T) {
+	data := []byte(`<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>10</ID>
+      <Description>"health"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>7FF6ABCD</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>11</ID>
+      <Description>"player"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>ck3.exe+1A2B</Address>
+      <Offsets>
+        <Offset>+18</Offset>
+        <Offset>-4</Offset>
+      </Offsets>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>12</ID>
+      <Description>"name"</Description>
+      <VariableType>String</VariableType>
+      <Address>7FF60000</Address>
+      <Length>16</Length>
+      <Unicode>1</Unicode>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>13</ID>
+      <Description>"script"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]</AssemblerScript>
+      <CheatEntries>
+        <CheatEntry>
+          <ID>14</ID>
+          <Description>"relative child"</Description>
+          <VariableType>4 Bytes</VariableType>
+          <Address>+20</Address>
+        </CheatEntry>
+      </CheatEntries>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>15</ID>
+      <Description>"group"</Description>
+      <GroupHeader>1</GroupHeader>
+      <Address>pSelectedCharacter</Address>
+    </CheatEntry>
+  </CheatEntries>
+</CheatTable>`)
+	tbl, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if tbl.Stats.Imported != 6 || tbl.Stats.Skipped != 0 {
+		t.Fatalf("imported=%d skipped=%d reasons=%v", tbl.Stats.Imported, tbl.Stats.Skipped, tbl.Stats.Reasons)
+	}
+	// The script is preserved as a group with its source; its relative child
+	// nests under it.
+	script := findEntry(tbl.Entries, "script")
+	if script == nil || !script.Group || script.Script != "[ENABLE]" {
+		t.Fatalf("script = %+v", script)
+	}
+	child := findEntryDeep(tbl.Entries, "relative child")
+	if child == nil || child.Expr != "+20" || child.Address != "" {
+		t.Fatalf("relative child = %+v", child)
+	}
+	group := findEntry(tbl.Entries, "group")
+	if group == nil || !group.Group || group.Expr != "pSelectedCharacter" {
+		t.Fatalf("group = %+v", group)
+	}
+	health := findEntry(tbl.Entries, "health")
+	if health == nil || health.Type != "dword" || health.Address != "0x7ff6abcd" {
+		t.Fatalf("health = %+v", health)
+	}
+	player := findEntry(tbl.Entries, "player")
+	if player == nil || player.Address != "0x0" {
+		t.Fatalf("player = %+v", player)
+	}
+	if pc, ok := ParsePointerChain(player.Pointer); !ok || pc.Module != "ck3.exe" || len(pc.Offsets) != 2 {
+		t.Fatalf("pointer chain = %+v ok=%v", pc, ok)
+	}
+	name := findEntry(tbl.Entries, "name")
+	if name == nil || name.Type != "utf16le" {
+		t.Fatalf("unicode string = %+v", name)
+	}
+}
+
+func findEntry(entries []Entry, desc string) *Entry {
+	for i := range entries {
+		if entries[i].Description == desc {
+			return &entries[i]
+		}
+	}
+	return nil
+}
+
+func findEntryDeep(entries []Entry, desc string) *Entry {
+	if e := findEntry(entries, desc); e != nil {
+		return e
+	}
+	for i := range entries {
+		if e := findEntryDeep(entries[i].Children, desc); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+func TestGroupRoundTrip(t *testing.T) {
+	tbl := &Table{}
+	tbl.Add("root", "0x1000", "dword", "1")
+	tbl.Entries[0].Group = true
+	tbl.Entries[0].Children = []Entry{{Description: "child", Address: "0x1004", Type: "dword"}}
+
+	path := filepath.Join(t.TempDir(), "tree.json")
+	if err := tbl.ExportJSON(path); err != nil {
+		t.Fatalf("ExportJSON: %v", err)
+	}
+	loaded, err := ImportJSON(path)
+	if err != nil {
+		t.Fatalf("ImportJSON: %v", err)
+	}
+	if !loaded.Entries[0].Group || len(loaded.Entries[0].Children) != 1 || loaded.Entries[0].Children[0].Description != "child" {
+		t.Fatalf("hierarchy lost: %+v", loaded.Entries[0])
+	}
+
+	ct := filepath.Join(t.TempDir(), "tree.ct")
+	if err := tbl.Save(ct); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	fromXML, err := Load(ct)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !fromXML.Entries[0].Group || len(fromXML.Entries[0].Children) != 1 || fromXML.Entries[0].Children[0].Address != "0x1004" {
+		t.Fatalf("xml hierarchy lost: %+v", fromXML.Entries[0])
+	}
+}
+
 func TestRoundTrip(t *testing.T) {
 	tbl := &Table{}
 	tbl.Add("health", "0x7ffe1234", "4 Bytes", "100")

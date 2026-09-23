@@ -37,6 +37,94 @@ type Entry struct {
 	BitOffset int  `xml:"BitOffset,attr,omitempty" json:"bit_offset,omitempty"`
 	BitWidth  int  `xml:"BitWidth,attr,omitempty" json:"bit_width,omitempty"`
 	BitSigned bool `xml:"BitSigned,attr,omitempty" json:"bit_signed,omitempty"`
+	// Group marks a group header: it has no address or value and only parents
+	// children in the tree.
+	Group bool `xml:"Group,attr,omitempty" json:"group,omitempty"`
+	// Expr is an unresolved Cheat Engine address expression (symbolic or
+	// parent-relative); Address is left empty when Expr is set.
+	Expr string `xml:"Expr,attr,omitempty" json:"expr,omitempty"`
+	// Offsets is the raw Cheat Engine offset list (comma-separated) that
+	// applies after Expr resolves.
+	Offsets string `xml:"Offsets,attr,omitempty" json:"offsets,omitempty"`
+	// Script is the Auto Assembler source of a script record. It is written as
+	// a child element and is not executed on import (ADR 0039).
+	Script string `xml:"Script" json:"script,omitempty"`
+	// Children are the nested records of a group or script.
+	Children []Entry `xml:"CheatEntries>CheatEntry,omitempty" json:"children,omitempty"`
+}
+
+// MarshalXML writes an entry without emitting an empty <CheatEntries> wrapper.
+// A plain struct with a chardata field and a nested slice would always emit the
+// wrapper, which corrupts the value on re-parse.
+func (e Entry) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
+	start := xml.StartElement{Name: xml.Name{Local: "CheatEntry"}}
+	set := func(name, value string) {
+		if value != "" {
+			start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: name}, Value: value})
+		}
+	}
+	boolean := func(name string, v bool) {
+		if v {
+			start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: name}, Value: "true"})
+		}
+	}
+	integer := func(name string, v int) {
+		if v != 0 {
+			start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: name}, Value: strconv.Itoa(v)})
+		}
+	}
+	integer("ID", e.ID)
+	set("Description", e.Description)
+	set("Address", e.Address)
+	set("Type", e.Type)
+	set("Hotkey", e.Hotkey)
+	set("Display", e.Display)
+	boolean("Frozen", e.Frozen)
+	set("Encoding", e.Encoding)
+	set("Pointer", e.Pointer)
+	integer("BitSize", e.BitSize)
+	integer("BitOffset", e.BitOffset)
+	integer("BitWidth", e.BitWidth)
+	boolean("BitSigned", e.BitSigned)
+	boolean("Group", e.Group)
+	set("Expr", e.Expr)
+	set("Offsets", e.Offsets)
+
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	if e.Value != "" {
+		if err := enc.EncodeToken(xml.CharData(e.Value)); err != nil {
+			return err
+		}
+	}
+	if e.Script != "" {
+		se := xml.StartElement{Name: xml.Name{Local: "Script"}}
+		if err := enc.EncodeToken(se); err != nil {
+			return err
+		}
+		if err := enc.EncodeToken(xml.CharData(e.Script)); err != nil {
+			return err
+		}
+		if err := enc.EncodeToken(se.End()); err != nil {
+			return err
+		}
+	}
+	if len(e.Children) > 0 {
+		wrap := xml.StartElement{Name: xml.Name{Local: "CheatEntries"}}
+		if err := enc.EncodeToken(wrap); err != nil {
+			return err
+		}
+		for _, c := range e.Children {
+			if err := enc.Encode(c); err != nil {
+				return err
+			}
+		}
+		if err := enc.EncodeToken(wrap.End()); err != nil {
+			return err
+		}
+	}
+	return enc.EncodeToken(start.End())
 }
 
 // Table is a flat list of cheat entries.
@@ -44,6 +132,17 @@ type Table struct {
 	XMLName xml.Name `xml:"CheatTable" json:"-"`
 	Version string   `xml:"Version,attr,omitempty" json:"version,omitempty"`
 	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries"`
+	// Stats summarises a Cheat Engine conversion. It is not serialized.
+	Stats ImportStats `xml:"-" json:"-"`
+}
+
+// ImportStats reports the outcome of converting a Cheat Engine .CT file into
+// Firstspark's flat table. Reasons counts skipped entries by cause ("group",
+// "script", "address", "type").
+type ImportStats struct {
+	Imported int
+	Skipped  int
+	Reasons  map[string]int
 }
 
 // PointerChain is a parsed pointer path. When Module is set, Offset is relative
@@ -148,8 +247,20 @@ func Load(path string) (*Table, error) {
 	return Parse(data)
 }
 
-// Parse parses .CT XML.
+// Parse parses .CT XML. Cheat Engine files (detected by their
+// CheatEngineTableVersion attribute) are converted to Firstspark's flat model;
+// the conversion is best-effort and its outcome is reported in Table.Stats.
 func Parse(data []byte) (*Table, error) {
+	var probe struct {
+		XMLName                 xml.Name
+		CheatEngineTableVersion string `xml:"CheatEngineTableVersion,attr"`
+	}
+	if err := xml.Unmarshal(data, &probe); err != nil {
+		return nil, fmt.Errorf("cheattable: parse xml: %w", err)
+	}
+	if probe.CheatEngineTableVersion != "" {
+		return parseCE(data)
+	}
 	var t Table
 	if err := xml.Unmarshal(data, &t); err != nil {
 		return nil, fmt.Errorf("cheattable: parse xml: %w", err)

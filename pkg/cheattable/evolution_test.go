@@ -1,6 +1,9 @@
 package cheattable
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // TestParseLegacyTableWithoutVersion covers a .CT file written before the
 // Version attribute and the extended entry fields existed.
@@ -34,7 +37,7 @@ func TestParseLegacyTableWithoutVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-Parse: %v", err)
 	}
-	if back.Entries[0] != e {
+	if !reflect.DeepEqual(back.Entries[0], e) {
 		t.Errorf("legacy round trip changed the entry: %+v", back.Entries[0])
 	}
 }
@@ -59,7 +62,7 @@ func TestExtendedFieldsRoundTrip(t *testing.T) {
 	if back.Version != SchemaVersion {
 		t.Errorf("Version = %q, want %q", back.Version, SchemaVersion)
 	}
-	if back.Entries[0] != tbl.Entries[0] {
+	if !reflect.DeepEqual(back.Entries[0], tbl.Entries[0]) {
 		t.Errorf("extended fields changed: %+v", back.Entries[0])
 	}
 }
