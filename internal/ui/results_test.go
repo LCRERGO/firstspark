@@ -14,11 +14,22 @@ func TestChainToPointer(t *testing.T) {
 	if !ok {
 		t.Fatal("conversion failed")
 	}
-	if pc.base != 0x1010 || len(pc.offsets) != 2 || pc.offsets[0] != 0 || pc.offsets[1] != 0x10 {
-		t.Fatalf("pointer = %+v", pc)
+	if pc.module != "lib.so" || pc.offset != 0x10 || len(pc.offsets) != 2 || pc.offsets[0] != 0 || pc.offsets[1] != 0x10 {
+		t.Fatalf("module pointer = %+v", pc)
 	}
 	if _, ok := chainToPointer(pointerscan.Chain{}); ok {
 		t.Fatal("expected an empty chain to be rejected")
+	}
+}
+
+func TestChainToPointerAbsolute(t *testing.T) {
+	c := pointerscan.Chain{Base: 0x1000, Offsets: []uint64{0x10, 0x20}}
+	pc, ok := chainToPointer(c)
+	if !ok {
+		t.Fatal("conversion failed")
+	}
+	if pc.module != "" || pc.base != 0x1010 || len(pc.offsets) != 1 || pc.offsets[0] != 0x20 {
+		t.Fatalf("absolute pointer = %+v", pc)
 	}
 }
 
