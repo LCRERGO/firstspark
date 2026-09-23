@@ -148,6 +148,34 @@ func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 
 func (a *App) saveTable() { a.saveTableAs() }
 
+// saveTableAsCE exports the cheat table as a Cheat Engine .CT document.
+func (a *App) saveTableAsCE() {
+	if len(a.entryRoots) == 0 {
+		a.setStatusText(i18n.T("status.nothing_to_save"))
+		return
+	}
+	tbl := a.tableFromEntries()
+	d := dialog.NewFileSave(func(w fyne.URIWriteCloser, err error) {
+		if err != nil {
+			a.fail(err)
+			return
+		}
+		if w == nil {
+			return
+		}
+		path := w.URI().Path()
+		_ = w.Close()
+		if err := tbl.ExportCE(path); err != nil {
+			a.fail(err)
+			return
+		}
+		a.setStatusText(i18n.Tf("status.saved", map[string]any{"Path": path}))
+	}, a.win)
+	d.SetFileName("firstspark.CT")
+	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct"}))
+	d.Show()
+}
+
 func (a *App) saveTableAs() {
 	if len(a.entryRoots) == 0 {
 		a.setStatusText(i18n.T("status.nothing_to_save"))

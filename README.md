@@ -37,7 +37,7 @@ or GDB runtime dependency.
 | PINCE-style auto-attach to a process by name | implemented |
 | Fyne desktop GUI | implemented (build tag `gui`) |
 | Firstspark `.CT`/JSON sessions import/export | implemented |
-| Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, core Lua; ADR 0037) |
+| Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, core Lua, CE export; ADR 0037) |
 
 ## Requirements
 

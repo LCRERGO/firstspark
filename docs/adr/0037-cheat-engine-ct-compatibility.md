@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted. Staged work; S0–S3 landed and S4a started, S4b–S6 planned. Relates to
-ADR 0038 (groups) and ADR 0039 (script execution).
+Accepted. Staged work; S0–S4 and S6 landed, S5 (CE custom types) planned. Relates
+to ADR 0038 (groups) and ADR 0039 (script execution).
 
 ## Context
 
@@ -55,7 +55,10 @@ Commit to Cheat Engine `.CT` compatibility as a dependency-ordered program:
   UI bridge, so the CK3 orchestrator evaluates; the remaining CE AA/Lua surface
   grows incrementally (ADR 0039).
 - **S5** — import CE custom types into `pkg/customtype`.
-- **S6** — export real CE element XML, so the round trip is true.
+- **S6 (done)** — `Table.MarshalCE`/`ExportCE` write a real Cheat Engine
+  element document (types mapped back, pointer chains split into
+  address/offsets, groups and scripts preserved); `File ▸ Save as Cheat Engine
+  Table…` uses it. A `MarshalCE` → `Parse` round trip is covered by a test.
 
 Records store the **address expression text** and resolve it live against the
 symbol table and module map, caching the last result. This is what lets scripts

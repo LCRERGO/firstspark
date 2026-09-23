@@ -18,6 +18,7 @@
   "menu.file.load": "Load...",
   "menu.file.save": "Save",
   "menu.file.save_as": "Save As...",
+  "menu.file.save_ce": "Save as Cheat Engine Table...",
   "menu.file.save_scan_results": "Save Scan Results",
   "menu.file.quit": "Quit",
   "menu.edit": "Edit",

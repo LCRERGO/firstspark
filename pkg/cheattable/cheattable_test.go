@@ -114,6 +114,52 @@ func findEntryDeep(entries []Entry, desc string) *Entry {
 	return nil
 }
 
+func TestExportCERoundTrip(t *testing.T) {
+	tbl := &Table{Version: SchemaVersion}
+	tbl.Entries = []Entry{
+		{ID: 1, Description: "grp", Group: true, Children: []Entry{
+			{ID: 2, Description: "hp", Address: "0x1000", Type: "dword"},
+		}},
+		{ID: 3, Description: "ptr", Type: "dword", Pointer: FormatPointerChain(PointerChain{
+			Module: "ck3.exe", Offset: 0x1a2b, Offsets: []int64{0x18, -4},
+		})},
+		{ID: 4, Description: "script", Group: true, Script: "[ENABLE]\nnop\n"},
+		{ID: 5, Description: "unresolved", Type: "dword", Expr: "+18", Offsets: "18,-4"},
+		{ID: 6, Description: "custom", Type: "mystruct", Address: "0x2000"},
+	}
+	data, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	back, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if back.Stats.Imported != 6 || back.Stats.Skipped != 0 {
+		t.Fatalf("imported=%d skipped=%d (%v)", back.Stats.Imported, back.Stats.Skipped, back.Stats.Reasons)
+	}
+	grp := findEntry(back.Entries, "grp")
+	if grp == nil || !grp.Group || len(grp.Children) != 1 {
+		t.Fatalf("group lost: %+v", grp)
+	}
+	ptr := findEntry(back.Entries, "ptr")
+	if pc, ok := ParsePointerChain(ptr.Pointer); !ok || pc.Module != "ck3.exe" || len(pc.Offsets) != 2 {
+		t.Fatalf("pointer lost: %+v", ptr)
+	}
+	script := findEntry(back.Entries, "script")
+	if script == nil || !script.Group || script.Script == "" {
+		t.Fatalf("script lost: %+v", script)
+	}
+	unresolved := findEntry(back.Entries, "unresolved")
+	if unresolved == nil || unresolved.Expr != "+18" || unresolved.Offsets != "18,-4" {
+		t.Fatalf("expression lost: %+v", unresolved)
+	}
+	custom := findEntry(back.Entries, "custom")
+	if custom == nil || custom.Type != "mystruct" {
+		t.Fatalf("custom type lost: %+v", custom)
+	}
+}
+
 func TestGroupRoundTrip(t *testing.T) {
 	tbl := &Table{}
 	tbl.Add("root", "0x1000", "dword", "1")

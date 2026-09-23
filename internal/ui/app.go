@@ -468,13 +468,14 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	save.Shortcut = ctrl(fyne.KeyS)
 	saveAs := fyne.NewMenuItem(i18n.T("menu.file.save_as"), a.saveTableAs)
 	saveAs.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
+	saveCE := fyne.NewMenuItem(i18n.T("menu.file.save_ce"), a.saveTableAsCE)
 	saveRes := fyne.NewMenuItem(i18n.T("menu.file.save_scan_results"), a.saveScanResults)
 	saveRes.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierAlt | fyne.KeyModifierShift}
 	quit := fyne.NewMenuItem(i18n.T("menu.file.quit"), a.fapp.Quit)
 	file := fyne.NewMenu(i18n.T("menu.file"),
 		openProc,
 		fyne.NewMenuItemSeparator(),
-		load, save, saveAs,
+		load, save, saveAs, saveCE,
 		fyne.NewMenuItemSeparator(),
 		saveRes,
 		fyne.NewMenuItemSeparator(),
