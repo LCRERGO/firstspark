@@ -2,6 +2,7 @@ package celua
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,6 +47,23 @@ ok = true
 	}
 	if got := binary.LittleEndian.Uint64(selfBuf); got != 0x0807060504030201 {
 		t.Fatalf("readQword bytes = %#x", got)
+	}
+	runtime.KeepAlive(selfBuf)
+}
+
+func TestEvalScalarSelf(t *testing.T) {
+	p, err := mem.Find(os.Getpid())
+	if err != nil {
+		t.Skipf("cannot open self: %v", err)
+	}
+	r := New(Config{Proc: p})
+	addr := uint64(uintptr(unsafe.Pointer(&selfBuf[0])))
+	chunk := fmt.Sprintf("writeByte(%d, 171)\nb = readByte(%d)\nt = getTickCount()", addr, addr)
+	if err := r.Eval(chunk); err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if selfBuf[0] != 0xAB {
+		t.Fatalf("writeByte => %#x", selfBuf[0])
 	}
 	runtime.KeepAlive(selfBuf)
 }

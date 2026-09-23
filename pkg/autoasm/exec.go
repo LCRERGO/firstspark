@@ -42,6 +42,18 @@ func NewExecutor(proc *mem.Process, be debugger.Backend, s *Script) *Executor {
 	}
 }
 
+// parseAASize parses an alloc size, accepting decimal, 0x hex and CE's $
+// hex form.
+func parseAASize(s string) (uint64, bool) {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "$") {
+		n, err := strconv.ParseUint(s[1:], 16, 64)
+		return n, err == nil
+	}
+	n, err := strconv.ParseUint(s, 0, 64)
+	return n, err == nil
+}
+
 // Symbols returns the resolved symbols (allocs and aobscan results).
 func (e *Executor) Symbols() map[string]uint64 { return e.symbols }
 
@@ -80,7 +92,7 @@ func (e *Executor) Apply(enable bool) error {
 		case KindAlloc:
 			size := uint64(0x1000)
 			if len(it.Args) > 1 {
-				if n, err := strconv.ParseUint(it.Args[1], 0, 64); err == nil && n > 0 {
+				if n, ok := parseAASize(it.Args[1]); ok && n > 0 {
 					size = n
 				}
 			}

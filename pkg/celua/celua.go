@@ -5,8 +5,10 @@
 package celua
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"time"
@@ -53,6 +55,8 @@ type Config struct {
 	Version float64
 	// Now overrides the clock used by timers (for tests).
 	Now func() time.Time
+	// Clipboard receives writeToClipboard text, if set.
+	Clipboard func(string)
 }
 
 // Runtime evaluates Cheat Engine Lua chunks against a process and table. Its
@@ -113,21 +117,50 @@ func (r *Runtime) Eval(chunk string) error {
 // apiGlobals builds the built-in Cheat Engine globals.
 func (r *Runtime) apiGlobals() map[string]script.Value {
 	return map[string]script.Value{
-		"process":        r.processValue(),
-		"_G":             script.TableVal(script.NewTable()),
-		"syntaxcheck":    script.Bool(false),
-		"readInteger":    r.reader(4, true),
-		"readQword":      r.reader(8, false),
-		"readPointer":    r.reader(8, false),
-		"readBytes":      script.GoFunc("readBytes", r.readBytes),
-		"readmem":        script.GoFunc("readmem", r.readMem),
-		"writeInteger":   r.writer(4),
-		"writeQword":     r.writer(8),
-		"getAddressSafe": script.GoFunc("getAddressSafe", r.getAddressSafe),
-		"getAddress":     script.GoFunc("getAddress", r.getAddressSafe),
-		"AobScan":        script.GoFunc("AobScan", r.aobScan),
-		"AobScanModule":  script.GoFunc("AobScanModule", r.aobScanModule),
-		"writeBytes":     script.GoFunc("writeBytes", r.writeBytes),
+		"process":           r.processValue(),
+		"_G":                script.TableVal(script.NewTable()),
+		"syntaxcheck":       script.Bool(false),
+		"readInteger":       r.reader(4, true),
+		"readQword":         r.reader(8, false),
+		"readPointer":       r.reader(8, false),
+		"readByte":          r.reader(1, false),
+		"readSmallInteger":  r.reader(2, true),
+		"readFloat":         r.readerFloat(4),
+		"readDouble":        r.readerFloat(8),
+		"readString":        script.GoFunc("readString", r.readString),
+		"readBytes":         script.GoFunc("readBytes", r.readBytes),
+		"readmem":           script.GoFunc("readmem", r.readMem),
+		"writeInteger":      r.writer(4),
+		"writeQword":        r.writer(8),
+		"writeByte":         r.writer(1),
+		"writeSmallInteger": r.writer(2),
+		"writeFloat":        r.writerFloat(4),
+		"writeDouble":       r.writerFloat(8),
+		"writeBytes":        script.GoFunc("writeBytes", r.writeBytes),
+		"getAddressSafe":    script.GoFunc("getAddressSafe", r.getAddressSafe),
+		"getAddress":        script.GoFunc("getAddress", r.getAddressSafe),
+		"AobScan":           script.GoFunc("AobScan", r.aobScan),
+		"AobScanModule":     script.GoFunc("AobScanModule", r.aobScanModule),
+		"getTickCount": script.GoFunc("getTickCount", func([]script.Value) ([]script.Value, error) {
+			return []script.Value{script.Int(time.Now().UnixMilli())}, nil
+		}),
+		"sleep": script.GoFunc("sleep", func(args []script.Value) ([]script.Value, error) {
+			if len(args) > 0 {
+				if ms := args[0].Int(); ms > 0 && ms <= 1000 {
+					time.Sleep(time.Duration(ms) * time.Millisecond)
+				}
+			}
+			return nil, nil
+		}),
+		"findAddressFromDatabase": script.GoFunc("findAddressFromDatabase", func([]script.Value) ([]script.Value, error) {
+			return []script.Value{script.Int(0)}, nil
+		}),
+		"writeToClipboard": script.GoFunc("writeToClipboard", func(args []script.Value) ([]script.Value, error) {
+			if r.cfg.Clipboard != nil && len(args) > 0 {
+				r.cfg.Clipboard(args[0].Str())
+			}
+			return nil, nil
+		}),
 		"getOpenedProcessID": script.GoFunc("getOpenedProcessID", func([]script.Value) ([]script.Value, error) {
 			if r.proc == nil {
 				return []script.Value{script.Int(0)}, nil
@@ -183,17 +216,69 @@ func (r *Runtime) reader(size int, signed bool) script.Value {
 		if err != nil || len(data) < size {
 			return []script.Value{script.Nil()}, nil
 		}
+		var n int64
 		switch size {
-		case 4:
-			n := binary.LittleEndian.Uint32(data)
+		case 1:
+			n = int64(data[0])
 			if signed {
-				return []script.Value{script.Int(int64(int32(n)))}, nil
+				n = int64(int8(data[0]))
 			}
-			return []script.Value{script.Int(int64(n))}, nil
+		case 2:
+			u := binary.LittleEndian.Uint16(data)
+			n = int64(u)
+			if signed {
+				n = int64(int16(u))
+			}
+		case 4:
+			u := binary.LittleEndian.Uint32(data)
+			n = int64(u)
+			if signed {
+				n = int64(int32(u))
+			}
 		default:
-			return []script.Value{script.Int(int64(binary.LittleEndian.Uint64(data)))}, nil
+			n = int64(binary.LittleEndian.Uint64(data))
 		}
+		return []script.Value{script.Int(n)}, nil
 	})
+}
+
+func (r *Runtime) readerFloat(size int) script.Value {
+	return script.GoFunc("read", func(args []script.Value) ([]script.Value, error) {
+		if len(args) == 0 || r.proc == nil {
+			return []script.Value{script.Nil()}, nil
+		}
+		addr := uint64(args[0].Int())
+		data, err := r.proc.Read(addr, size)
+		if err != nil || len(data) < size {
+			return []script.Value{script.Nil()}, nil
+		}
+		if size == 4 {
+			return []script.Value{script.Float(float64(math.Float32frombits(binary.LittleEndian.Uint32(data))))}, nil
+		}
+		return []script.Value{script.Float(math.Float64frombits(binary.LittleEndian.Uint64(data)))}, nil
+	})
+}
+
+func (r *Runtime) readString(args []script.Value) ([]script.Value, error) {
+	if len(args) == 0 || r.proc == nil {
+		return []script.Value{script.Str("")}, nil
+	}
+	addr := uint64(args[0].Int())
+	max := 64
+	if len(args) > 1 && args[1].Int() > 0 {
+		max = int(args[1].Int())
+	}
+	if max > 1<<16 {
+		max = 1 << 16
+	}
+	data, err := r.proc.Read(addr, max)
+	if err != nil && len(data) == 0 {
+		return []script.Value{script.Str("")}, nil
+	}
+	if i := bytes.IndexByte(data, 0); i >= 0 {
+		data = data[:i]
+	}
+	return []script.Value{script.Str(string(data))}, nil
 }
 
 func (r *Runtime) readBytes(args []script.Value) ([]script.Value, error) {
@@ -367,16 +452,35 @@ func (r *Runtime) writer(size int) script.Value {
 			return []script.Value{script.Bool(false)}, nil
 		}
 		addr := uint64(args[0].Int())
+		buf := make([]byte, size)
 		switch size {
+		case 1:
+			buf[0] = byte(args[1].Int())
+		case 2:
+			binary.LittleEndian.PutUint16(buf, uint16(args[1].Int()))
 		case 4:
-			buf := make([]byte, 4)
 			binary.LittleEndian.PutUint32(buf, uint32(args[1].Int()))
-			return []script.Value{script.Bool(r.proc.Write(addr, buf) == nil)}, nil
 		default:
-			buf := make([]byte, 8)
 			binary.LittleEndian.PutUint64(buf, uint64(args[1].Int()))
-			return []script.Value{script.Bool(r.proc.Write(addr, buf) == nil)}, nil
 		}
+		return []script.Value{script.Bool(r.proc.Write(addr, buf) == nil)}, nil
+	})
+}
+
+func (r *Runtime) writerFloat(size int) script.Value {
+	return script.GoFunc("write", func(args []script.Value) ([]script.Value, error) {
+		if len(args) < 2 || r.proc == nil {
+			return []script.Value{script.Bool(false)}, nil
+		}
+		addr := uint64(args[0].Int())
+		f, _ := args[1].Number()
+		buf := make([]byte, size)
+		if size == 4 {
+			binary.LittleEndian.PutUint32(buf, math.Float32bits(float32(f)))
+		} else {
+			binary.LittleEndian.PutUint64(buf, math.Float64bits(f))
+		}
+		return []script.Value{script.Bool(r.proc.Write(addr, buf) == nil)}, nil
 	})
 }
 

@@ -56,7 +56,10 @@ UI-agnostic, so GUI Lua bindings cannot live in the engine.
   `createTimer`/`delayedExecute` (driven by `RunTimers` on the UI tick), and
   no-op thread/GUI surfaces. `internal/ui` bridges the cheat table to `celua`
   via a session runtime whose globals persist, so the CK3 orchestrator runs.
-  The remaining CE API grows as tables need it.
+  The scalar helpers were later widened to byte/word/float/double/string reads
+  and writes, `getTickCount`/`sleep`, `writeToClipboard` and a
+  `findAddressFromDatabase` stub, and the AA parser accepts `globalalloc` and
+  `$`-hex alloc sizes. The remaining CE API grows as tables need it.
 
 ## Consequences
 

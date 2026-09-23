@@ -214,6 +214,32 @@ func TestGlobalsPersistAcrossChunks(t *testing.T) {
 	}
 }
 
+func TestEvalNewScalarAPI(t *testing.T) {
+	var clip string
+	r := New(Config{Clipboard: func(s string) { clip = s }})
+	err := r.Eval(`
+b = readByte(0)
+w = readSmallInteger(0)
+f = readFloat(0)
+d = readDouble(0)
+s = readString(0, 4)
+writeByte(0, 1)
+writeSmallInteger(0, 2)
+writeFloat(0, 1.5)
+writeDouble(0, 2.5)
+t = getTickCount()
+writeToClipboard("hi")
+z = findAddressFromDatabase("x")
+sleep(0)
+`)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if clip != "hi" {
+		t.Fatalf("clipboard = %q", clip)
+	}
+}
+
 func TestEvalUnknownMemberErrors(t *testing.T) {
 	r := New(Config{})
 	if err := r.Eval(`x = getAddressList().nope`); err == nil {

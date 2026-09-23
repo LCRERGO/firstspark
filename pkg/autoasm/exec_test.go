@@ -10,6 +10,29 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
+func TestParseAASize(t *testing.T) {
+	if v, ok := parseAASize("$1000"); !ok || v != 0x1000 {
+		t.Fatalf("$1000 = %d, %v", v, ok)
+	}
+	if v, ok := parseAASize("4096"); !ok || v != 4096 {
+		t.Fatalf("4096 = %d, %v", v, ok)
+	}
+	if v, ok := parseAASize("0x100"); !ok || v != 0x100 {
+		t.Fatalf("0x100 = %d, %v", v, ok)
+	}
+}
+
+func TestGlobalAllocParses(t *testing.T) {
+	s, err := Parse("[ENABLE]\nglobalalloc(scratch,$100)\n")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	items := s.Sections[0].Items
+	if len(items) != 1 || items[0].Kind != KindAlloc || items[0].Name != "scratch" {
+		t.Fatalf("items = %+v", items)
+	}
+}
+
 func TestModuleMatches(t *testing.T) {
 	r := mem.Region{Path: "/usr/lib/libc.so.6"}
 	if !moduleMatches(r, "libc.so.6") {

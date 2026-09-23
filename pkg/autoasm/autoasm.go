@@ -143,7 +143,7 @@ func Parse(src string) (*Script, error) {
 				}
 				add(Item{Kind: KindDefine, Name: args[0], Args: args, Line: i + 1})
 				continue
-			case "alloc":
+			case "alloc", "globalalloc":
 				add(Item{Kind: KindAlloc, Name: arg(args, 0), Args: args, Line: i + 1})
 				continue
 			case "dealloc":
