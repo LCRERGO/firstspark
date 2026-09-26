@@ -126,6 +126,9 @@ type App struct {
 	tableSel        int
 	tableMulti      map[*tableEntry]bool
 	clickMod        fyne.KeyModifier
+	lastTap         time.Time
+	lastTapRow      int
+	lastTapCol      int
 	activePanel     activePanel
 	hotkeyShortcuts map[uint64]fyne.Shortcut
 

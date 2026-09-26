@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -799,6 +800,13 @@ func (a *App) tableTapped(row, col int) {
 		a.table.Refresh()
 		return
 	}
+	now := time.Now()
+	double := a.lastTapRow == row && a.lastTapCol == col && now.Sub(a.lastTap) < doubleTapWindow
+	a.lastTap, a.lastTapRow, a.lastTapCol = now, row, col
+	if double {
+		a.tableDoubleTapped(row, col)
+		return
+	}
 	if col == 1 && e.group {
 		a.toggleExpand(row)
 		return
@@ -808,6 +816,24 @@ func (a *App) tableTapped(row, col int) {
 		return
 	}
 	a.table.Refresh()
+}
+
+// doubleTapWindow is how close two clicks must be to count as a double-click.
+const doubleTapWindow = 350 * time.Millisecond
+
+// tableDoubleTapped implements Cheat Engine's cell editing: double-clicking the
+// Description renames the record, and double-clicking the Value opens the
+// change-value form.
+func (a *App) tableDoubleTapped(row, col int) {
+	if row < 0 || row >= len(a.entries) {
+		return
+	}
+	switch col {
+	case 1:
+		a.changeDescriptionDialog(row)
+	case 4:
+		a.changeValueDialog(row)
+	}
 }
 
 func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObject) {
