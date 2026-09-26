@@ -2,6 +2,7 @@ package customtype
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,8 +106,8 @@ func RegisterAA(def Definition) (*scan.Type, error) {
 	if err != nil {
 		return nil, fmt.Errorf("customtype: %s: %w", name, err)
 	}
-	if kind != scan.KindInt {
-		return nil, fmt.Errorf("customtype: %s: auto-assembler types support only kind int", name)
+	if kind != scan.KindInt && kind != scan.KindFloat {
+		return nil, fmt.Errorf("customtype: %s: auto-assembler types support only int and float", name)
 	}
 	prog, err := buildAA(def)
 	if err != nil {
@@ -124,18 +125,40 @@ func RegisterAA(def Definition) (*scan.Type, error) {
 		Alignment: alignment,
 		Kind:      kind,
 	}
-	t.Int64 = func(v scan.Value) int64 { return prog.readInt(v.Raw) }
-	t.Numeric = func(v scan.Value) float64 { return float64(prog.readInt(v.Raw)) }
-	t.Format = func(v scan.Value) string { return strconv.FormatInt(prog.readInt(v.Raw), 10) }
-	if prog.write != 0 {
-		t.Parse = func(input string) (scan.Value, error) {
-			n, err := strconv.ParseInt(strings.TrimSpace(input), 0, 64)
-			if err != nil {
-				return scan.Value{}, err
-			}
-			return scan.Value{Type: t.ID, Raw: prog.writeInt(n)}, nil
+	if kind == scan.KindFloat {
+		t.Numeric = func(v scan.Value) float64 {
+			return float64(math.Float32frombits(uint32(prog.readInt(v.Raw))))
 		}
-		t.Encode = func(n int64) []byte { return prog.writeInt(n) }
+		t.Int64 = func(v scan.Value) int64 {
+			return int64(math.Float32frombits(uint32(prog.readInt(v.Raw))))
+		}
+		t.Format = func(v scan.Value) string {
+			return strconv.FormatFloat(float64(math.Float32frombits(uint32(prog.readInt(v.Raw)))), 'g', -1, 32)
+		}
+		if prog.write != 0 {
+			t.Parse = func(input string) (scan.Value, error) {
+				f, err := strconv.ParseFloat(strings.TrimSpace(input), 32)
+				if err != nil {
+					return scan.Value{}, err
+				}
+				return scan.Value{Type: t.ID, Raw: prog.writeInt(int64(math.Float32bits(float32(f))))}, nil
+			}
+			t.Encode = func(n int64) []byte { return prog.writeInt(n) }
+		}
+	} else {
+		t.Int64 = func(v scan.Value) int64 { return prog.readInt(v.Raw) }
+		t.Numeric = func(v scan.Value) float64 { return float64(prog.readInt(v.Raw)) }
+		t.Format = func(v scan.Value) string { return strconv.FormatInt(prog.readInt(v.Raw), 10) }
+		if prog.write != 0 {
+			t.Parse = func(input string) (scan.Value, error) {
+				n, err := strconv.ParseInt(strings.TrimSpace(input), 0, 64)
+				if err != nil {
+					return scan.Value{}, err
+				}
+				return scan.Value{Type: t.ID, Raw: prog.writeInt(n)}, nil
+			}
+			t.Encode = func(n int64) []byte { return prog.writeInt(n) }
+		}
 	}
 	scan.RegisterType(t)
 	return t, nil

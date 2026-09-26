@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. P0 and P1 are implemented; P2–P4 remain open.
+Accepted. P0–P2 are implemented; P3–P4 remain open.
 
 ## Context
 
@@ -78,7 +78,8 @@ Routine ABIs to support, in order:
   integer ABIs, wired into the GUI import with a `RegisterRaw` fallback.
   Implemented and unit-tested with `customtype.RegisterCE`.
 - **P2 — float (medium).** Extend `RegisterAA` with `kind: float`
-  (bit-pattern reinterpretation) and accept `USESFLOAT`.
+  (bit-pattern reinterpretation) and accept `USESFLOAT`. Implemented and
+  unit-tested.
 - **P3 — string (large).** `kind: string`, the three-argument ABI and the output
   buffer.
 - **P4 — pure-Go fallback (optional, large).** A translator for the common

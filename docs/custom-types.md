@@ -161,8 +161,10 @@ Conventions:
   returns the value in **RAX**.
 - `ConvertBackRoutine` receives the value in **RDI** and a pointer to the
   output bytes in **RSI**; it writes `size` bytes.
-- Only `kind: int` is supported. Float and string Auto Assembler types are
-  rejected; use a Lua type for those.
+- `kind: int` and `kind: float` are supported. A float type's routine returns the
+  IEEE-754 single bit pattern as an integer, and the value is interpreted as a
+  32-bit float (Cheat Engine's `USESFLOAT` convention). String Auto Assembler
+  types are rejected; use a Lua type for those.
 - The script must be self-contained (no external symbols); `alloc` directives
   are ignored.
 

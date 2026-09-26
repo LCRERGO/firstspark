@@ -1,6 +1,8 @@
 package customtype
 
 import (
+	"encoding/binary"
+	"math"
 	"strings"
 	"testing"
 
@@ -34,9 +36,47 @@ func TestRegisterCEInteger(t *testing.T) {
 	}
 }
 
+func TestRegisterCEFloat(t *testing.T) {
+	// Identity routines: the raw bits pass through, and the type interprets
+	// them as a single-precision float.
+	conv := CEConversion{
+		Name:               "fs_ce_float",
+		Size:               4,
+		Alignment:          4,
+		UsesFloat:          true,
+		ConvertRoutine:     "mov eax, [rcx]",
+		ConvertBackRoutine: "mov eax, ecx\nmov [rdx], eax",
+	}
+	typ, err := RegisterCE(conv)
+	if err != nil {
+		if strings.Contains(err.Error(), "not supported in this build") {
+			t.Skip("jit unavailable in this build")
+		}
+		t.Fatalf("RegisterCE: %v", err)
+	}
+	if typ.Kind != scan.KindFloat {
+		t.Fatalf("kind = %v, want float", typ.Kind)
+	}
+	raw := make([]byte, 4)
+	binary.LittleEndian.PutUint32(raw, math.Float32bits(1.5))
+	if got := typ.Numeric(scan.Value{Type: typ.ID, Raw: raw}); got != 1.5 {
+		t.Fatalf("Numeric = %v, want 1.5", got)
+	}
+	if got := typ.Format(scan.Value{Type: typ.ID, Raw: raw}); got != "1.5" {
+		t.Fatalf("Format = %q, want 1.5", got)
+	}
+	parsed, err := typ.Parse("2.5")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := binary.LittleEndian.Uint32(parsed.Raw); got != math.Float32bits(2.5) {
+		t.Fatalf("Parse bits = %#x, want %#x", got, math.Float32bits(2.5))
+	}
+}
+
 func TestRegisterCEUnsupported(t *testing.T) {
 	cases := []CEConversion{
-		{UsesFloat: true, Size: 4, ConvertRoutine: "ret"},
+		{UsesFloat: true, Size: 8, ConvertRoutine: "ret"},
 		{UsesString: true, Size: 4, ConvertRoutine: "ret"},
 		{MaxStringSize: 32, Size: 4, ConvertRoutine: "ret"},
 		{Size: 4, ConvertRoutine: ""},

@@ -27,21 +27,28 @@ type CEConversion struct {
 	ConvertBackRoutine string
 }
 
-// RegisterCE registers a Cheat Engine custom type, applying its integer
-// conversion through the Auto Assembler/JIT path (ADR 0048). Float, string and
-// empty definitions are reported as ErrConversionUnsupported so the caller can
-// register them raw.
+// RegisterCE registers a Cheat Engine custom type, applying its conversion
+// through the Auto Assembler/JIT path (ADR 0048): the integer and single-precision
+// float cases are supported. String and empty definitions are reported as
+// ErrConversionUnsupported so the caller can register them raw.
 func RegisterCE(c CEConversion) (*scan.Type, error) {
-	if c.UsesFloat || c.UsesString || c.MaxStringSize > 0 {
+	if c.UsesString || c.MaxStringSize > 0 {
+		return nil, ErrConversionUnsupported
+	}
+	if c.UsesFloat && c.Size != 4 {
 		return nil, ErrConversionUnsupported
 	}
 	if strings.TrimSpace(c.ConvertRoutine) == "" {
 		return nil, ErrConversionUnsupported
 	}
+	kind := "int"
+	if c.UsesFloat {
+		kind = "float"
+	}
 	def := Definition{
 		Name:      c.Name,
 		Size:      c.Size,
-		Kind:      "int",
+		Kind:      kind,
 		Mode:      "aa",
 		Alignment: c.Alignment,
 		Script:    synthesizeCEScript(c),

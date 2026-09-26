@@ -1,6 +1,8 @@
 package customtype
 
 import (
+	"encoding/binary"
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -78,9 +80,22 @@ func TestRegisterAAType(t *testing.T) {
 	}
 }
 
-func TestAATypeRejectsFloat(t *testing.T) {
-	if _, err := RegisterAA(Definition{Name: "AA Float", Size: 4, Kind: "float", Mode: "aa", Script: "[ENABLE]\nConvertRoutine:\n  ret\n"}); err == nil {
-		t.Fatal("expected float AA types to be rejected")
+func TestAATypeSupportsFloat(t *testing.T) {
+	def := Definition{
+		Name: "AA Float", Size: 4, Kind: "float", Mode: "aa",
+		Script: "[ENABLE]\nConvertRoutine:\n  mov eax, [rdi]\n  ret\nConvertBackRoutine:\n  mov eax, edi\n  mov [rsi], eax\n  ret\n",
+	}
+	typ, err := RegisterAA(def)
+	if err != nil {
+		t.Fatalf("RegisterAA: %v", err)
+	}
+	if typ.Kind != scan.KindFloat {
+		t.Fatalf("kind = %v, want float", typ.Kind)
+	}
+	raw := make([]byte, 4)
+	binary.LittleEndian.PutUint32(raw, math.Float32bits(3.5))
+	if got := typ.Numeric(scan.Value{Type: typ.ID, Raw: raw}); got != 3.5 {
+		t.Fatalf("Numeric = %v, want 3.5", got)
 	}
 }
 
