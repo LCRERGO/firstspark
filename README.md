@@ -28,7 +28,7 @@ or GDB runtime dependency.
 | Debugger GUI, hardware watchpoints, find-accesses/writes | implemented |
 | Structure dissect (compare instances, guess fields, follow pointers) | implemented |
 | Auto Assembler (`alloc`, labels, `db`/`dd`, `aobscan`, enable/disable) | implemented |
-| GDB/MI backend | stub (same interface) |
+| GDB/MI backend (attach, memory, registers, breakpoints, step; no remote calls/watchpoints) | implemented |
 | Disassembler (pure Go, `x86asm`) | implemented |
 | Assembler (pure-Go Intel syntax, common subset) | implemented |
 | Inline trampoline hooking + remote `mmap`/`mprotect` | implemented |
@@ -40,7 +40,7 @@ or GDB runtime dependency.
 | PINCE-style auto-attach to a process by name | implemented |
 | Fyne desktop GUI | implemented (build tag `gui`) |
 | Firstspark `.CT`/JSON/YAML sessions import/export | implemented |
-| Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, core Lua, CE export; ADR 0037) |
+| Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, colour, last state, hotkeys, core Lua; ADR 0037/0046) |
 
 ## Requirements
 
@@ -183,10 +183,15 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
 - **Call stack**: a best-effort frame-pointer walk; builds compiled without a
   frame pointer may truncate it.
 - **Unrandomizer**: returns a constant only (no counter/pattern mode).
-- **gdbmi**: the backend is a stub; only ptrace is implemented.
-- **Cheat Engine tables**: import/export covers the tree, expressions, scripts
-  and the core Lua API (ADR 0037); GUI/VCL-script tables are out of scope
-  (ADR 0039).
+- **RNG hooks** (`speedhack`, `unrandomizer`) and Auto Assembler use the ptrace
+  backend directly; they do not use `debugger.backend`.
+- **GDB/MI backend**: needs `gdb` on `PATH`; it supports attach, memory,
+  registers, breakpoints and stepping, but not remote calls or hardware
+  watchpoints (ADR 0047).
+- **Cheat Engine tables**: import/export covers the tree, expressions, scripts,
+  colour, last state, hotkeys, the core Lua API and preserved unknown elements
+  (ADR 0037, ADR 0046); GUI/VCL-script tables are out of scope (ADR 0039), and
+  custom-type `ConvertRoutine` bodies are preserved but not applied.
 
 ## License
 

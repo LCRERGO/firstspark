@@ -82,6 +82,8 @@ Terms used across the codebase, ADRs and UI.
   shared `pkg/celua` runtime; `print` writes to its output log (ADR 0045).
 - **Memory Regions browser** — the Memory Viewer window that lists the process
   memory map and jumps to a region (ADR 0043).
+- **MI (Machine Interface)** — GDB's machine-readable protocol; the `gdbmi`
+  debugger backend drives a gdb child process over it (ADR 0047).
 - **Module** — a file-backed region mapped at offset 0; the debugger lists these
   as load bases (ADR 0044).
 - **Pointermap** — a reverse index from pointer values to the addresses that
