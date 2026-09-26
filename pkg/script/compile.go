@@ -239,181 +239,225 @@ func compileStmts(stmts []Stmt) stmtFn {
 func compileStmt(s Stmt) stmtFn {
 	switch s := s.(type) {
 	case *LocalStmt:
-		names := s.Names
-		valFn := compileValues(s.Exprs)
-		return func(env *Env) (flow, []Value) {
-			vals := valFn(env)
-			for i, n := range names {
-				if i < len(vals) {
-					env.setLocal(n, vals[i])
-				} else {
-					env.setLocal(n, Nil())
-				}
-			}
-			return flowNormal, nil
-		}
+		return compileLocalStmt(s)
 	case *AssignStmt:
-		targets := make([]assigner, len(s.Targets))
-		for i, t := range s.Targets {
-			targets[i] = compileAssigner(t)
-		}
-		valFn := compileValues(s.Exprs)
-		return func(env *Env) (flow, []Value) {
-			vals := valFn(env)
-			for i, a := range targets {
-				if i < len(vals) {
-					a(env, vals[i])
-				} else {
-					a(env, Nil())
-				}
-			}
-			return flowNormal, nil
-		}
+		return compileAssignStmt(s)
 	case *LocalFuncStmt:
-		name := s.Name
-		fnFn := compileFuncLit(s.Fn)
-		return func(env *Env) (flow, []Value) {
-			env.setLocal(name, Nil())
-			env.setLocal(name, fnFn(env))
-			return flowNormal, nil
-		}
+		return compileLocalFuncStmt(s)
 	case *FuncStmt:
-		a := compileAssigner(s.Target)
-		fnFn := compileFuncLit(s.Fn)
-		return func(env *Env) (flow, []Value) {
-			a(env, fnFn(env))
-			return flowNormal, nil
-		}
+		return compileFuncStmt(s)
 	case *CallStmt:
-		call, ok := s.Call.(*Call)
-		if !ok {
-			throw("malformed call statement")
-		}
-		fn := compileCallMulti(call)
-		return func(env *Env) (flow, []Value) {
-			fn(env)
-			return flowNormal, nil
-		}
+		return compileCallStmt(s)
 	case *DoStmt:
-		body := compileStmts(s.Body)
-		return func(env *Env) (flow, []Value) { return body(newEnv(env)) }
+		return compileDoStmt(s)
 	case *IfStmt:
 		return compileIf(s)
 	case *WhileStmt:
-		cond := compileExpr(s.Cond)
-		body := compileStmts(s.Body)
-		return func(env *Env) (flow, []Value) {
-			for truthy(cond(env)) {
-				fl, rets := body(newEnv(env))
-				if fl == flowBreak {
-					break
-				}
-				if fl == flowReturn {
-					return fl, rets
-				}
-			}
-			return flowNormal, nil
-		}
+		return compileWhileStmt(s)
 	case *RepeatStmt:
-		body := compileStmts(s.Body)
-		cond := compileExpr(s.Cond)
-		return func(env *Env) (flow, []Value) {
-			for {
-				iter := newEnv(env)
-				fl, rets := body(iter)
-				if fl == flowBreak {
-					break
-				}
-				if fl == flowReturn {
-					return fl, rets
-				}
-				if truthy(cond(iter)) {
-					break
-				}
-			}
-			return flowNormal, nil
-		}
+		return compileRepeatStmt(s)
 	case *NumForStmt:
-		startFn := compileExpr(s.Start)
-		limitFn := compileExpr(s.Limit)
-		var stepFn exprFn
-		if s.Step != nil {
-			stepFn = compileExpr(s.Step)
-		}
-		body := compileStmts(s.Body)
-		name := s.Name
-		return func(env *Env) (flow, []Value) {
-			start := toNumber(startFn(env))
-			limit := toNumber(limitFn(env))
-			step := 1.0
-			if stepFn != nil {
-				step = toNumber(stepFn(env))
-			}
-			loop := newEnv(env)
-			if step == 0 {
-				throw("'for' step is zero")
-			}
-			for i := start; (step > 0 && i <= limit) || (step < 0 && i >= limit); i += step {
-				loop.setLocal(name, numberValue(i))
-				fl, rets := body(newEnv(loop))
-				if fl == flowBreak {
-					break
-				}
-				if fl == flowReturn {
-					return fl, rets
-				}
-			}
-			return flowNormal, nil
-		}
+		return compileNumForStmt(s)
 	case *GenForStmt:
-		exprFn := compileValues(s.Exprs)
-		body := compileStmts(s.Body)
-		names := s.Names
-		return func(env *Env) (flow, []Value) {
-			vals := exprFn(env)
-			var iter, state, control Value
-			if len(vals) > 0 {
-				iter = vals[0]
-			}
-			if len(vals) > 1 {
-				state = vals[1]
-			}
-			if len(vals) > 2 {
-				control = vals[2]
-			}
-			for {
-				rets := callValue(iter, env, []Value{state, control})
-				if len(rets) == 0 || rets[0].IsNil() {
-					break
-				}
-				control = rets[0]
-				loop := newEnv(env)
-				for i, n := range names {
-					if i < len(rets) {
-						loop.setLocal(n, rets[i])
-					} else {
-						loop.setLocal(n, Nil())
-					}
-				}
-				fl, out := body(loop)
-				if fl == flowBreak {
-					break
-				}
-				if fl == flowReturn {
-					return fl, out
-				}
-			}
-			return flowNormal, nil
-		}
+		return compileGenForStmt(s)
 	case *ReturnStmt:
-		valFn := compileValues(s.Exprs)
-		return func(env *Env) (flow, []Value) { return flowReturn, valFn(env) }
+		return compileReturnStmt(s)
 	case *BreakStmt:
 		return func(*Env) (flow, []Value) { return flowBreak, nil }
 	default:
 		throw("unknown statement")
 	}
 	return nil
+}
+
+func compileLocalStmt(s *LocalStmt) stmtFn {
+	names := s.Names
+	valFn := compileValues(s.Exprs)
+	return func(env *Env) (flow, []Value) {
+		vals := valFn(env)
+		for i, n := range names {
+			if i < len(vals) {
+				env.setLocal(n, vals[i])
+			} else {
+				env.setLocal(n, Nil())
+			}
+		}
+		return flowNormal, nil
+	}
+}
+
+func compileAssignStmt(s *AssignStmt) stmtFn {
+	targets := make([]assigner, len(s.Targets))
+	for i, t := range s.Targets {
+		targets[i] = compileAssigner(t)
+	}
+	valFn := compileValues(s.Exprs)
+	return func(env *Env) (flow, []Value) {
+		vals := valFn(env)
+		for i, a := range targets {
+			if i < len(vals) {
+				a(env, vals[i])
+			} else {
+				a(env, Nil())
+			}
+		}
+		return flowNormal, nil
+	}
+}
+
+func compileLocalFuncStmt(s *LocalFuncStmt) stmtFn {
+	name := s.Name
+	fnFn := compileFuncLit(s.Fn)
+	return func(env *Env) (flow, []Value) {
+		env.setLocal(name, Nil())
+		env.setLocal(name, fnFn(env))
+		return flowNormal, nil
+	}
+}
+
+func compileFuncStmt(s *FuncStmt) stmtFn {
+	a := compileAssigner(s.Target)
+	fnFn := compileFuncLit(s.Fn)
+	return func(env *Env) (flow, []Value) {
+		a(env, fnFn(env))
+		return flowNormal, nil
+	}
+}
+
+func compileCallStmt(s *CallStmt) stmtFn {
+	call, ok := s.Call.(*Call)
+	if !ok {
+		throw("malformed call statement")
+	}
+	fn := compileCallMulti(call)
+	return func(env *Env) (flow, []Value) {
+		fn(env)
+		return flowNormal, nil
+	}
+}
+
+func compileDoStmt(s *DoStmt) stmtFn {
+	body := compileStmts(s.Body)
+	return func(env *Env) (flow, []Value) { return body(newEnv(env)) }
+}
+
+func compileWhileStmt(s *WhileStmt) stmtFn {
+	cond := compileExpr(s.Cond)
+	body := compileStmts(s.Body)
+	return func(env *Env) (flow, []Value) {
+		for truthy(cond(env)) {
+			fl, rets := body(newEnv(env))
+			if fl == flowBreak {
+				break
+			}
+			if fl == flowReturn {
+				return fl, rets
+			}
+		}
+		return flowNormal, nil
+	}
+}
+
+func compileRepeatStmt(s *RepeatStmt) stmtFn {
+	body := compileStmts(s.Body)
+	cond := compileExpr(s.Cond)
+	return func(env *Env) (flow, []Value) {
+		for {
+			iter := newEnv(env)
+			fl, rets := body(iter)
+			if fl == flowBreak {
+				break
+			}
+			if fl == flowReturn {
+				return fl, rets
+			}
+			if truthy(cond(iter)) {
+				break
+			}
+		}
+		return flowNormal, nil
+	}
+}
+
+func compileNumForStmt(s *NumForStmt) stmtFn {
+	startFn := compileExpr(s.Start)
+	limitFn := compileExpr(s.Limit)
+	var stepFn exprFn
+	if s.Step != nil {
+		stepFn = compileExpr(s.Step)
+	}
+	body := compileStmts(s.Body)
+	name := s.Name
+	return func(env *Env) (flow, []Value) {
+		start := toNumber(startFn(env))
+		limit := toNumber(limitFn(env))
+		step := 1.0
+		if stepFn != nil {
+			step = toNumber(stepFn(env))
+		}
+		loop := newEnv(env)
+		if step == 0 {
+			throw("'for' step is zero")
+		}
+		for i := start; (step > 0 && i <= limit) || (step < 0 && i >= limit); i += step {
+			loop.setLocal(name, numberValue(i))
+			fl, rets := body(newEnv(loop))
+			if fl == flowBreak {
+				break
+			}
+			if fl == flowReturn {
+				return fl, rets
+			}
+		}
+		return flowNormal, nil
+	}
+}
+
+func compileGenForStmt(s *GenForStmt) stmtFn {
+	exprFn := compileValues(s.Exprs)
+	body := compileStmts(s.Body)
+	names := s.Names
+	return func(env *Env) (flow, []Value) {
+		vals := exprFn(env)
+		var iter, state, control Value
+		if len(vals) > 0 {
+			iter = vals[0]
+		}
+		if len(vals) > 1 {
+			state = vals[1]
+		}
+		if len(vals) > 2 {
+			control = vals[2]
+		}
+		for {
+			rets := callValue(iter, env, []Value{state, control})
+			if len(rets) == 0 || rets[0].IsNil() {
+				break
+			}
+			control = rets[0]
+			loop := newEnv(env)
+			for i, n := range names {
+				if i < len(rets) {
+					loop.setLocal(n, rets[i])
+				} else {
+					loop.setLocal(n, Nil())
+				}
+			}
+			fl, out := body(loop)
+			if fl == flowBreak {
+				break
+			}
+			if fl == flowReturn {
+				return fl, out
+			}
+		}
+		return flowNormal, nil
+	}
+}
+
+func compileReturnStmt(s *ReturnStmt) stmtFn {
+	valFn := compileValues(s.Exprs)
+	return func(env *Env) (flow, []Value) { return flowReturn, valFn(env) }
 }
 
 func compileIf(s *IfStmt) stmtFn {
