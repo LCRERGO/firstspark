@@ -115,15 +115,7 @@ func (a *App) buildMemoryViewer() {
 			a.setCursor(a.disasm[id].Addr)
 		}
 	}
-	a.hexList = widget.NewList(
-		func() int { return a.memRegionRows },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) { a.updateHexRow(id, o) },
-	)
-	a.hexList.OnSelected = func(id widget.ListItemID) {
-		a.setCursor(a.memRegion.Start + uint64(id)*16)
-		a.setDisasmAt(a.memCur)
-	}
+	a.hexList = a.newMemHexList()
 
 	split := container.NewVSplit(a.disasmList, a.hexList)
 	split.SetOffset(0.69)
@@ -155,6 +147,7 @@ func (a *App) installMemoryShortcuts() {
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyF3}, func(fyne.Shortcut) { a.findNext() })
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyPageUp}, func(fyne.Shortcut) { a.memPage(-1) })
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyPageDown}, func(fyne.Shortcut) { a.memPage(1) })
+	c.AddShortcut(ctrl(fyne.KeyC), func(fyne.Shortcut) { a.copyMemorySelection() })
 	// Cheat Engine selects the display width with Ctrl+1..0.
 	keys := []fyne.KeyName{fyne.Key1, fyne.Key2, fyne.Key3, fyne.Key4, fyne.Key5, fyne.Key6}
 	for i, k := range keys {
@@ -187,6 +180,8 @@ func (a *App) loadMemory(addr uint64) {
 		a.memRegionRows = 1
 	}
 	a.memPageCache = map[uint64][]byte{}
+	a.memSelActive = false
+	a.memNibbleHigh = true
 	a.refreshRegionSelect()
 	a.setCursor(addr)
 	if a.hexList != nil {
@@ -288,21 +283,31 @@ func (a *App) readCached(addr uint64, n int) []byte {
 }
 
 func (a *App) updateHexRow(id widget.ListItemID, o fyne.CanvasObject) {
-	t := o.(*canvas.Text)
+	h := o.(*hexRow)
+	h.row = int(id)
 	if id < 0 || id >= a.memRegionRows {
-		t.Text = ""
-		t.Refresh()
+		h.set("", "", "")
 		return
 	}
 	addr := a.memRegion.Start + uint64(id)*16
-	t.Text = a.formatHexRow(addr, a.readCached(addr, 16))
-	t.Color = a.pal().text
-	t.Refresh()
+	prefix, bytes, ascii, value := a.hexParts(addr, a.readCached(addr, 16))
+	lo, hi := -1, -1
+	if a.memSelActive {
+		slo, shi := a.memSelection()
+		if shi >= addr && slo <= addr+15 {
+			lo = int(max(slo, addr) - addr)
+			hi = int(min(shi, addr+15)-addr) + 1
+		}
+	} else if a.memCur >= addr && a.memCur < addr+16 {
+		lo = int(a.memCur - addr)
+		hi = lo + 1
+	}
+	h.setParts(prefix, bytes, ascii, value, lo, hi)
 }
 
-// formatHexRow renders one 16-byte row: address, hex bytes, ASCII and a decoded
-// value column.
-func (a *App) formatHexRow(addr uint64, data []byte) string {
+// hexParts splits a hex row into its address prefix, 16 byte tokens, ASCII and
+// decoded value, so a selection can colour part of the bytes.
+func (a *App) hexParts(addr uint64, data []byte) (string, []string, string, string) {
 	typ := scan.TypeDword
 	if a.memType != nil {
 		typ = parseMemType(a.memType.Selected)
@@ -311,29 +316,268 @@ func (a *App) formatHexRow(addr uint64, data []byte) string {
 	if w <= 0 {
 		w = 1
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%016x  ", addr)
+	bytes := make([]string, 16)
 	for j := 0; j < 16; j++ {
 		if j < len(data) {
-			fmt.Fprintf(&b, "%02x ", data[j])
+			bytes[j] = fmt.Sprintf("%02x ", data[j])
 		} else {
-			b.WriteString("   ")
+			bytes[j] = "   "
 		}
 	}
-	b.WriteByte(' ')
+	var ascii strings.Builder
 	for j := 0; j < len(data) && j < 16; j++ {
 		c := data[j]
 		if c >= 0x20 && c < 0x7f {
-			b.WriteByte(c)
+			ascii.WriteByte(c)
 		} else {
-			b.WriteByte('.')
+			ascii.WriteByte('.')
 		}
 	}
+	value := ""
 	if w <= len(data) {
 		v := scan.NewValue(typ, data[:w])
-		fmt.Fprintf(&b, "  = %s", v.String())
+		value = fmt.Sprintf("  = %s", v.String())
 	}
-	return b.String()
+	return fmt.Sprintf("%016x  ", addr), bytes, ascii.String(), value
+}
+
+func (a *App) formatHexRow(addr uint64, data []byte) string {
+	prefix, bytes, ascii, value := a.hexParts(addr, data)
+	return prefix + strings.Join(bytes, "") + " " + ascii + value
+}
+
+// hexRow is one hex-pane row with a coloured cursor/selection span.
+type hexRow struct {
+	widget.BaseWidget
+	app  *App
+	row  int
+	pre  *canvas.Text
+	sel  *canvas.Text
+	post *canvas.Text
+}
+
+func (a *App) newHexRow() *hexRow {
+	h := &hexRow{
+		app:  a,
+		pre:  a.th.monoText("", a.pal().text),
+		sel:  a.th.monoText("", a.pal().primary),
+		post: a.th.monoText("", a.pal().text),
+	}
+	h.ExtendBaseWidget(h)
+	return h
+}
+
+func (h *hexRow) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(container.New(noGapLayout{}, h.pre, h.sel, h.post))
+}
+
+func (h *hexRow) set(pre, sel, post string) {
+	h.pre.Text, h.sel.Text, h.post.Text = pre, sel, post
+	h.pre.Refresh()
+	h.sel.Refresh()
+	h.post.Refresh()
+}
+
+func (h *hexRow) setParts(prefix string, bytes []string, ascii, value string, lo, hi int) {
+	if lo < 0 {
+		h.set(prefix+strings.Join(bytes, ""), "", " "+ascii+value)
+		return
+	}
+	h.set(
+		prefix+strings.Join(bytes[:lo], ""),
+		strings.Join(bytes[lo:hi], ""),
+		strings.Join(bytes[hi:], "")+" "+ascii+value,
+	)
+}
+
+// MouseDown places the byte cursor; Shift extends the selection.
+func (h *hexRow) MouseDown(e *desktop.MouseEvent) {
+	if h.row < 0 {
+		return
+	}
+	base := h.app.memRegion.Start + uint64(h.row)*16
+	cw := fyne.MeasureText("0", h.pre.TextSize, fyne.TextStyle{Monospace: true}).Width
+	if cw <= 0 {
+		return
+	}
+	k := int((e.Position.X/cw - 18) / 3)
+	if k < 0 {
+		k = 0
+	}
+	if k > 15 {
+		k = 15
+	}
+	addr := base + uint64(k)
+	if e.Modifier&fyne.KeyModifierShift != 0 && h.app.memSelActive {
+		h.app.memSelEnd = addr
+	} else {
+		h.app.memSelStart, h.app.memSelEnd = addr, addr
+	}
+	h.app.memSelActive = true
+	h.app.memNibbleHigh = true
+	h.app.setCursor(addr)
+	h.app.focusHex()
+	h.app.hexList.Refresh()
+	h.app.setDisasmAt(addr)
+}
+
+// noGapLayout stacks monospace texts edge to edge so the hex grid stays aligned.
+type noGapLayout struct{}
+
+func (noGapLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	s := fyne.NewSize(0, 0)
+	for _, o := range objs {
+		m := o.MinSize()
+		s.Width += m.Width
+		if m.Height > s.Height {
+			s.Height = m.Height
+		}
+	}
+	return s
+}
+
+func (noGapLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	x := float32(0)
+	for _, o := range objs {
+		m := o.MinSize()
+		o.Move(fyne.NewPos(x, 0))
+		o.Resize(m)
+		x += m.Width
+	}
+}
+
+// memHexList adds a byte cursor and hex-nibble editing to the hex list.
+type memHexList struct {
+	*widget.List
+	app *App
+}
+
+func (a *App) newMemHexList() *memHexList {
+	h := &memHexList{app: a}
+	h.List = widget.NewList(
+		func() int { return a.memRegionRows },
+		func() fyne.CanvasObject { return a.newHexRow() },
+		func(id widget.ListItemID, o fyne.CanvasObject) { a.updateHexRow(id, o) },
+	)
+	return h
+}
+
+func (h *memHexList) TypedKey(ev *fyne.KeyEvent) {
+	switch ev.Name {
+	case fyne.KeyLeft:
+		h.app.memMoveCursor(-1, 0)
+	case fyne.KeyRight:
+		h.app.memMoveCursor(1, 0)
+	case fyne.KeyUp:
+		h.app.memMoveCursor(0, -16)
+	case fyne.KeyDown:
+		h.app.memMoveCursor(0, 16)
+	case fyne.KeyPageUp:
+		h.app.memPage(-1)
+	case fyne.KeyPageDown:
+		h.app.memPage(1)
+	default:
+		h.List.TypedKey(ev)
+	}
+}
+
+func (h *memHexList) TypedRune(r rune) {
+	h.app.memTypeNibble(r)
+}
+
+func (a *App) focusHex() {
+	if a.memWin != nil && a.hexList != nil {
+		a.memWin.Canvas().Focus(a.hexList)
+	}
+}
+
+func (a *App) memSelection() (uint64, uint64) {
+	lo, hi := a.memSelStart, a.memSelEnd
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	return lo, hi
+}
+
+// memMoveCursor moves the byte cursor and keeps the disassembly anchored.
+func (a *App) memMoveCursor(dx, dy int) {
+	if a.memRegion.End == 0 {
+		return
+	}
+	next := int64(a.memCur) + int64(dx+dy)
+	if next < int64(a.memRegion.Start) {
+		next = int64(a.memRegion.Start)
+	}
+	if next >= int64(a.memRegion.End) {
+		next = int64(a.memRegion.End) - 1
+	}
+	a.memSelActive = false
+	a.memNibbleHigh = true
+	a.setCursor(uint64(next))
+	a.scrollHexTo(uint64(next))
+	if a.hexList != nil {
+		a.hexList.Refresh()
+	}
+	a.setDisasmAt(uint64(next))
+}
+
+// memTypeNibble edits the byte at the cursor with two hex digits.
+func (a *App) memTypeNibble(r rune) {
+	v := hexNibble(r)
+	if v < 0 {
+		return
+	}
+	if a.memNibbleHigh {
+		a.memPending = byte(v) << 4
+		a.memNibbleHigh = false
+		return
+	}
+	a.memNibbleHigh = true
+	a.writeMemoryByte(a.memCur, a.memPending|byte(v))
+	a.memMoveCursor(1, 0)
+}
+
+func hexNibble(r rune) int {
+	switch {
+	case r >= '0' && r <= '9':
+		return int(r - '0')
+	case r >= 'a' && r <= 'f':
+		return int(r-'a') + 10
+	case r >= 'A' && r <= 'F':
+		return int(r-'A') + 10
+	default:
+		return -1
+	}
+}
+
+// writeMemoryByte writes one byte and drops the cached page.
+func (a *App) writeMemoryByte(addr uint64, b byte) {
+	if a.proc == nil {
+		return
+	}
+	if err := a.proc.Write(addr, []byte{b}); err != nil {
+		a.fail(err)
+		return
+	}
+	delete(a.memPageCache, addr&^uint64(memPageSize-1))
+}
+
+// copyMemorySelection copies the selected bytes as spaced hex.
+func (a *App) copyMemorySelection() {
+	if !a.memSelActive {
+		return
+	}
+	lo, hi := a.memSelection()
+	data := a.readCached(lo, int(hi-lo+1))
+	if len(data) == 0 {
+		return
+	}
+	parts := make([]string, len(data))
+	for i, b := range data {
+		parts[i] = fmt.Sprintf("%02X", b)
+	}
+	a.fapp.Clipboard().SetContent(strings.Join(parts, " "))
+	a.setStatusText(i18n.Tf("status.memory_copied", map[string]any{"Count": len(data)}))
 }
 
 func (a *App) updateDisasmRow(id widget.ListItemID, o fyne.CanvasObject) {

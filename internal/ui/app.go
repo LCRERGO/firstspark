@@ -225,7 +225,7 @@ type App struct {
 	memWin       fyne.Window
 	disasm       []asm.Instruction
 	disasmList   *widget.List
-	hexList      *widget.List
+	hexList      *memHexList
 	memAddrEntry *toolTipEntry
 	memType      *ttwidget.Select
 	searchPat    []byte
@@ -233,6 +233,11 @@ type App struct {
 	searchNext   uint64
 
 	memCur          uint64
+	memSelStart     uint64
+	memSelEnd       uint64
+	memSelActive    bool
+	memNibbleHigh   bool
+	memPending      byte
 	memRegion       mem.Region
 	memRegionRows   int
 	memPageCache    map[uint64][]byte

@@ -93,6 +93,7 @@
   "status.script_applied": "script applied: {{.Name}}",
   "status.script_reverted": "script reverted: {{.Name}}",
   "status.memory_changed": "wrote 0x{{.Addr}}",
+  "status.memory_copied": "copied {{.Count}} bytes",
   "status.children_set": "set {{.Count}} values",
   "status.values_set": "set {{.Count}} values",
   "status.nothing_to_save": "nothing to save",
