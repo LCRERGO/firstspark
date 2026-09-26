@@ -66,9 +66,12 @@ func (a *App) installShortcuts() {
 		action := b.action
 		canvas.AddShortcut(sc, func(fyne.Shortcut) { action() })
 	}
-	// Ctrl+C is canvas-only so focused text fields keep their own copy.
+	// Ctrl+C and Ctrl+V are canvas-only so focused text fields keep their own
+	// clipboard handling.
 	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyC, Modifier: fyne.KeyModifierControl},
 		func(fyne.Shortcut) { a.copySelection() })
+	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyV, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.pasteSelection() })
 }
 
 // cheatTable adds the Cheat Engine table key bindings. Fyne delivers bare keys

@@ -53,6 +53,7 @@ type tableEntry struct {
 	pointer     *pointerChain
 	bit         *bitSpec
 	display     displayFormat
+	unsigned    bool
 	hotkey      fyne.KeyName
 	group       bool
 	expanded    bool
@@ -552,11 +553,12 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	a.updateThemeChecks()
 
 	addAddr := fyne.NewMenuItem(i18n.T("menu.table.add_address"), a.addAddressDialog)
+	newGroupItem := fyne.NewMenuItem(i18n.T("menu.table.new_group"), a.newGroup)
 	clear := fyne.NewMenuItem(i18n.T("menu.table.clear"), a.clearTable)
 	custom := fyne.NewMenuItem(i18n.T("menu.table.custom_types"), a.showCustomTypes)
 	pointer := fyne.NewMenuItem(i18n.T("menu.table.pointer_scan"), a.showPointerScan)
 	loadPointer := fyne.NewMenuItem(i18n.T("menu.table.load_pointer_scan"), a.loadPointerScan)
-	table := fyne.NewMenu(i18n.T("menu.table"), addAddr, clear, fyne.NewMenuItemSeparator(), pointer, loadPointer, custom)
+	table := fyne.NewMenu(i18n.T("menu.table"), addAddr, newGroupItem, clear, fyne.NewMenuItemSeparator(), pointer, loadPointer, custom)
 
 	speed := fyne.NewMenuItem(i18n.T("menu.tools.speedhack"), a.toggleSpeedhack)
 	hotkeysItem := fyne.NewMenuItem(i18n.T("menu.tools.hotkeys"), a.showHotkeys)

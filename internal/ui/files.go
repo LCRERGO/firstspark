@@ -84,11 +84,12 @@ func (a *App) applyTable(tbl *cheattable.Table) {
 // entryFromStored converts a stored (possibly nested) entry into a tree node.
 func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 	node := &tableEntry{
-		desc:    e.Description,
-		group:   e.Group,
-		expr:    e.Expr,
-		script:  e.Script,
-		display: parseDisplay(e.Display),
+		desc:     e.Description,
+		group:    e.Group,
+		expr:     e.Expr,
+		script:   e.Script,
+		display:  parseDisplay(e.Display),
+		unsigned: !e.ShowAsSigned,
 	}
 	if s := strings.TrimSpace(e.Offsets); s != "" {
 		for _, part := range strings.Split(s, ",") {
@@ -256,6 +257,7 @@ func entryToStored(e *tableEntry) *cheattable.Entry {
 			out.Hotkey = string(e.hotkey)
 		}
 		out.Display = displayName(e.display)
+		out.ShowAsSigned = !e.unsigned
 		out.Frozen = e.frozen
 		if e.bit != nil {
 			out.Type = "bitfield"

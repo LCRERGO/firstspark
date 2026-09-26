@@ -99,6 +99,11 @@ func (a *App) formatEntryValue(e *tableEntry) string {
 	case displayBinary:
 		return binaryOf(e.value)
 	default:
+		if e.unsigned {
+			if d := scan.TypeByID(e.typ); d != nil && d.Kind == scan.KindInt {
+				return strconv.FormatUint(e.value.Uint64(), 10)
+			}
+		}
 		return e.value.String()
 	}
 }
@@ -517,14 +522,24 @@ func (a *App) setFoundDisplay(d displayFormat) {
 	a.refreshFound()
 }
 
-// copySelection handles Ctrl+C: it copies the selected Found address. Text
-// fields keep their own clipboard handling because Fyne consumes the shortcut
-// before the canvas sees it.
+// copySelection handles Ctrl+C: it copies the active panel's selection, the
+// cheat-table addresses or the selected Found address. Text fields keep their
+// own clipboard handling because Fyne consumes the shortcut first.
 func (a *App) copySelection() {
-	if a.activePanel != panelFound || a.foundSel < 0 || a.foundSel >= len(a.results) {
+	if a.activePanel == panelCheatTable {
+		a.copyTableSelection()
+		return
+	}
+	if a.foundSel < 0 || a.foundSel >= len(a.results) {
 		return
 	}
 	a.copyFoundAddr(a.foundSel)
+}
+
+// pasteSelection handles Ctrl+V: it pastes clipboard addresses into the cheat
+// table.
+func (a *App) pasteSelection() {
+	a.pasteTable()
 }
 
 // browseFoundAddr opens the memory viewer at addr.
@@ -860,6 +875,11 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 			fyne.NewMenuItem(i18n.T("menu.set_children_value"), func() { a.setChildrenValueDialog(row) }),
 			fyne.NewMenuItem(i18n.T("menu.freeze"), func() { a.toggleFreezeRow(row) }),
 			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem(i18n.T("menu.create_group"), a.groupSelection),
+			fyne.NewMenuItem(i18n.T("menu.duplicate"), a.duplicateSelection),
+			fyne.NewMenuItemSeparator(),
+			a.moveUpItem(row), a.moveDownItem(row), a.moveTopItem(row), a.moveBottomItem(row),
+			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem(i18n.T("menu.delete"), func() { a.deleteRow(row) }),
 		)
 		widget.ShowPopUpMenuAtRelativePosition(fyne.NewMenu("", items...), a.win.Canvas(), rel, anchor)
@@ -867,9 +887,18 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 	}
 	menu := fyne.NewMenu("",
 		fyne.NewMenuItem(i18n.T("menu.change_value"), func() { a.changeValueDialog(row) }),
+		fyne.NewMenuItem(i18n.T("menu.change_value_back"), func() { a.changeValueBack(row) }),
 		fyne.NewMenuItem(i18n.T("menu.change_description"), func() { a.changeDescriptionDialog(row) }),
+		a.changeTypeItem(row),
 		fyne.NewMenuItem(i18n.T("menu.configure_bitfield"), func() { a.configureBitfieldDialog(row) }),
 		fyne.NewMenuItem(i18n.T("menu.freeze"), func() { a.toggleFreezeRow(row) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.increase_value"), func() { a.adjustSelectedValues(true) }),
+		fyne.NewMenuItem(i18n.T("menu.decrease_value"), func() { a.adjustSelectedValues(false) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.copy"), func() { a.copyTableSelection() }),
+		fyne.NewMenuItem(i18n.T("menu.paste"), func() { a.pasteTable() }),
+		fyne.NewMenuItem(i18n.T("menu.duplicate"), a.duplicateSelection),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(i18n.T("menu.browse"), func() { a.browseRow(row) }),
 		fyne.NewMenuItem(i18n.T("menu.disassemble"), func() { a.disassembleRow(row) }),
@@ -879,11 +908,377 @@ func (a *App) tableMenu(row, col int, rel fyne.Position, anchor fyne.CanvasObjec
 		fyne.NewMenuItem(i18n.T("menu.show_decimal"), func() { a.setDisplay(row, displayDefault) }),
 		fyne.NewMenuItem(i18n.T("menu.show_hex"), func() { a.setDisplay(row, displayHex) }),
 		fyne.NewMenuItem(i18n.T("menu.show_binary"), func() { a.setDisplay(row, displayBinary) }),
+		fyne.NewMenuItem(i18n.T("menu.show_signed"), func() { a.setUnsigned(row, false) }),
+		fyne.NewMenuItem(i18n.T("menu.show_unsigned"), func() { a.setUnsigned(row, true) }),
 		fyne.NewMenuItem(i18n.T("menu.assign_hotkey"), func() { a.assignHotkey(row) }),
+		fyne.NewMenuItemSeparator(),
+		a.moveUpItem(row), a.moveDownItem(row), a.moveTopItem(row), a.moveBottomItem(row),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(i18n.T("menu.delete"), func() { a.deleteRow(row) }),
 	)
 	widget.ShowPopUpMenuAtRelativePosition(menu, a.win.Canvas(), rel, anchor)
+}
+
+// changeTypeItem builds the "Change record type" submenu.
+func (a *App) changeTypeItem(row int) *fyne.MenuItem {
+	item := fyne.NewMenuItem(i18n.T("menu.change_type"), nil)
+	var children []*fyne.MenuItem
+	for _, t := range scan.Types() {
+		if t.ID == scan.TypeAll || t.ID == scan.TypeGrouped {
+			continue
+		}
+		id := t.ID
+		children = append(children, fyne.NewMenuItem(t.Label, func() { a.changeEntryType(row, id) }))
+	}
+	item.ChildMenu = fyne.NewMenu("", children...)
+	return item
+}
+
+func (a *App) moveUpItem(row int) *fyne.MenuItem {
+	return fyne.NewMenuItem(i18n.T("menu.move_up"), func() { a.moveEntry(row, true) })
+}
+
+func (a *App) moveDownItem(row int) *fyne.MenuItem {
+	return fyne.NewMenuItem(i18n.T("menu.move_down"), func() { a.moveEntry(row, false) })
+}
+
+func (a *App) moveTopItem(row int) *fyne.MenuItem {
+	return fyne.NewMenuItem(i18n.T("menu.move_top"), func() { a.moveEntryEdge(row, true) })
+}
+
+func (a *App) moveBottomItem(row int) *fyne.MenuItem {
+	return fyne.NewMenuItem(i18n.T("menu.move_bottom"), func() { a.moveEntryEdge(row, false) })
+}
+
+// setUnsigned switches an entry between signed and unsigned integer display.
+func (a *App) setUnsigned(row int, u bool) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
+		return
+	}
+	a.entries[row].unsigned = u
+	a.table.Refresh()
+}
+
+// changeEntryType reinterprets an entry's bytes as another type, re-reading the
+// value at the same address and dropping an incompatible bitfield.
+func (a *App) changeEntryType(row int, t scan.ValueType) {
+	if row < 0 || row >= len(a.entries) || a.entries[row].group {
+		return
+	}
+	e := a.entries[row]
+	e.typ = t
+	e.bit = nil
+	if a.proc != nil && e.addr != 0 {
+		w := t.Size()
+		if w == 0 {
+			w = len(e.value.Raw)
+		}
+		if w > 0 {
+			if raw, err := a.proc.Read(e.addr, w); err == nil {
+				e.value = scan.NewValue(t, raw)
+				e.orig = e.value
+				if e.frozen {
+					e.frozenValue = e.value
+					a.syncFreezeTargets()
+				}
+			}
+		}
+	}
+	a.table.Refresh()
+}
+
+// adjustSelectedValues prompts once and adds or subtracts a delta from every
+// selected numeric leaf.
+func (a *App) adjustSelectedValues(increase bool) {
+	sel := a.selectedTableEntries()
+	if len(sel) == 0 {
+		a.setStatusText(i18n.T("status.select_cheat_row"))
+		return
+	}
+	a.promptValue("1", func(input string) {
+		changed := 0
+		for _, e := range sel {
+			if a.adjustEntryValue(e, input, increase) {
+				changed++
+			}
+		}
+		a.syncFreezeTargets()
+		a.table.Refresh()
+		a.setStatusText(i18n.Tf("status.values_set", map[string]any{"Count": changed}))
+	})
+}
+
+// adjustEntryValue applies a delta to one numeric entry and reports success.
+func (a *App) adjustEntryValue(e *tableEntry, deltaText string, increase bool) bool {
+	if e.group || e.bit != nil || e.addr == 0 || e.expr != "" {
+		return false
+	}
+	d := scan.TypeByID(e.typ)
+	if d == nil || (d.Kind != scan.KindInt && d.Kind != scan.KindFloat) {
+		return false
+	}
+	delta, err := scan.ParseValue(e.typ, deltaText)
+	if err != nil {
+		return false
+	}
+	var v scan.Value
+	if d.Kind == scan.KindFloat {
+		n := e.value.Float64()
+		if increase {
+			n += delta.Float64()
+		} else {
+			n -= delta.Float64()
+		}
+		v, err = scan.ParseValue(e.typ, strconv.FormatFloat(n, 'g', -1, 64))
+		if err != nil {
+			return false
+		}
+	} else {
+		n := e.value.Int64()
+		if increase {
+			n += delta.Int64()
+		} else {
+			n -= delta.Int64()
+		}
+		v = scan.NewValue(e.typ, scan.EncodeValue(e.typ, n))
+	}
+	if err := a.writeValue(e.addr, v); err != nil {
+		return false
+	}
+	e.hasUndo = true
+	e.undoValue = e.value
+	e.value = v
+	if e.frozen {
+		e.frozenValue = v
+	}
+	return true
+}
+
+// copyTableSelection copies the selected addresses as newline-separated hex.
+func (a *App) copyTableSelection() {
+	sel := a.selectedTableEntries()
+	lines := make([]string, 0, len(sel))
+	for _, e := range sel {
+		if !e.group && e.addr != 0 {
+			lines = append(lines, fmt.Sprintf("0x%x", e.addr))
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	a.fapp.Clipboard().SetContent(strings.Join(lines, "\n"))
+}
+
+// pasteTable creates a record for every address on the clipboard, accepting
+// "0x1234" or "0x1234 - description" lines.
+func (a *App) pasteTable() {
+	text := a.fapp.Clipboard().Content()
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	typ := a.defaultValueType()
+	added := 0
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		addrText, desc := line, ""
+		if i := strings.Index(line, " - "); i >= 0 {
+			addrText, desc = strings.TrimSpace(line[:i]), strings.TrimSpace(line[i+3:])
+		}
+		addr, err := parseAddress(addrText)
+		if err != nil {
+			continue
+		}
+		e := &tableEntry{addr: addr, typ: typ, desc: desc}
+		if a.proc != nil && typ.Size() > 0 {
+			if raw, rerr := a.proc.Read(addr, typ.Size()); rerr == nil {
+				e.value = scan.NewValue(typ, raw)
+				e.orig = e.value
+			}
+		}
+		a.addRoot(e)
+		added++
+	}
+	if added == 0 {
+		return
+	}
+	a.table.Refresh()
+	a.updateScanControls()
+	a.setStatusText(i18n.Tf("status.records_added", map[string]any{"Count": added}))
+}
+
+// duplicateSelection appends a deep copy of every selected entry as a root.
+func (a *App) duplicateSelection() {
+	sel := a.selectedTableEntries()
+	if len(sel) == 0 {
+		return
+	}
+	for _, e := range sel {
+		a.addRoot(cloneEntry(e))
+	}
+	a.table.Refresh()
+	a.updateScanControls()
+}
+
+// cloneEntry deep-copies an entry and its subtree.
+func cloneEntry(e *tableEntry) *tableEntry {
+	c := *e
+	c.parent = nil
+	c.exprOffsets = append([]string(nil), e.exprOffsets...)
+	if e.pointer != nil {
+		p := *e.pointer
+		p.offsets = append([]int64(nil), e.pointer.offsets...)
+		c.pointer = &p
+	}
+	if e.bit != nil {
+		b := *e.bit
+		c.bit = &b
+	}
+	c.children = nil
+	for _, ch := range e.children {
+		c.children = append(c.children, cloneEntry(ch))
+	}
+	return &c
+}
+
+// newGroup appends an empty group header.
+func (a *App) newGroup() {
+	g := &tableEntry{group: true, expanded: true, desc: i18n.T("group.default")}
+	a.addRoot(g)
+	a.tableSel = a.rowOf(g)
+	a.table.Refresh()
+	a.updateScanControls()
+	a.changeDescriptionDialog(a.tableSel)
+}
+
+// groupSelection wraps the selected top-level entries under a new group.
+func (a *App) groupSelection() {
+	roots := a.selectedRoots()
+	if len(roots) == 0 {
+		a.setStatusText(i18n.T("status.select_cheat_row"))
+		return
+	}
+	mark := map[*tableEntry]bool{}
+	for _, r := range roots {
+		mark[r] = true
+	}
+	insert := -1
+	for i, r := range a.entryRoots {
+		if mark[r] {
+			insert = i
+			break
+		}
+	}
+	kept := a.entryRoots[:0]
+	for _, r := range a.entryRoots {
+		if !mark[r] {
+			kept = append(kept, r)
+		}
+	}
+	a.entryRoots = kept
+	if insert < 0 || insert > len(a.entryRoots) {
+		insert = len(a.entryRoots)
+	}
+	g := &tableEntry{group: true, expanded: true, desc: i18n.T("group.default"), children: roots}
+	for _, r := range roots {
+		r.parent = g
+	}
+	a.entryRoots = append(a.entryRoots, nil)
+	copy(a.entryRoots[insert+1:], a.entryRoots[insert:])
+	a.entryRoots[insert] = g
+	a.rebuildVisible()
+	a.tableSel = a.rowOf(g)
+	a.table.Refresh()
+	a.updateScanControls()
+}
+
+// selectedRoots returns the top-level ancestors of the selection in tree order.
+func (a *App) selectedRoots() []*tableEntry {
+	mark := map[*tableEntry]bool{}
+	for _, e := range a.selectedTableEntries() {
+		for e.parent != nil {
+			e = e.parent
+		}
+		mark[e] = true
+	}
+	var out []*tableEntry
+	for _, r := range a.entryRoots {
+		if mark[r] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// siblingsOf returns the slice an entry lives in.
+func (a *App) siblingsOf(e *tableEntry) []*tableEntry {
+	if e.parent == nil {
+		return a.entryRoots
+	}
+	return e.parent.children
+}
+
+func indexOfEntry(sib []*tableEntry, e *tableEntry) int {
+	for i, x := range sib {
+		if x == e {
+			return i
+		}
+	}
+	return -1
+}
+
+// moveEntry swaps an entry with its previous or next sibling.
+func (a *App) moveEntry(row int, up bool) {
+	if row < 0 || row >= len(a.entries) {
+		return
+	}
+	e := a.entries[row]
+	sib := a.siblingsOf(e)
+	i := indexOfEntry(sib, e)
+	j := i + 1
+	if up {
+		j = i - 1
+	}
+	if i < 0 || j < 0 || j >= len(sib) {
+		return
+	}
+	sib[i], sib[j] = sib[j], sib[i]
+	a.finishMove(e)
+}
+
+// moveEntryEdge moves an entry to the start or end of its sibling list.
+func (a *App) moveEntryEdge(row int, top bool) {
+	if row < 0 || row >= len(a.entries) {
+		return
+	}
+	e := a.entries[row]
+	sib := a.siblingsOf(e)
+	i := indexOfEntry(sib, e)
+	if i < 0 {
+		return
+	}
+	j := len(sib) - 1
+	if top {
+		j = 0
+	}
+	if i == j {
+		return
+	}
+	if j > i {
+		copy(sib[i:j], sib[i+1:j+1])
+	} else {
+		copy(sib[j+1:i+1], sib[j:i])
+	}
+	sib[j] = e
+	a.finishMove(e)
+}
+
+func (a *App) finishMove(e *tableEntry) {
+	a.rebuildVisible()
+	a.tableSel = a.rowOf(e)
+	a.table.Refresh()
 }
 
 func (a *App) toggleFreezeRow(row int) {

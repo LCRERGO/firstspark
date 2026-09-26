@@ -138,3 +138,68 @@ func TestFoundDisplayFormat(t *testing.T) {
 		t.Fatalf("hex = %q, want %q", got, hexOf(v))
 	}
 }
+
+func TestEntrySignedUnsigned(t *testing.T) {
+	a := newTestApp(t)
+	e := &tableEntry{typ: scan.TypeDword, value: scan.NewValue(scan.TypeDword, []byte{0xFF, 0xFF, 0xFF, 0xFF})}
+	if got := a.formatEntryValue(e); got != "-1" {
+		t.Fatalf("signed = %q, want -1", got)
+	}
+	e.unsigned = true
+	if got := a.formatEntryValue(e); got != "4294967295" {
+		t.Fatalf("unsigned = %q", got)
+	}
+}
+
+func TestChangeEntryTypeClearsBitfield(t *testing.T) {
+	a := newTestApp(t)
+	a.entryRoots = []*tableEntry{{addr: 0x10, typ: scan.TypeDword, value: scan.NewValue(scan.TypeDword, []byte{1, 0, 0, 0}), bit: &bitSpec{size: 4, width: 4}}}
+	a.rebuildVisible()
+	a.changeEntryType(0, scan.TypeQword)
+	if a.entryRoots[0].typ != scan.TypeQword || a.entryRoots[0].bit != nil {
+		t.Fatalf("entry after type change = %+v", a.entryRoots[0])
+	}
+}
+
+func TestMoveEntry(t *testing.T) {
+	a := newTestApp(t)
+	a.entryRoots = []*tableEntry{{addr: 1}, {addr: 2}, {addr: 3}}
+	a.rebuildVisible()
+	a.moveEntry(0, false)
+	if a.entryRoots[0].addr != 2 || a.entryRoots[1].addr != 1 {
+		t.Fatalf("after down = %d,%d", a.entryRoots[0].addr, a.entryRoots[1].addr)
+	}
+	a.moveEntryEdge(2, true)
+	if a.entryRoots[0].addr != 3 {
+		t.Fatalf("after top = %d", a.entryRoots[0].addr)
+	}
+}
+
+func TestGroupSelection(t *testing.T) {
+	a := newTestApp(t)
+	a.entryRoots = []*tableEntry{{addr: 1}, {addr: 2}, {addr: 3}}
+	a.rebuildVisible()
+	a.tableMulti = map[*tableEntry]bool{a.entryRoots[0]: true, a.entryRoots[1]: true}
+	a.groupSelection()
+	if len(a.entryRoots) != 2 {
+		t.Fatalf("roots = %d, want 2", len(a.entryRoots))
+	}
+	if !a.entryRoots[0].group || len(a.entryRoots[0].children) != 2 {
+		t.Fatalf("group = %+v", a.entryRoots[0])
+	}
+	if a.entryRoots[1].addr != 3 {
+		t.Fatalf("remaining root = %d", a.entryRoots[1].addr)
+	}
+}
+
+func TestCloneEntry(t *testing.T) {
+	e := &tableEntry{addr: 7, desc: "x", pointer: &pointerChain{base: 1, offsets: []int64{2, 3}}, children: []*tableEntry{{addr: 8}}}
+	c := cloneEntry(e)
+	if c == e || c.addr != 7 || c.pointer == e.pointer || len(c.children) != 1 {
+		t.Fatalf("clone = %+v", c)
+	}
+	c.pointer.offsets[0] = 9
+	if e.pointer.offsets[0] != 2 {
+		t.Fatal("clone shares pointer offsets")
+	}
+}
