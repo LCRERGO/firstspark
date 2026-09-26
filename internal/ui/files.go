@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -37,6 +38,18 @@ func (a *App) loadTable() {
 		for _, ct := range tbl.CustomTypes {
 			if _, ok := scan.LookupType(ct.Name); ok {
 				continue
+			}
+			conv := customtype.CEConversion{
+				Name: ct.Name, Size: ct.Size, Alignment: ct.Alignment,
+				CallMethod: ct.CallMethod, UsesFloat: ct.UsesFloat,
+				UsesString: ct.UsesString, MaxStringSize: ct.MaxStringSize,
+				ConvertRoutine: ct.ConvertRoutine, ConvertBackRoutine: ct.ConvertBackRoutine,
+			}
+			if _, err := customtype.RegisterCE(conv); err == nil {
+				log.Info("custom type conversion registered", "name", ct.Name)
+				continue
+			} else if !errors.Is(err, customtype.ErrConversionUnsupported) {
+				log.Warn("custom type conversion failed, using raw", "name", ct.Name, "err", err)
 			}
 			if _, err := customtype.RegisterRaw(ct.Name, ct.Size); err != nil {
 				log.Warn("custom type import failed", "name", ct.Name, "err", err)

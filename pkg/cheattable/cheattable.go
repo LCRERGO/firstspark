@@ -213,11 +213,16 @@ type ImportStats struct {
 
 // CustomTypeDef is a Cheat Engine custom type definition extracted from a
 // table's scripts (ADR 0037 S5). ConvertRoutine and ConvertBackRoutine hold the
-// Auto Assembler bodies when present; Firstspark registers the type raw because
-// translating arbitrary assembly conversions is a separate follow-up.
+// Auto Assembler bodies; the flags select the Cheat Engine calling convention
+// and result kind (ADR 0048).
 type CustomTypeDef struct {
 	Name               string
 	Size               int
+	Alignment          int
+	CallMethod         bool
+	UsesFloat          bool
+	UsesString         bool
+	MaxStringSize      int
 	ConvertRoutine     string
 	ConvertBackRoutine string
 }

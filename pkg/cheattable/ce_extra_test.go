@@ -67,6 +67,60 @@ func TestCEExtrasRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCECustomTypeFlags(t *testing.T) {
+	body := `
+TypeName:
+  db 'mytype',0
+ByteSize:
+  dd 4
+PREFEREDALIGNMENT:
+  dd 2
+CALLMETHOD:
+  db 1
+ConvertRoutine:
+  mov eax, [rcx]
+  ret
+ConvertBackRoutine:
+  mov [rdx], ecx
+  ret
+`
+	def, ok := customTypeFromAA(body)
+	if !ok {
+		t.Fatal("custom type not extracted")
+	}
+	if def.Name != "mytype" || def.Size != 4 || def.Alignment != 2 || !def.CallMethod {
+		t.Fatalf("def = %+v", def)
+	}
+	if def.UsesFloat || def.UsesString || def.MaxStringSize != 0 {
+		t.Fatalf("unexpected flags: %+v", def)
+	}
+	if def.ConvertRoutine == "" || def.ConvertBackRoutine == "" {
+		t.Fatalf("routines missing: %+v", def)
+	}
+}
+
+func TestCECustomTypeStringFlag(t *testing.T) {
+	body := `
+TypeName:
+  db 'text16',0
+ByteSize:
+  dd 8
+USESSTRING:
+  db 1
+MAXSTRINGSIZE:
+  dd 64
+ConvertRoutine:
+  ret
+`
+	def, ok := customTypeFromAA(body)
+	if !ok {
+		t.Fatal("custom type not extracted")
+	}
+	if !def.UsesString || def.MaxStringSize != 64 {
+		t.Fatalf("def = %+v", def)
+	}
+}
+
 func TestFirstsparkHotkeyExportsAsCEHotkey(t *testing.T) {
 	tbl := &Table{Version: SchemaVersion, Entries: []Entry{
 		{ID: 1, Description: "hp", Address: "0x1000", Type: "dword", Hotkey: "F5"},

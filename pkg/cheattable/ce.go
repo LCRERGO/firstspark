@@ -149,9 +149,68 @@ func customTypeFromAA(s string) (CustomTypeDef, bool) {
 	return CustomTypeDef{
 		Name:               name,
 		Size:               size,
+		Alignment:          symbolValue(lines, "PREFEREDALIGNMENT"),
+		CallMethod:         symbolValue(lines, "CALLMETHOD") != 0,
+		UsesFloat:          symbolValue(lines, "USESFLOAT") != 0,
+		UsesString:         symbolValue(lines, "USESSTRING") != 0,
+		MaxStringSize:      symbolValue(lines, "MAXSTRINGSIZE"),
 		ConvertRoutine:     extractAARoutine(lines, "ConvertRoutine"),
 		ConvertBackRoutine: extractAARoutine(lines, "ConvertBackRoutine"),
 	}, true
+}
+
+// symbolValue finds a Cheat Engine custom-type flag symbol and reads the db/dd
+// value that follows it (a label or an alloc). It returns 0 when absent.
+func symbolValue(lines []string, symbol string) int {
+	for i, l := range lines {
+		if !containsSymbol(l, symbol) {
+			continue
+		}
+		for j := i; j < len(lines) && j < i+5; j++ {
+			fields := strings.Fields(lines[j])
+			for k := 0; k+1 < len(fields); k++ {
+				op := strings.ToLower(strings.TrimSuffix(fields[k], ","))
+				if op != "db" && op != "dw" && op != "dd" && op != "dq" {
+					continue
+				}
+				v := strings.TrimSuffix(fields[k+1], ",")
+				if n, err := strconv.ParseInt(v, 0, 64); err == nil {
+					return int(n)
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// containsSymbol reports whether line contains symbol as a whole identifier.
+func containsSymbol(line, symbol string) bool {
+	up := strings.ToUpper(line)
+	sym := strings.ToUpper(symbol)
+	start := 0
+	for {
+		i := strings.Index(up[start:], sym)
+		if i < 0 {
+			return false
+		}
+		i += start
+		before := byte(0)
+		if i > 0 {
+			before = up[i-1]
+		}
+		after := byte(0)
+		if i+len(sym) < len(up) {
+			after = up[i+len(sym)]
+		}
+		if !isIdentByte(before) && !isIdentByte(after) {
+			return true
+		}
+		start = i + 1
+	}
+}
+
+func isIdentByte(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // extractAARoutine returns the lines after a `label:` up to the next label.
