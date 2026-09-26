@@ -238,6 +238,8 @@ type App struct {
 	memSelActive    bool
 	memNibbleHigh   bool
 	memPending      byte
+	memViewStart    uint64
+	memViewLen      int
 	memRegion       mem.Region
 	memRegionRows   int
 	memPageCache    map[uint64][]byte

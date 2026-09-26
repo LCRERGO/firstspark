@@ -107,14 +107,9 @@ func (a *App) buildMemoryViewer() {
 
 	a.disasmList = widget.NewList(
 		func() int { return len(a.disasm) },
-		func() fyne.CanvasObject { return a.monoText("") },
+		func() fyne.CanvasObject { return a.newDisasmRow() },
 		func(id widget.ListItemID, o fyne.CanvasObject) { a.updateDisasmRow(id, o) },
 	)
-	a.disasmList.OnSelected = func(id widget.ListItemID) {
-		if id >= 0 && id < len(a.disasm) {
-			a.setCursor(a.disasm[id].Addr)
-		}
-	}
 	a.hexList = a.newMemHexList()
 
 	split := container.NewVSplit(a.disasmList, a.hexList)
@@ -129,8 +124,14 @@ func (a *App) buildMemoryViewer() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(i18n.T("menu.view.memory_regions"), a.openMemoryRegions),
 	)
+	fileMenu := fyne.NewMenu(i18n.T("menu.file"),
+		fyne.NewMenuItem(i18n.T("menu.file.save_memory"), func() { a.saveMemoryDialog(a.memViewStart, uint64(a.memViewLen)) }),
+		fyne.NewMenuItem(i18n.T("menu.file.save_selection"), a.saveMemorySelection),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.file.close"), func() { a.memWin.Hide() }),
+	)
 	a.memWin.SetMainMenu(fyne.NewMainMenu(
-		fyne.NewMenu(i18n.T("menu.file"), fyne.NewMenuItem(i18n.T("menu.file.close"), func() { a.memWin.Hide() })),
+		fileMenu,
 		fyne.NewMenu(i18n.T("menu.search"),
 			fyne.NewMenuItem(i18n.T("menu.search.find"), a.findDialog),
 			fyne.NewMenuItem(i18n.T("menu.search.find_next"), a.findNext),
@@ -390,24 +391,23 @@ func (h *hexRow) setParts(prefix string, bytes []string, ascii, value string, lo
 	)
 }
 
-// MouseDown places the byte cursor; Shift extends the selection.
+// MouseDown places the byte cursor; Shift extends the selection and the
+// secondary button opens the memory context menu.
 func (h *hexRow) MouseDown(e *desktop.MouseEvent) {
 	if h.row < 0 {
 		return
 	}
-	base := h.app.memRegion.Start + uint64(h.row)*16
-	cw := fyne.MeasureText("0", h.pre.TextSize, fyne.TextStyle{Monospace: true}).Width
-	if cw <= 0 {
+	addr, ok := h.byteAt(e.Position.X)
+	if !ok {
 		return
 	}
-	k := int((e.Position.X/cw - 18) / 3)
-	if k < 0 {
-		k = 0
+	if e.Button == desktop.MouseButtonSecondary {
+		h.app.memSelActive = false
+		h.app.setCursor(addr)
+		h.app.hexList.Refresh()
+		h.app.memoryMenu(addr, e.Position, h)
+		return
 	}
-	if k > 15 {
-		k = 15
-	}
-	addr := base + uint64(k)
 	if e.Modifier&fyne.KeyModifierShift != 0 && h.app.memSelActive {
 		h.app.memSelEnd = addr
 	} else {
@@ -419,6 +419,22 @@ func (h *hexRow) MouseDown(e *desktop.MouseEvent) {
 	h.app.focusHex()
 	h.app.hexList.Refresh()
 	h.app.setDisasmAt(addr)
+}
+
+// byteAt maps a click x within the row to the byte address.
+func (h *hexRow) byteAt(x float32) (uint64, bool) {
+	cw := fyne.MeasureText("0", h.pre.TextSize, fyne.TextStyle{Monospace: true}).Width
+	if cw <= 0 {
+		return 0, false
+	}
+	k := int((x/cw - 18) / 3)
+	if k < 0 {
+		k = 0
+	}
+	if k > 15 {
+		k = 15
+	}
+	return h.app.memRegion.Start + uint64(h.row)*16 + uint64(k), true
 }
 
 // noGapLayout stacks monospace texts edge to edge so the hex grid stays aligned.
@@ -580,17 +596,143 @@ func (a *App) copyMemorySelection() {
 	a.setStatusText(i18n.Tf("status.memory_copied", map[string]any{"Count": len(data)}))
 }
 
+// memoryMenu is the hex/disassembly context menu.
+func (a *App) memoryMenu(addr uint64, rel fyne.Position, anchor fyne.CanvasObject) {
+	menu := fyne.NewMenu("",
+		fyne.NewMenuItem(i18n.T("menu.follow_pointer"), func() { a.followPointer(addr) }),
+		fyne.NewMenuItem(i18n.T("menu.copy_address"), func() { a.fapp.Clipboard().SetContent(fmt.Sprintf("0x%x", addr)) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.toggle_breakpoint"), func() { a.toggleBreakpointAt(addr) }),
+		fyne.NewMenuItem(i18n.T("menu.find_writes"), func() { a.findWhatWritesAddr(addr, true) }),
+		fyne.NewMenuItem(i18n.T("menu.find_accesses"), func() { a.findWhatWritesAddr(addr, false) }),
+	)
+	widget.ShowPopUpMenuAtRelativePosition(menu, a.memWin.Canvas(), rel, anchor)
+}
+
+// followPointer reads a qword at addr and jumps there when it is mapped.
+func (a *App) followPointer(addr uint64) {
+	if a.proc == nil {
+		a.setStatusText(i18n.T("error.no_process"))
+		return
+	}
+	raw, err := a.proc.Read(addr, 8)
+	if err != nil || len(raw) < 8 {
+		a.fail(fmt.Errorf("read pointer at 0x%x", addr))
+		return
+	}
+	target := scan.NewValue(scan.TypeQword, raw).Uint64()
+	if _, ok := mem.RegionFor(a.memRegions, target); !ok {
+		a.setStatusText(i18n.Tf("status.memory_not_mapped", map[string]any{"Addr": fmt.Sprintf("%x", target)}))
+		return
+	}
+	a.openMemoryViewer()
+	a.loadMemory(target)
+}
+
+// toggleBreakpointAt opens the debugger at addr and toggles a breakpoint.
+func (a *App) toggleBreakpointAt(addr uint64) {
+	a.openDebugger()
+	a.dbgAddrEntry.SetText(fmt.Sprintf("0x%x", addr))
+	if a.dbgSession == nil {
+		a.debuggerAttach()
+	}
+	a.debuggerToggleBreakpoint()
+}
+
+// saveMemorySelection saves the selected bytes to a binary file.
+func (a *App) saveMemorySelection() {
+	if !a.memSelActive {
+		a.setStatusText(i18n.T("status.no_selection"))
+		return
+	}
+	lo, hi := a.memSelection()
+	a.saveMemoryDialog(lo, hi-lo+1)
+}
+
+// saveMemoryDialog writes n bytes at start to a user-chosen file.
+func (a *App) saveMemoryDialog(start, n uint64) {
+	if a.proc == nil {
+		a.setStatusText(i18n.T("error.no_process"))
+		return
+	}
+	if n == 0 {
+		return
+	}
+	data := a.readCached(start, int(n))
+	if len(data) == 0 {
+		a.setStatusText(i18n.T("status.no_memory"))
+		return
+	}
+	d := dialog.NewFileSave(func(w fyne.URIWriteCloser, err error) {
+		if err != nil || w == nil {
+			return
+		}
+		defer w.Close()
+		if _, werr := w.Write(data); werr != nil {
+			a.fail(werr)
+			return
+		}
+		a.setStatusText(i18n.Tf("status.saved", map[string]any{"Path": w.URI().Path()}))
+	}, a.memWin)
+	d.SetFileName(fmt.Sprintf("mem_0x%x.bin", start))
+	d.Show()
+}
+
+// disasmRow is one disassembly line with a context menu.
+type disasmRow struct {
+	widget.BaseWidget
+	app  *App
+	text *canvas.Text
+	row  int
+}
+
+func (a *App) newDisasmRow() *disasmRow {
+	r := &disasmRow{app: a, text: a.th.monoText("", a.pal().text)}
+	r.ExtendBaseWidget(r)
+	return r
+}
+
+func (r *disasmRow) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(r.text)
+}
+
+func (r *disasmRow) addr() (uint64, bool) {
+	if r.row < 0 || r.row >= len(r.app.disasm) {
+		return 0, false
+	}
+	return r.app.disasm[r.row].Addr, true
+}
+
+func (r *disasmRow) Tapped(*fyne.PointEvent) {
+	if addr, ok := r.addr(); ok {
+		r.app.setCursor(addr)
+	}
+}
+
+func (r *disasmRow) MouseDown(e *desktop.MouseEvent) {
+	addr, ok := r.addr()
+	if !ok {
+		return
+	}
+	if e.Button == desktop.MouseButtonSecondary {
+		r.app.memoryMenu(addr, e.Position, r)
+		return
+	}
+	r.app.setCursor(addr)
+}
+
 func (a *App) updateDisasmRow(id widget.ListItemID, o fyne.CanvasObject) {
-	t := o.(*canvas.Text)
+	r := o.(*disasmRow)
+	r.row = int(id)
 	if id < 0 || id >= len(a.disasm) {
-		t.Text = ""
-		t.Refresh()
+		r.text.Text = ""
+		r.text.Refresh()
 		return
 	}
 	ins := a.disasm[id]
-	t.Text = fmt.Sprintf("%016x  %-24x  %s", ins.Addr, ins.Bytes, ins.Text)
-	t.Color = a.pal().text
-	t.Refresh()
+	r.text.Text = fmt.Sprintf("%016x  %-24x  %s", ins.Addr, ins.Bytes, ins.Text)
+	r.text.Color = a.pal().text
+	r.text.Refresh()
 }
 
 // setDisasmAt disassembles a chunk around addr and scrolls to it.
@@ -601,6 +743,8 @@ func (a *App) setDisasmAt(addr uint64) {
 	}
 	data := a.readCached(start, memDisasmChunk)
 	a.disasmBase = start
+	a.memViewStart = start
+	a.memViewLen = len(data)
 	a.disasm = asm.Disassemble(data, start)
 	if a.disasmList != nil {
 		a.disasmList.Refresh()
