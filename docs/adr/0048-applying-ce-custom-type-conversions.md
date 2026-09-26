@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted. P0 and P1 are implemented; P2–P4 remain open.
 
 ## Context
 
@@ -73,11 +73,10 @@ Routine ABIs to support, in order:
 
 - **P0 — metadata (small).** Extract every feature symbol (`PREFEREDALIGNMENT`,
   `USESFLOAT`, `USESSTRING`, `MAXSTRINGSIZE`, `CALLMETHOD`) alongside the
-  routines into `CustomTypeDef`. Mostly done: routines are extracted, flags are
-  not.
+  routines into `CustomTypeDef`. Implemented.
 - **P1 — integer types (medium).** `RegisterCE` with the SysV shim for the two
-  integer ABIs, wired into the GUI/CLI import with `RegisterRaw` fallback and a
-  stat reason. Testable with `customtype.AATest` on a synthetic CE script.
+  integer ABIs, wired into the GUI import with a `RegisterRaw` fallback.
+  Implemented and unit-tested with `customtype.RegisterCE`.
 - **P2 — float (medium).** Extend `RegisterAA` with `kind: float`
   (bit-pattern reinterpretation) and accept `USESFLOAT`.
 - **P3 — string (large).** `kind: string`, the three-argument ABI and the output
