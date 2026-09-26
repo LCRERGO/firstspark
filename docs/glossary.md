@@ -21,6 +21,8 @@ Terms used across the codebase, ADRs and UI.
   edited with read-modify-write so neighbouring bits are preserved (ADR 0030).
 - **Byte cursor** — the selected byte in the Memory Viewer; hex-nibble typing
   writes it and Shift-click extends a selection (ADR 0043).
+- **Call stack** — the best-effort frame-pointer unwind shown in the debugger,
+  with each return address disassembled (ADR 0044).
 - **CE core Lua API** — the bounded subset of Cheat Engine's Lua table-object
   model Firstspark implements for scripts (`AddressList`, `MemoryRecord`,
   `Memscan`, `Process`, memory helpers, timers); GUI and OS-integration units
@@ -40,8 +42,13 @@ Terms used across the codebase, ADRs and UI.
   hotkeys and metadata (`pkg/cheattable`).
 - **Code cave** — executable memory allocated in the target to hold a hook
   handler or relocated instructions (`pkg/inject`).
+- **Conditional breakpoint** — a software breakpoint with an optional
+  `REGISTER op value` condition; a false condition resumes automatically
+  (ADR 0044).
 - **Copy-on-write region** — a private mapping (`p` in `/proc/<pid>/maps`);
   the scan's *Copy on write* filter keeps only these (ADR 0041).
+- **Debug thread** — the TID the debugger is bound to; selecting another thread
+  rebinds and re-attaches the ptrace session (ADR 0044).
 - **Duplicate record** — a deep copy of a cheat-table record (and its subtree)
   appended as a new root; created from the context menu (ADR 0042).
 - **Executable filter** — the scan option that keeps only executable regions,
@@ -66,11 +73,15 @@ Terms used across the codebase, ADRs and UI.
   registers DR0–DR3 (`pkg/debugger/hardware.go`).
 - **Inline hook** — overwriting a function prologue with a jump into a code cave
   (`pkg/inject`).
+- **Instruction trace** — a bounded single-step log of RIP and registers in the
+  debugger (ADR 0044).
 - **Live value** — the value last read from the target process, shown in the
   cheat table's Value column and the Found list's Value column; every cheat-table
   row is re-read on the 500 ms UI tick, as are the Found results (ADR 0040).
 - **Memory Regions browser** — the Memory Viewer window that lists the process
   memory map and jumps to a region (ADR 0043).
+- **Module** — a file-backed region mapped at offset 0; the debugger lists these
+  as load bases (ADR 0044).
 - **Pointermap** — a reverse index from pointer values to the addresses that
   contain them, used by the pointer scan (`pkg/pointerscan`).
 - **Pointer scan** — searching for a chain of pointers, starting at a module or

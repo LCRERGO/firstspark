@@ -24,7 +24,7 @@ or GDB runtime dependency.
 | Pointer scanner (N-level, cached pointermap, `.ptr` load/save) | implemented |
 | Hex viewer/editor with page scrolling, region browser, byte editing and dump | implemented |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
-| Breakpoints, single-step, registers | implemented |
+| Breakpoints, single-step, registers, threads, modules, conditions, call stack, trace | implemented |
 | Debugger GUI, hardware watchpoints, find-accesses/writes | implemented |
 | Structure dissect (compare instances, guess fields, follow pointers) | implemented |
 | Auto Assembler (`alloc`, labels, `db`/`dd`, `aobscan`, enable/disable) | implemented |
