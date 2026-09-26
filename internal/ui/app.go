@@ -179,11 +179,13 @@ type App struct {
 	dbgAddrEntry   *toolTipEntry
 	dbgStatus      *widget.Label
 	dbgStop        chan struct{}
-	dbgBreakpoints map[uint64]bool
+	dbgBreakpoints map[uint64]*dbgBreakpoint
 	dbgWatchpoints map[uint64]int
 	dbgWatchWrite  map[uint64]bool
 	dbgBPList      *dbgList
 	dbgBPLabels    []string
+	dbgBPAddrs     []uint64
+	dbgBPWatch     []bool
 	dbgRegEdit     *toolTipEntry
 	dbgTID         int
 	dbgAttached    bool

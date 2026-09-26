@@ -30,6 +30,14 @@ var dbgRegNames = []string{
 	"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15", "RFLAGS",
 }
 
+// dbgBreakpoint is a software breakpoint with an optional hit condition.
+type dbgBreakpoint struct {
+	addr    uint64
+	cond    string
+	enabled bool
+	hits    int
+}
+
 // openDebugger shows the Debugger window, creating it lazily.
 func (a *App) openDebugger() {
 	if a.proc == nil {
@@ -115,7 +123,7 @@ func (a *App) selectThread(tid int) {
 		a.dbgAttached = false
 	}
 	a.dbgTID = tid
-	a.dbgBreakpoints = map[uint64]bool{}
+	a.dbgBreakpoints = map[uint64]*dbgBreakpoint{}
 	a.refreshBreakpointList()
 	a.refreshThreads()
 	a.dbgStatus.SetText(i18n.Tf("debugger.thread_selected", map[string]any{"TID": tid}))
@@ -148,7 +156,7 @@ func (a *App) buildDebugger() {
 	a.dbgRegVals = make([]string, len(dbgRegNames))
 	a.dbgAddrEntry = newHintEntry("debugger.hint.address")
 	a.dbgAddrEntry.SetPlaceHolder(i18n.T("debugger.address_placeholder"))
-	a.dbgBreakpoints = map[uint64]bool{}
+	a.dbgBreakpoints = map[uint64]*dbgBreakpoint{}
 	a.dbgWatchpoints = map[uint64]int{}
 	a.dbgWatchWrite = map[uint64]bool{}
 
@@ -197,6 +205,11 @@ func (a *App) buildDebugger() {
 			t.Refresh()
 		},
 	)
+	a.dbgBPList.OnSelected = func(id widget.ListItemID) {
+		if id >= 0 && id < len(a.dbgBPAddrs) && !a.dbgBPWatch[id] {
+			a.editBreakpoint(a.dbgBPAddrs[id])
+		}
+	}
 	a.dbgThreadList = a.newDebuggerList(
 		func() int { return len(a.dbgThreads) },
 		func() fyne.CanvasObject { return a.monoText("") },
@@ -390,6 +403,13 @@ func (a *App) debuggerAttach() {
 		return
 	}
 	a.dbgAttached = true
+	for _, bp := range a.dbgBreakpoints {
+		if bp.enabled {
+			if err := a.dbgSession.SetBreakpoint(bp.addr); err != nil {
+				log.Warn("breakpoint reinstall failed", "addr", fmt.Sprintf("0x%x", bp.addr), "err", err)
+			}
+		}
+	}
 	log.Info("debugger attached", "tid", a.debuggerTID())
 	a.dbgStatus.SetText(i18n.Tf("debugger.attached_to", map[string]any{"PID": a.debuggerTID()}))
 	a.debuggerRefresh()
@@ -414,23 +434,52 @@ func (a *App) debuggerContinue() {
 		return
 	}
 	pid := a.proc.PID
+	conds := make(map[uint64]string, len(a.dbgBreakpoints))
+	for addr, bp := range a.dbgBreakpoints {
+		if bp.enabled {
+			conds[addr] = bp.cond
+		}
+	}
 	go func() {
-		if err := a.dbgSession.Continue(); err != nil {
-			fyne.Do(func() { a.fail(err) })
-			return
-		}
-		reason, err := a.dbgSession.Wait()
-		if err != nil {
-			fyne.Do(func() { a.fail(err) })
-			return
-		}
-		switch reason.Event {
-		case debugger.EventExited:
-			log.Warn("target exited while debugging", "pid", pid, "code", reason.ExitCode)
-		case debugger.EventSignaled:
-			log.Warn("target killed by signal while debugging", "pid", pid, "signal", reason.Signal)
+		hits := map[uint64]int{}
+		var reason debugger.StopReason
+		var err error
+		for {
+			if err = a.dbgSession.Continue(); err != nil {
+				break
+			}
+			reason, err = a.dbgSession.Wait()
+			if err != nil || reason.Event != debugger.EventStopped {
+				break
+			}
+			if !reason.HasBreakpoint {
+				break
+			}
+			cond, ok := conds[reason.BreakpointAddr]
+			if !ok {
+				break // a temporary breakpoint (step over) or unknown
+			}
+			if cond != "" {
+				regs, rerr := a.dbgSession.Registers()
+				if rerr == nil && !evalBreakpointCond(cond, regs) {
+					continue
+				}
+			}
+			hits[reason.BreakpointAddr]++
+			break
 		}
 		fyne.Do(func() {
+			if err != nil {
+				a.fail(err)
+				return
+			}
+			a.applyBreakpointHits(hits)
+			switch reason.Event {
+			case debugger.EventExited:
+				log.Warn("target exited while debugging", "pid", pid, "code", reason.ExitCode)
+			case debugger.EventSignaled:
+				log.Warn("target killed by signal while debugging", "pid", pid, "signal", reason.Signal)
+			}
 			a.dbgStatus.SetText(describeStop(reason))
 			if reason.Event != debugger.EventStopped {
 				a.processGone(pid)
@@ -527,7 +576,7 @@ func (a *App) debuggerToggleBreakpoint() {
 		a.fail(err)
 		return
 	}
-	if a.dbgBreakpoints[addr] {
+	if _, ok := a.dbgBreakpoints[addr]; ok {
 		if err := a.dbgSession.ClearBreakpoint(addr); err != nil {
 			a.fail(err)
 			return
@@ -541,7 +590,7 @@ func (a *App) debuggerToggleBreakpoint() {
 		a.fail(err)
 		return
 	}
-	a.dbgBreakpoints[addr] = true
+	a.dbgBreakpoints[addr] = &dbgBreakpoint{addr: addr, enabled: true}
 	a.dbgStatus.SetText(i18n.Tf("debugger.breakpoint", map[string]any{"Addr": fmt.Sprintf("%x", addr)}))
 	a.refreshBreakpointList()
 }
@@ -709,22 +758,196 @@ func (a *App) debuggerRefresh() {
 }
 
 func (a *App) refreshBreakpointList() {
-	labels := make([]string, 0, len(a.dbgBreakpoints)+len(a.dbgWatchpoints))
-	for addr := range a.dbgBreakpoints {
-		labels = append(labels, fmt.Sprintf("BP  0x%x", addr))
+	type row struct {
+		label string
+		addr  uint64
+		watch bool
+	}
+	var rows []row
+	for addr, bp := range a.dbgBreakpoints {
+		state := i18n.T("debugger.state_on")
+		if !bp.enabled {
+			state = i18n.T("debugger.state_off")
+		}
+		label := fmt.Sprintf("BP  0x%x  [%s]  hits %d", addr, state, bp.hits)
+		if bp.cond != "" {
+			label += "  if " + bp.cond
+		}
+		rows = append(rows, row{label, addr, false})
 	}
 	for addr, size := range a.dbgWatchpoints {
 		mode := "r/w"
 		if a.dbgWatchWrite[addr] {
 			mode = "w"
 		}
-		labels = append(labels, fmt.Sprintf("WP  0x%x  %d bytes  %s", addr, size, mode))
+		rows = append(rows, row{fmt.Sprintf("WP  0x%x  %d bytes  %s", addr, size, mode), addr, true})
 	}
-	sort.Strings(labels)
-	a.dbgBPLabels = labels
+	sort.Slice(rows, func(i, j int) bool { return rows[i].addr < rows[j].addr })
+	a.dbgBPLabels = a.dbgBPLabels[:0]
+	a.dbgBPAddrs = a.dbgBPAddrs[:0]
+	a.dbgBPWatch = a.dbgBPWatch[:0]
+	for _, r := range rows {
+		a.dbgBPLabels = append(a.dbgBPLabels, r.label)
+		a.dbgBPAddrs = append(a.dbgBPAddrs, r.addr)
+		a.dbgBPWatch = append(a.dbgBPWatch, r.watch)
+	}
 	if a.dbgBPList != nil {
 		a.dbgBPList.Refresh()
 	}
+}
+
+// applyBreakpointHits folds the hit counts from a continue loop into the map.
+func (a *App) applyBreakpointHits(hits map[uint64]int) {
+	if len(hits) == 0 {
+		return
+	}
+	for addr, n := range hits {
+		if bp := a.dbgBreakpoints[addr]; bp != nil {
+			bp.hits += n
+		}
+	}
+	a.refreshBreakpointList()
+}
+
+// editBreakpoint opens the condition/enable form for a breakpoint.
+func (a *App) editBreakpoint(addr uint64) {
+	bp, ok := a.dbgBreakpoints[addr]
+	if !ok {
+		return
+	}
+	cond := widget.NewEntry()
+	cond.SetText(bp.cond)
+	enabled := widget.NewCheck(i18n.T("debugger.enabled"), nil)
+	enabled.SetChecked(bp.enabled)
+	d := dialog.NewForm(i18n.T("debugger.edit_breakpoint"), i18n.T("action.apply"), i18n.T("action.cancel"),
+		[]*widget.FormItem{
+			widget.NewFormItem(i18n.T("field.address"), widget.NewLabel(fmt.Sprintf("0x%x", addr))),
+			widget.NewFormItem(i18n.T("debugger.condition"), cond),
+			widget.NewFormItem("", enabled),
+		},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			a.applyBreakpointEdit(addr, cond.Text, enabled.Checked)
+		}, a.dbgWin)
+	d.Resize(fyne.NewSize(420, 260))
+	d.Show()
+}
+
+// applyBreakpointEdit validates and stores a breakpoint edit, syncing the
+// enabled state with the backend.
+func (a *App) applyBreakpointEdit(addr uint64, cond string, enabled bool) {
+	bp, ok := a.dbgBreakpoints[addr]
+	if !ok {
+		return
+	}
+	if _, err := parseBreakpointCond(cond); err != nil {
+		a.fail(err)
+		return
+	}
+	bp.cond = strings.TrimSpace(cond)
+	bp.enabled = enabled
+	if a.dbgSession != nil && a.dbgAttached {
+		if enabled {
+			_ = a.dbgSession.SetBreakpoint(addr)
+		} else {
+			_ = a.dbgSession.ClearBreakpoint(addr)
+		}
+	}
+	a.refreshBreakpointList()
+}
+
+// parseBreakpointCond validates "lhs op rhs" with registers or numbers.
+func parseBreakpointCond(cond string) (string, error) {
+	cond = strings.TrimSpace(cond)
+	if cond == "" {
+		return "", nil
+	}
+	for _, op := range []string{"==", "!=", ">=", "<=", ">", "<"} {
+		i := strings.Index(cond, op)
+		if i <= 0 {
+			continue
+		}
+		lhs := strings.TrimSpace(cond[:i])
+		rhs := strings.TrimSpace(cond[i+len(op):])
+		if validCondOperand(lhs) && validCondOperand(rhs) {
+			return op, nil
+		}
+		return "", fmt.Errorf("%s", i18n.T("error.bad_condition"))
+	}
+	return "", fmt.Errorf("%s", i18n.T("error.bad_condition"))
+}
+
+func validCondOperand(s string) bool {
+	if _, ok := regIndex(strings.ToUpper(strings.TrimSpace(s))); ok {
+		return true
+	}
+	_, err := parseUintLoose(s)
+	return err == nil
+}
+
+// evalBreakpointCond evaluates a breakpoint condition against the registers.
+// An unparsable condition is treated as true so it never suppresses a stop.
+func evalBreakpointCond(cond string, regs debugger.Registers) bool {
+	cond = strings.TrimSpace(cond)
+	if cond == "" {
+		return true
+	}
+	values := regValues(regs)
+	for _, op := range []string{"==", "!=", ">=", "<=", ">", "<"} {
+		i := strings.Index(cond, op)
+		if i <= 0 {
+			continue
+		}
+		lv, ok1 := condOperandValue(strings.TrimSpace(cond[:i]), values)
+		rv, ok2 := condOperandValue(strings.TrimSpace(cond[i+len(op):]), values)
+		if !ok1 || !ok2 {
+			return true
+		}
+		switch op {
+		case "==":
+			return lv == rv
+		case "!=":
+			return lv != rv
+		case ">=":
+			return lv >= rv
+		case "<=":
+			return lv <= rv
+		case ">":
+			return lv > rv
+		case "<":
+			return lv < rv
+		}
+	}
+	return true
+}
+
+func condOperandValue(s string, values [18]uint64) (uint64, bool) {
+	if i, ok := regIndex(strings.ToUpper(strings.TrimSpace(s))); ok {
+		return values[i], true
+	}
+	n, err := parseUintLoose(s)
+	return n, err == nil
+}
+
+// regValues orders the register snapshot like dbgRegNames.
+func regValues(regs debugger.Registers) [18]uint64 {
+	return [18]uint64{
+		regs.RIP, regs.RSP, regs.RBP, regs.RAX, regs.RBX, regs.RCX, regs.RDX,
+		regs.RSI, regs.RDI, regs.R8, regs.R9, regs.R10, regs.R11, regs.R12,
+		regs.R13, regs.R14, regs.R15, regs.RFLAGS,
+	}
+}
+
+// regIndex maps a register name to its index in dbgRegNames.
+func regIndex(name string) (int, bool) {
+	for i, n := range dbgRegNames {
+		if n == name {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // applyRegisterEdit applies a "NAME=value" edit to a register snapshot.
