@@ -399,69 +399,45 @@ func familyPalette(f family, v fyne.ThemeVariant) palette {
 	}
 }
 
+// colorFields maps each Fyne colour name to the palette field that supplies it.
+var colorFields = map[fyne.ThemeColorName]func(palette) color.Color{
+	theme.ColorNameBackground:                func(p palette) color.Color { return p.background },
+	theme.ColorNameButton:                    func(p palette) color.Color { return p.surface },
+	theme.ColorNameDisabledButton:            func(p palette) color.Color { return p.separator },
+	theme.ColorNameDisabled:                  func(p palette) color.Color { return p.subtle },
+	theme.ColorNameError:                     func(p palette) color.Color { return p.errColor },
+	theme.ColorNameForeground:                func(p palette) color.Color { return p.text },
+	theme.ColorNameForegroundOnError:         func(p palette) color.Color { return p.onError },
+	theme.ColorNameForegroundOnPrimary:       func(p palette) color.Color { return p.onPrimary },
+	theme.ColorNameForegroundOnSuccess:       func(p palette) color.Color { return p.onSuccess },
+	theme.ColorNameForegroundOnWarning:       func(p palette) color.Color { return p.onWarning },
+	theme.ColorNameHeaderBackground:          func(p palette) color.Color { return p.header },
+	theme.ColorNameHover:                     func(p palette) color.Color { return p.hover },
+	theme.ColorNameHyperlink:                 func(p palette) color.Color { return p.secondary },
+	theme.ColorNameInnerWindowBorder:         func(p palette) color.Color { return p.innerBorder },
+	theme.ColorNameInnerWindowBorderInactive: func(p palette) color.Color { return p.innerBorder },
+	theme.ColorNameInputBackground:           func(p palette) color.Color { return p.input },
+	theme.ColorNameInputBorder:               func(p palette) color.Color { return p.inputBorder },
+	theme.ColorNameMenuBackground:            func(p palette) color.Color { return p.surface },
+	theme.ColorNameOverlayBackground:         func(p palette) color.Color { return p.dialogSurface },
+	theme.ColorNamePlaceHolder:               func(p palette) color.Color { return p.subtle },
+	theme.ColorNamePressed:                   func(p palette) color.Color { return p.primary },
+	theme.ColorNamePrimary:                   func(p palette) color.Color { return p.primary },
+	theme.ColorNameScrollBar:                 func(p palette) color.Color { return p.subtle },
+	theme.ColorNameScrollBarBackground:       func(p palette) color.Color { return p.surface },
+	theme.ColorNameSelection:                 func(p palette) color.Color { return p.selection },
+	theme.ColorNameSeparator:                 func(p palette) color.Color { return p.separator },
+	theme.ColorNameShadow:                    func(p palette) color.Color { return p.scrim },
+	theme.ColorNameSuccess:                   func(p palette) color.Color { return p.success },
+	theme.ColorNameWarning:                   func(p palette) color.Color { return p.warning },
+	theme.ColorNameFocus:                     func(p palette) color.Color { return p.focus },
+}
+
 func (p palette) color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
-	switch n {
-	case theme.ColorNameBackground:
-		return p.background
-	case theme.ColorNameButton:
-		return p.surface
-	case theme.ColorNameDisabledButton:
-		return p.separator
-	case theme.ColorNameDisabled:
-		return p.subtle
-	case theme.ColorNameError:
-		return p.errColor
-	case theme.ColorNameForeground:
-		return p.text
-	case theme.ColorNameForegroundOnError:
-		return p.onError
-	case theme.ColorNameForegroundOnPrimary:
-		return p.onPrimary
-	case theme.ColorNameForegroundOnSuccess:
-		return p.onSuccess
-	case theme.ColorNameForegroundOnWarning:
-		return p.onWarning
-	case theme.ColorNameHeaderBackground:
-		return p.header
-	case theme.ColorNameHover:
-		return p.hover
-	case theme.ColorNameHyperlink:
-		return p.secondary
-	case theme.ColorNameInnerWindowBorder, theme.ColorNameInnerWindowBorderInactive:
-		return p.innerBorder
-	case theme.ColorNameInputBackground:
-		return p.input
-	case theme.ColorNameInputBorder:
-		return p.inputBorder
-	case theme.ColorNameMenuBackground:
-		return p.surface
-	case theme.ColorNameOverlayBackground:
-		return p.dialogSurface
-	case theme.ColorNamePlaceHolder:
-		return p.subtle
-	case theme.ColorNamePressed:
-		return p.primary
-	case theme.ColorNamePrimary:
-		return p.primary
-	case theme.ColorNameScrollBar:
-		return p.subtle
-	case theme.ColorNameScrollBarBackground:
-		return p.surface
-	case theme.ColorNameSelection:
-		return p.selection
-	case theme.ColorNameSeparator:
-		return p.separator
-	case theme.ColorNameShadow:
-		return p.scrim
-	case theme.ColorNameSuccess:
-		return p.success
-	case theme.ColorNameWarning:
-		return p.warning
-	case theme.ColorNameFocus:
-		return p.focus
-	default:
-		return theme.DefaultTheme().Color(n, v)
+	if f, ok := colorFields[n]; ok {
+		return f(p)
 	}
+	return theme.DefaultTheme().Color(n, v)
 }
 
 // cyberTheme is a flat theme with a selectable palette family and variant.
