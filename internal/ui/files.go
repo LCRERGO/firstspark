@@ -28,13 +28,7 @@ func (a *App) loadTable() {
 		}
 		path := r.URI().Path()
 		_ = r.Close()
-		var tbl *cheattable.Table
-		var perr error
-		if strings.HasSuffix(strings.ToLower(path), ".json") {
-			tbl, perr = cheattable.ImportJSON(path)
-		} else {
-			tbl, perr = cheattable.Load(path)
-		}
+		tbl, perr := cheattable.LoadAny(path)
 		if perr != nil {
 			a.fail(perr)
 			return
@@ -50,7 +44,7 @@ func (a *App) loadTable() {
 		a.applyTable(tbl)
 		a.reportCEImport(tbl.Stats)
 	}, a.win)
-	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json"}))
+	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json", ".yaml", ".yml"}))
 	d.Show()
 }
 
@@ -235,20 +229,14 @@ func (a *App) saveTableDialog(name string, tbl *cheattable.Table) {
 		}
 		path := w.URI().Path()
 		_ = w.Close()
-		var serr error
-		if strings.HasSuffix(strings.ToLower(path), ".json") {
-			serr = tbl.ExportJSON(path)
-		} else {
-			serr = tbl.Save(path)
-		}
-		if serr != nil {
+		if serr := tbl.SaveAs(path); serr != nil {
 			a.fail(serr)
 			return
 		}
 		a.setStatusText(i18n.Tf("status.saved", map[string]any{"Path": path}))
 	}, a.win)
 	d.SetFileName(name)
-	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json"}))
+	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json", ".yaml", ".yml"}))
 	d.Show()
 }
 

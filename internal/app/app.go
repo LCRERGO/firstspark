@@ -40,7 +40,7 @@ func Run(args []string) error {
 	cow := fs.Bool("cow", false, "scan copy-on-write regions only")
 	start := fs.String("start", "", "scan range start address (hex)")
 	stop := fs.String("stop", "", "scan range stop address (hex)")
-	export := fs.String("export", "", "export results to a .CT file")
+	export := fs.String("export", "", "export results to a .CT, .json or .yaml file")
 	logLevel := fs.String("log-level", "", "log level (debug|info|warn|error)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
@@ -286,7 +286,7 @@ func exportResults(results []scan.Result, path string) error {
 	for _, r := range results {
 		tbl.Add("", fmt.Sprintf("0x%x", r.Addr), r.Value.Type.String(), r.Value.String())
 	}
-	if err := tbl.Save(path); err != nil {
+	if err := tbl.SaveAs(path); err != nil {
 		return err
 	}
 	fmt.Println(i18n.Tf("cli.exported", map[string]any{"Count": len(results), "Path": path}))

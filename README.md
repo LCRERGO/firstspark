@@ -39,7 +39,7 @@ or GDB runtime dependency.
 | Internationalization (go-i18n catalogs, `ui.language`) | implemented |
 | PINCE-style auto-attach to a process by name | implemented |
 | Fyne desktop GUI | implemented (build tag `gui`) |
-| Firstspark `.CT`/JSON sessions import/export | implemented |
+| Firstspark `.CT`/JSON/YAML sessions import/export | implemented |
 | Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, core Lua, CE export; ADR 0037) |
 
 ## Requirements

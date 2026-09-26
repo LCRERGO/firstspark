@@ -17,42 +17,42 @@ const SchemaVersion = "2"
 
 // Entry is a single cheat table entry.
 type Entry struct {
-	ID          int    `xml:"ID,attr" json:"id"`
-	Description string `xml:"Description,attr" json:"description"`
-	Address     string `xml:"Address,attr" json:"address"`
-	Type        string `xml:"Type,attr" json:"type"`
-	Value       string `xml:",chardata" json:"value"`
+	ID          int    `xml:"ID,attr" json:"id" yaml:"id"`
+	Description string `xml:"Description,attr" json:"description" yaml:"description"`
+	Address     string `xml:"Address,attr" json:"address" yaml:"address"`
+	Type        string `xml:"Type,attr" json:"type" yaml:"type"`
+	Value       string `xml:",chardata" json:"value" yaml:"value"`
 	// Hotkey is the freeze toggle key (F1..F12 or a letter).
-	Hotkey string `xml:"Hotkey,attr,omitempty" json:"hotkey,omitempty"`
+	Hotkey string `xml:"Hotkey,attr,omitempty" json:"hotkey,omitempty" yaml:"hotkey,omitempty"`
 	// Display is the value format: "decimal", "hex" or "binary".
-	Display string `xml:"Display,attr,omitempty" json:"display,omitempty"`
+	Display string `xml:"Display,attr,omitempty" json:"display,omitempty" yaml:"display,omitempty"`
 	// ShowAsSigned renders integer values as signed instead of unsigned.
-	ShowAsSigned bool `xml:"ShowAsSigned,attr,omitempty" json:"show_as_signed,omitempty"`
+	ShowAsSigned bool `xml:"ShowAsSigned,attr,omitempty" json:"show_as_signed,omitempty" yaml:"show_as_signed,omitempty"`
 	// Frozen marks a locked value.
-	Frozen bool `xml:"Frozen,attr,omitempty" json:"frozen,omitempty"`
+	Frozen bool `xml:"Frozen,attr,omitempty" json:"frozen,omitempty" yaml:"frozen,omitempty"`
 	// Encoding is the string encoding for string types (e.g. "utf16le").
-	Encoding string `xml:"Encoding,attr,omitempty" json:"encoding,omitempty"`
+	Encoding string `xml:"Encoding,attr,omitempty" json:"encoding,omitempty" yaml:"encoding,omitempty"`
 	// Pointer is a pointer chain, see FormatPointerChain.
-	Pointer string `xml:"Pointer,attr,omitempty" json:"pointer,omitempty"`
+	Pointer string `xml:"Pointer,attr,omitempty" json:"pointer,omitempty" yaml:"pointer,omitempty"`
 	// BitSize, BitOffset, BitWidth and BitSigned describe a bitfield entry.
-	BitSize   int  `xml:"BitSize,attr,omitempty" json:"bit_size,omitempty"`
-	BitOffset int  `xml:"BitOffset,attr,omitempty" json:"bit_offset,omitempty"`
-	BitWidth  int  `xml:"BitWidth,attr,omitempty" json:"bit_width,omitempty"`
-	BitSigned bool `xml:"BitSigned,attr,omitempty" json:"bit_signed,omitempty"`
+	BitSize   int  `xml:"BitSize,attr,omitempty" json:"bit_size,omitempty" yaml:"bit_size,omitempty"`
+	BitOffset int  `xml:"BitOffset,attr,omitempty" json:"bit_offset,omitempty" yaml:"bit_offset,omitempty"`
+	BitWidth  int  `xml:"BitWidth,attr,omitempty" json:"bit_width,omitempty" yaml:"bit_width,omitempty"`
+	BitSigned bool `xml:"BitSigned,attr,omitempty" json:"bit_signed,omitempty" yaml:"bit_signed,omitempty"`
 	// Group marks a group header: it has no address or value and only parents
 	// children in the tree.
-	Group bool `xml:"Group,attr,omitempty" json:"group,omitempty"`
+	Group bool `xml:"Group,attr,omitempty" json:"group,omitempty" yaml:"group,omitempty"`
 	// Expr is an unresolved Cheat Engine address expression (symbolic or
 	// parent-relative); Address is left empty when Expr is set.
-	Expr string `xml:"Expr,attr,omitempty" json:"expr,omitempty"`
+	Expr string `xml:"Expr,attr,omitempty" json:"expr,omitempty" yaml:"expr,omitempty"`
 	// Offsets is the raw Cheat Engine offset list (comma-separated) that
 	// applies after Expr resolves.
-	Offsets string `xml:"Offsets,attr,omitempty" json:"offsets,omitempty"`
+	Offsets string `xml:"Offsets,attr,omitempty" json:"offsets,omitempty" yaml:"offsets,omitempty"`
 	// Script is the Auto Assembler source of a script record. It is written as
 	// a child element and is not executed on import (ADR 0039).
-	Script string `xml:"Script" json:"script,omitempty"`
+	Script string `xml:"Script" json:"script,omitempty" yaml:"script,omitempty"`
 	// Children are the nested records of a group or script.
-	Children []Entry `xml:"CheatEntries>CheatEntry,omitempty" json:"children,omitempty"`
+	Children []Entry `xml:"CheatEntries>CheatEntry,omitempty" json:"children,omitempty" yaml:"children,omitempty"`
 }
 
 // MarshalXML writes an entry without emitting an empty <CheatEntries> wrapper.
@@ -131,14 +131,14 @@ func (e Entry) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
 
 // Table is a flat list of cheat entries.
 type Table struct {
-	XMLName xml.Name `xml:"CheatTable" json:"-"`
-	Version string   `xml:"Version,attr,omitempty" json:"version,omitempty"`
-	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries"`
+	XMLName xml.Name `xml:"CheatTable" json:"-" yaml:"-"`
+	Version string   `xml:"Version,attr,omitempty" json:"version,omitempty" yaml:"version,omitempty"`
+	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries" yaml:"entries"`
 	// Stats summarises a Cheat Engine conversion. It is not serialized.
-	Stats ImportStats `xml:"-" json:"-"`
+	Stats ImportStats `xml:"-" json:"-" yaml:"-"`
 	// CustomTypes lists Cheat Engine custom type definitions found in the
 	// table's scripts. It is not serialized.
-	CustomTypes []CustomTypeDef `xml:"-" json:"-"`
+	CustomTypes []CustomTypeDef `xml:"-" json:"-" yaml:"-"`
 }
 
 // ImportStats reports the outcome of converting a Cheat Engine .CT file into
