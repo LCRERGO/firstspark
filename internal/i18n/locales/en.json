@@ -379,6 +379,10 @@
   "debugger.edit_breakpoint": "Edit Breakpoint",
   "debugger.state_on": "on",
   "debugger.state_off": "off",
+  "debugger.trace": "Trace",
+  "debugger.trace_steps": "Steps",
+  "debugger.trace_done": "traced {{.Count}} instructions",
+  "debugger.hint.trace": "Single-step the target and record each instruction.",
   "debugger.hint.refresh": "Re-read registers and the thread/module lists.",
   "debugger.hint.follow_rip": "Open the Memory Viewer at RIP.",
   "debugger.hint.follow_rsp": "Open the Memory Viewer at RSP.",
@@ -455,6 +459,7 @@
   "error.invalid_argument": "invalid argument {{.Arg}}",
   "error.bitfield_range": "bitfield offset/width is out of range",
   "error.bad_condition": "condition must be REGISTER op value, e.g. RAX == 0x10",
+  "error.trace_steps": "steps must be a positive number",
 
   "bitfield.offset": "Bit offset",
   "bitfield.width": "Bit width",
