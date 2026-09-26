@@ -211,123 +211,52 @@ func (a *App) buildDebugger() {
 	a.dbgBreakpoints = map[uint64]*dbgBreakpoint{}
 	a.dbgWatchpoints = map[uint64]int{}
 	a.dbgWatchWrite = map[uint64]bool{}
+	a.dbgRegEdit = newHintEntry("debugger.hint.register_edit")
+	a.dbgRegEdit.SetPlaceHolder(i18n.T("debugger.register_edit_placeholder"))
+	a.buildDebuggerLists()
 
-	a.dbgRegs = a.newDebuggerList(
-		func() int { return len(dbgRegNames) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(dbgRegNames) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			t.Text = fmt.Sprintf("%-7s %s", dbgRegNames[id], a.dbgRegVals[id])
-			t.Color = a.pal().text
-			t.Refresh()
-		},
+	tabs := container.NewAppTabs(
+		container.NewTabItem(i18n.T("debugger.tab.registers"), a.dbgRegs),
+		container.NewTabItem(i18n.T("debugger.tab.threads"), a.dbgThreadList),
+		container.NewTabItem(i18n.T("debugger.tab.modules"), a.dbgModuleList),
+		container.NewTabItem(i18n.T("debugger.tab.breakpoints"), a.dbgBPList),
+		container.NewTabItem(i18n.T("debugger.tab.hits"), a.dbgHits),
+		container.NewTabItem(i18n.T("debugger.tab.stack"), a.dbgStackList),
+		container.NewTabItem(i18n.T("debugger.tab.trace"), a.dbgTraceList),
 	)
-	a.dbgHits = a.newDebuggerList(
-		func() int { return len(a.dbgHitLabels) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.dbgHitLabels) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			t.Text = a.dbgHitLabels[id]
-			t.Color = a.pal().text
-			t.Refresh()
-		},
-	)
-	a.dbgBPList = a.newDebuggerList(
-		func() int { return len(a.dbgBPLabels) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.dbgBPLabels) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			t.Text = a.dbgBPLabels[id]
-			t.Color = a.pal().text
-			t.Refresh()
-		},
-	)
+	content := container.NewBorder(a.buildDebuggerControls(), nil, nil, nil, tabs)
+	a.dbgWin.SetContent(fynetooltip.AddWindowToolTipLayer(content, a.dbgWin.Canvas()))
+}
+
+// buildDebuggerLists creates the tab lists and their selection handlers.
+func (a *App) buildDebuggerLists() {
+	a.dbgRegs = a.newTextList(a.dbgRegLines)
+	a.dbgHits = a.newTextList(func() []string { return a.dbgHitLabels })
+	a.dbgTraceList = a.newTextList(func() []string { return a.dbgTrace })
+
+	a.dbgBPList = a.newTextList(func() []string { return a.dbgBPLabels })
 	a.dbgBPList.OnSelected = func(id widget.ListItemID) {
 		if id >= 0 && id < len(a.dbgBPAddrs) && !a.dbgBPWatch[id] {
 			a.editBreakpoint(a.dbgBPAddrs[id])
 		}
 	}
-	a.dbgThreadList = a.newDebuggerList(
-		func() int { return len(a.dbgThreads) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.dbgThreads) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			tid := a.dbgThreads[id]
-			mark := "  "
-			if tid == a.dbgTID {
-				mark = "* "
-			}
-			name := ""
-			if a.proc != nil {
-				name = threadName(a.proc.PID, tid)
-			}
-			t.Text = fmt.Sprintf("%s%d  %s", mark, tid, name)
-			t.Color = a.pal().text
-			t.Refresh()
-		},
-	)
+
+	a.dbgThreadList = a.newTextList(a.dbgThreadLines)
 	a.dbgThreadList.OnSelected = func(id widget.ListItemID) {
 		if id >= 0 && id < len(a.dbgThreads) {
 			a.selectThread(a.dbgThreads[id])
 		}
 	}
-	a.dbgModuleList = a.newDebuggerList(
-		func() int { return len(a.dbgModules) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.dbgModules) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			r := a.dbgModules[id]
-			t.Text = fmt.Sprintf("0x%012x  %10s  %s", r.Start, humanBytes(r.Size()), r.Path)
-			t.Color = a.pal().text
-			t.Refresh()
-		},
-	)
+
+	a.dbgModuleList = a.newTextList(a.dbgModuleLines)
 	a.dbgModuleList.OnSelected = func(id widget.ListItemID) {
 		if id >= 0 && id < len(a.dbgModules) {
 			a.openMemoryViewer()
 			a.loadMemory(a.dbgModules[id].Start)
 		}
 	}
-	a.dbgStackList = a.newDebuggerList(
-		func() int { return len(a.dbgStack) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.dbgStack) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			t.Text = a.dbgStack[id]
-			t.Color = a.pal().text
-			t.Refresh()
-		},
-	)
+
+	a.dbgStackList = a.newTextList(func() []string { return a.dbgStack })
 	a.dbgStackList.OnSelected = func(id widget.ListItemID) {
 		if id >= 0 && id < len(a.dbgStackAddrs) {
 			addr := a.dbgStackAddrs[id]
@@ -336,22 +265,10 @@ func (a *App) buildDebugger() {
 			a.loadMemory(addr)
 		}
 	}
-	a.dbgTraceList = a.newDebuggerList(
-		func() int { return len(a.dbgTrace) },
-		func() fyne.CanvasObject { return a.monoText("") },
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			t := o.(*canvas.Text)
-			if id < 0 || id >= len(a.dbgTrace) {
-				t.Text = ""
-				t.Refresh()
-				return
-			}
-			t.Text = a.dbgTrace[id]
-			t.Color = a.pal().text
-			t.Refresh()
-		},
-	)
+}
 
+// buildDebuggerControls assembles the toolbar rows above the tabs.
+func (a *App) buildDebuggerControls() fyne.CanvasObject {
 	controls := container.NewHBox(
 		newHintButton(i18n.T("debugger.attach"), "debugger.hint.attach", a.debuggerAttach),
 		newHintButton(i18n.T("debugger.detach"), "debugger.hint.detach", a.debuggerDetach),
@@ -373,23 +290,67 @@ func (a *App) buildDebugger() {
 		newHintButton(i18n.T("debugger.trace"), "debugger.hint.trace", a.debuggerTraceDialog),
 		newHintButton(i18n.T("debugger.refresh"), "debugger.hint.refresh", a.debuggerRefresh),
 	)
-	a.dbgRegEdit = newHintEntry("debugger.hint.register_edit")
-	a.dbgRegEdit.SetPlaceHolder(i18n.T("debugger.register_edit_placeholder"))
 	register := container.NewHBox(
 		a.dbgRegEdit,
 		newHintButton(i18n.T("debugger.set_register"), "debugger.hint.set_register", a.debuggerSetRegister),
 	)
-	top := container.NewVBox(container.NewHScroll(controls), container.NewHScroll(watch), follow, register, a.dbgStatus)
-	tabs := container.NewAppTabs(
-		container.NewTabItem(i18n.T("debugger.tab.registers"), a.dbgRegs),
-		container.NewTabItem(i18n.T("debugger.tab.threads"), a.dbgThreadList),
-		container.NewTabItem(i18n.T("debugger.tab.modules"), a.dbgModuleList),
-		container.NewTabItem(i18n.T("debugger.tab.breakpoints"), a.dbgBPList),
-		container.NewTabItem(i18n.T("debugger.tab.hits"), a.dbgHits),
-		container.NewTabItem(i18n.T("debugger.tab.stack"), a.dbgStackList),
-		container.NewTabItem(i18n.T("debugger.tab.trace"), a.dbgTraceList),
+	return container.NewVBox(container.NewHScroll(controls), container.NewHScroll(watch), follow, register, a.dbgStatus)
+}
+
+// newTextList builds a debugger list that renders each string from items().
+func (a *App) newTextList(items func() []string) *dbgList {
+	return a.newDebuggerList(
+		func() int { return len(items()) },
+		func() fyne.CanvasObject { return a.monoText("") },
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			t := o.(*canvas.Text)
+			rows := items()
+			if id < 0 || id >= len(rows) {
+				t.Text = ""
+				t.Refresh()
+				return
+			}
+			t.Text = rows[id]
+			t.Color = a.pal().text
+			t.Refresh()
+		},
 	)
-	a.dbgWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(top, nil, nil, nil, tabs), a.dbgWin.Canvas()))
+}
+
+func (a *App) dbgRegLines() []string {
+	out := make([]string, len(dbgRegNames))
+	for i, name := range dbgRegNames {
+		v := ""
+		if i < len(a.dbgRegVals) {
+			v = a.dbgRegVals[i]
+		}
+		out[i] = fmt.Sprintf("%-7s %s", name, v)
+	}
+	return out
+}
+
+func (a *App) dbgThreadLines() []string {
+	pid := 0
+	if a.proc != nil {
+		pid = a.proc.PID
+	}
+	out := make([]string, len(a.dbgThreads))
+	for i, tid := range a.dbgThreads {
+		mark := "  "
+		if tid == a.dbgTID {
+			mark = "* "
+		}
+		out[i] = fmt.Sprintf("%s%d  %s", mark, tid, threadName(pid, tid))
+	}
+	return out
+}
+
+func (a *App) dbgModuleLines() []string {
+	out := make([]string, len(a.dbgModules))
+	for i, r := range a.dbgModules {
+		out[i] = fmt.Sprintf("0x%012x  %10s  %s", r.Start, humanBytes(r.Size()), r.Path)
+	}
+	return out
 }
 
 // dbgList is a list that also handles the debugger's bare function keys, which

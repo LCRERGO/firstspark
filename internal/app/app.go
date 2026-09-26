@@ -120,6 +120,37 @@ func headlessScan(cfg config.Config, pid int, f scanFlags) error {
 		return err
 	}
 	log.Info("headless scan", "pid", pid, "type", f.typ, "mode", f.mode, "next", f.next)
+	opts, vt, err := headlessOptions(cfg, f)
+	if err != nil {
+		return err
+	}
+
+	session := scan.NewSession(proc, opts)
+	if err := session.First(context.Background(), nil); err != nil {
+		return err
+	}
+	fmt.Println(i18n.Tf("cli.first_scan", map[string]any{"Count": session.Count()}))
+
+	if f.next != "" {
+		if err := headlessNext(session, opts, vt, f); err != nil {
+			return err
+		}
+	}
+
+	results := session.Results()
+	if limit := cfg.UI.ResultLimit; limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+	printResults(results)
+	if f.export != "" {
+		return exportResults(results, f.export)
+	}
+	return nil
+}
+
+// headlessOptions turns the CLI flags into scan options and the resolved value
+// type (used again by the --next scan).
+func headlessOptions(cfg config.Config, f scanFlags) (scan.Options, scan.ValueType, error) {
 	opts := scan.DefaultOptions()
 	opts.Alignment = cfg.Scan.Alignment
 	opts.SnapshotLimit = cfg.Scan.SnapshotLimit
@@ -132,10 +163,20 @@ func headlessScan(cfg config.Config, pid int, f scanFlags) error {
 	}
 	vt, err := scan.ParseValueType(f.typ)
 	if err != nil {
-		return err
+		return opts, vt, err
 	}
 	opts.Type = vt
+	if err := applyScanFlags(&opts, f); err != nil {
+		return opts, vt, err
+	}
+	if err := applyScanValue(&opts, vt, f); err != nil {
+		return opts, vt, err
+	}
+	return opts, vt, nil
+}
 
+// applyScanFlags applies the mode, comparison and region-filter flags.
+func applyScanFlags(opts *scan.Options, f scanFlags) error {
 	if f.mode != "" {
 		sm, err := scan.ParseScanMode(f.mode)
 		if err != nil {
@@ -158,20 +199,28 @@ func headlessScan(cfg config.Config, pid int, f scanFlags) error {
 		opts.Executable = em
 	}
 	opts.CopyOnWrite = f.cow
-	if opts.Start, err = parseHexAddr(f.start); err != nil {
+	start, err := parseHexAddr(f.start)
+	if err != nil {
 		return err
 	}
-	if opts.Stop, err = parseHexAddr(f.stop); err != nil {
+	stop, err := parseHexAddr(f.stop)
+	if err != nil {
 		return err
 	}
+	opts.Start, opts.Stop = start, stop
+	return nil
+}
 
-	if opts.Type == scan.TypeGrouped {
+// applyScanValue parses the value (and between bound) for the selected mode.
+func applyScanValue(opts *scan.Options, vt scan.ValueType, f scanFlags) error {
+	switch {
+	case opts.Type == scan.TypeGrouped:
 		gp, err := scan.ParseGrouped(f.value)
 		if err != nil {
 			return err
 		}
 		opts.Grouped = gp
-	} else if modeTakesValue(opts.Mode) {
+	case modeTakesValue(opts.Mode):
 		v, err := scan.ParseValue(vt, f.value)
 		if err != nil {
 			return err
@@ -190,63 +239,57 @@ func headlessScan(cfg config.Config, pid int, f scanFlags) error {
 		}
 		opts.Value2 = v2
 	}
+	return nil
+}
 
-	session := scan.NewSession(proc, opts)
-	if err := session.First(context.Background(), nil); err != nil {
+// headlessNext applies and runs the --next scan.
+func headlessNext(session *scan.Session, opts scan.Options, vt scan.ValueType, f scanFlags) error {
+	nm, err := scan.ParseScanMode(f.next)
+	if err != nil {
 		return err
 	}
-	fmt.Println(i18n.Tf("cli.first_scan", map[string]any{"Count": session.Count()}))
-
-	if f.next != "" {
-		nm, err := scan.ParseScanMode(f.next)
+	session.SetMode(nm)
+	if modeTakesValue(nm) && opts.Type != scan.TypeGrouped {
+		v, err := scan.ParseValue(vt, f.value)
 		if err != nil {
 			return err
 		}
-		session.SetMode(nm)
-		if modeTakesValue(nm) && opts.Type != scan.TypeGrouped {
-			v, err := scan.ParseValue(vt, f.value)
-			if err != nil {
-				return err
-			}
-			session.SetValue(v)
-		}
-		if nm == scan.ModeBetween {
-			v, err := scan.ParseValue(vt, f.value)
-			if err != nil {
-				return err
-			}
-			session.SetValue(v)
-			v2, err := scan.ParseValue(vt, f.value2)
-			if err != nil {
-				return err
-			}
-			session.SetValue2(v2)
-		}
-		if err := session.Next(context.Background(), nil); err != nil {
+		session.SetValue(v)
+	}
+	if nm == scan.ModeBetween {
+		v, err := scan.ParseValue(vt, f.value)
+		if err != nil {
 			return err
 		}
-		fmt.Println(i18n.Tf("cli.next_scan", map[string]any{"Mode": nm, "Count": session.Count()}))
+		session.SetValue(v)
+		v2, err := scan.ParseValue(vt, f.value2)
+		if err != nil {
+			return err
+		}
+		session.SetValue2(v2)
 	}
+	if err := session.Next(context.Background(), nil); err != nil {
+		return err
+	}
+	fmt.Println(i18n.Tf("cli.next_scan", map[string]any{"Mode": nm, "Count": session.Count()}))
+	return nil
+}
 
-	results := session.Results()
-	limit := cfg.UI.ResultLimit
-	if limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
+func printResults(results []scan.Result) {
 	for _, r := range results {
 		fmt.Printf("0x%x = %s\n", r.Addr, r.Value.String())
 	}
+}
 
-	if f.export != "" {
-		tbl := &cheattable.Table{}
-		for _, r := range results {
-			tbl.Add("", fmt.Sprintf("0x%x", r.Addr), r.Value.Type.String(), r.Value.String())
-		}
-		if err := tbl.Save(f.export); err != nil {
-			return err
-		}
-		fmt.Println(i18n.Tf("cli.exported", map[string]any{"Count": len(results), "Path": f.export}))
+func exportResults(results []scan.Result, path string) error {
+	tbl := &cheattable.Table{}
+	for _, r := range results {
+		tbl.Add("", fmt.Sprintf("0x%x", r.Addr), r.Value.Type.String(), r.Value.String())
 	}
+	if err := tbl.Save(path); err != nil {
+		return err
+	}
+	fmt.Println(i18n.Tf("cli.exported", map[string]any{"Count": len(results), "Path": path}))
 	return nil
 }
 

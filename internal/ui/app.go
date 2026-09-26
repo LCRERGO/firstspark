@@ -440,66 +440,70 @@ func (a *App) toolbar() *widget.Toolbar {
 // state, mirroring Cheat Engine's blocked buttons.
 func (a *App) updateScanControls() {
 	mode := parseCEScanType(a.scanType.Selected)
-
 	if a.scanning {
-		if a.scanBtn != nil {
-			setEnabled(a.scanBtn, false)
-		}
-		if a.nextBtn != nil {
-			setEnabled(a.nextBtn, false)
-		}
-		if a.undoBtn != nil {
-			setEnabled(a.undoBtn, false)
-		}
-		if a.stopBtn != nil {
-			setEnabled(a.stopBtn, true)
-		}
+		a.setScanButtons(false, false, false, true)
 		return
 	}
-	if a.stopBtn != nil {
-		setEnabled(a.stopBtn, false)
-	}
+	a.setScanButtons(a.proc != nil, a.session != nil, a.session != nil && a.session.CanUndo(), false)
+	a.updateValueControls(mode)
+	a.updateTableActions()
+}
+
+// setScanButtons enables the scan button set.
+func (a *App) setScanButtons(canScan, canNext, canUndo, canStop bool) {
 	if a.scanBtn != nil {
-		setEnabled(a.scanBtn, a.proc != nil)
+		setEnabled(a.scanBtn, canScan)
 	}
 	if a.nextBtn != nil {
-		setEnabled(a.nextBtn, a.session != nil)
+		setEnabled(a.nextBtn, canNext)
 	}
 	if a.undoBtn != nil {
-		setEnabled(a.undoBtn, a.session != nil && a.session.CanUndo())
+		setEnabled(a.undoBtn, canUndo)
 	}
+	if a.stopBtn != nil {
+		setEnabled(a.stopBtn, canStop)
+	}
+}
+
+// updateValueControls enables and shows the value controls for a scan mode.
+func (a *App) updateValueControls(mode scan.ScanMode) {
 	if a.valueEntry != nil {
 		setEnabled(a.valueEntry, modeNeedsValue(mode))
 		a.valueEntry.SetPlaceHolder(valuePlaceholder(mode))
 	}
 	between := mode == scan.ModeBetween
 	if a.andLabel != nil {
-		if between {
-			a.andLabel.Show()
-		} else {
-			a.andLabel.Hide()
-		}
-		a.andLabel.Refresh()
+		setVisible(a.andLabel, between)
 	}
 	if a.value2Entry != nil {
 		setEnabled(a.value2Entry, between)
-		if between {
-			a.value2Entry.Show()
-		} else {
-			a.value2Entry.Hide()
-		}
-		a.value2Entry.Refresh()
+		setVisible(a.value2Entry, between)
 	}
 	if a.compareSelect != nil {
 		setEnabled(a.compareSelect, mode == scan.ModeExact)
 	}
+}
 
+// updateTableActions enables the toolbar actions that depend on app state.
+func (a *App) updateTableActions() {
 	hasTable := len(a.entryRoots) > 0
 	setActionEnabled(a.saveAction, hasTable)
 	setActionEnabled(a.saveAsAction, hasTable)
 	setActionEnabled(a.memViewAction, a.proc != nil)
 	setActionEnabled(a.addAddrAction, a.proc != nil)
 	setActionEnabled(a.clearAction, hasTable)
+}
+
+func setVisible(o fyne.CanvasObject, visible bool) {
+	if o == nil {
+		return
+	}
+	if visible {
+		o.Show()
+	} else {
+		o.Hide()
+	}
+	o.Refresh()
 }
 
 // updateScanTypeOptions swaps the Scan Type list between the first-scan and
@@ -731,14 +735,7 @@ func (a *App) shutdown() {
 
 func (a *App) freezeLoop() {
 	const freezeTick = 50 * time.Millisecond
-	refresh := a.cfg.UI.RefreshMS
-	if refresh < int(freezeTick/time.Millisecond) {
-		refresh = 500
-	}
-	every := refresh / int(freezeTick/time.Millisecond)
-	if every < 1 {
-		every = 1
-	}
+	every := a.refreshTickEvery(int(freezeTick / time.Millisecond))
 	ticker := time.NewTicker(freezeTick)
 	defer ticker.Stop()
 	tick := 0
@@ -748,35 +745,61 @@ func (a *App) freezeLoop() {
 		case <-a.stop:
 			return
 		case <-ticker.C:
-			a.mu.Lock()
-			proc := a.proc
-			if proc != nil {
-				for addr, v := range a.freezeTargets {
-					if err := proc.Write(addr, v.Raw); err != nil {
-						if time.Since(lastWriteErr) > 5*time.Second {
-							log.Warn("freeze write failed", "pid", proc.PID, "addr", fmt.Sprintf("0x%x", addr), "err", err)
-							lastWriteErr = time.Now()
-						}
-					}
-				}
-			}
-			a.mu.Unlock()
+			a.writeFrozen(&lastWriteErr)
 			tick++
 			if tick%every == 0 {
-				fyne.Do(func() {
-					changed := a.refreshEntries()
-					a.refreshFoundValues()
-					a.syncFreezeTargets()
-					a.runLuaTimers()
-					if changed && a.table != nil {
-						a.table.Refresh()
-					}
-					if a.foundList != nil {
-						a.foundList.Refresh()
-					}
-				})
+				fyne.Do(a.refreshUI)
 			}
 		}
+	}
+}
+
+// refreshTickEvery converts the configured refresh interval into a number of
+// freeze ticks, clamped to at least one and defaulting to 500 ms.
+func (a *App) refreshTickEvery(tickMS int) int {
+	if tickMS < 1 {
+		tickMS = 50
+	}
+	refresh := a.cfg.UI.RefreshMS
+	if refresh < tickMS {
+		refresh = 500
+	}
+	every := refresh / tickMS
+	if every < 1 {
+		every = 1
+	}
+	return every
+}
+
+// writeFrozen rewrites every frozen target under the state lock.
+func (a *App) writeFrozen(lastWriteErr *time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	proc := a.proc
+	if proc == nil {
+		return
+	}
+	for addr, v := range a.freezeTargets {
+		if err := proc.Write(addr, v.Raw); err != nil {
+			if time.Since(*lastWriteErr) > 5*time.Second {
+				log.Warn("freeze write failed", "pid", proc.PID, "addr", fmt.Sprintf("0x%x", addr), "err", err)
+				*lastWriteErr = time.Now()
+			}
+		}
+	}
+}
+
+// refreshUI re-reads the cheat table and Found values on the UI goroutine.
+func (a *App) refreshUI() {
+	changed := a.refreshEntries()
+	a.refreshFoundValues()
+	a.syncFreezeTargets()
+	a.runLuaTimers()
+	if changed && a.table != nil {
+		a.table.Refresh()
+	}
+	if a.foundList != nil {
+		a.foundList.Refresh()
 	}
 }
 
