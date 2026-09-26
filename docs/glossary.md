@@ -78,6 +78,8 @@ Terms used across the codebase, ADRs and UI.
 - **Live value** — the value last read from the target process, shown in the
   cheat table's Value column and the Found list's Value column; every cheat-table
   row is re-read on the 500 ms UI tick, as are the Found results (ADR 0040).
+- **Lua Engine** — the console window that evaluates Lua chunks against the
+  shared `pkg/celua` runtime; `print` writes to its output log (ADR 0045).
 - **Memory Regions browser** — the Memory Viewer window that lists the process
   memory map and jumps to a region (ADR 0043).
 - **Module** — a file-backed region mapped at offset 0; the debugger lists these
@@ -113,4 +115,6 @@ Terms used across the codebase, ADRs and UI.
   hardware watchpoint (`debugger.Session.Watch`).
 - **Undo value** — the value captured just before the last manual Change value;
   `Ctrl+Z` restores it and moves the frozen value when the entry is frozen.
+- **Unrandomizer** — hooking libc `rand`/`random`/`rand_r` to return a constant
+  so randomised values become predictable (ADR 0045).
 - **Watchpoint** — see *Hardware watchpoint*.

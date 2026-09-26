@@ -33,6 +33,8 @@ or GDB runtime dependency.
 | Assembler (pure-Go Intel syntax, common subset) | implemented |
 | Inline trampoline hooking + remote `mmap`/`mprotect` | implemented |
 | Speedhack (`clock_gettime`, `gettimeofday`), wired to the UI | implemented (experimental) |
+| Unrandomizer (constant `rand`/`random`/`rand_r` hooks) | implemented |
+| Lua Engine console (`pkg/celua`) | implemented |
 | Remote function calls (int/float/double arguments) | implemented |
 | Internationalization (go-i18n catalogs, `ui.language`) | implemented |
 | PINCE-style auto-attach to a process by name | implemented |
