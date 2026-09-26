@@ -5,6 +5,7 @@ package ui
 import (
 	"encoding/binary"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
 	"github.com/LCRERGO/firstspark/pkg/log"
+	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
 var dbgRegNames = []string{
@@ -36,11 +38,109 @@ func (a *App) openDebugger() {
 	}
 	if a.dbgWin == nil {
 		a.dbgWin = a.fapp.NewWindow(i18n.T("debugger.title"))
-		a.dbgWin.Resize(fyne.NewSize(660, 620))
+		a.dbgWin.Resize(fyne.NewSize(680, 660))
 		a.buildDebugger()
 	}
+	if a.dbgTID == 0 {
+		a.dbgTID = a.proc.PID
+	}
+	a.refreshThreads()
+	a.refreshModules()
 	a.dbgWin.Show()
 	a.dbgWin.Canvas().Focus(a.dbgRegs)
+}
+
+// listThreads returns the TIDs of a process's threads.
+func listThreads(pid int) []int {
+	entries, err := os.ReadDir(fmt.Sprintf("/proc/%d/task", pid))
+	if err != nil {
+		return nil
+	}
+	out := make([]int, 0, len(entries))
+	for _, e := range entries {
+		if tid, err := strconv.Atoi(e.Name()); err == nil {
+			out = append(out, tid)
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+// threadName reads a thread's command name.
+func threadName(pid, tid int) string {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/task/%d/comm", pid, tid))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func (a *App) refreshThreads() {
+	a.dbgThreads = nil
+	if a.proc != nil {
+		a.dbgThreads = listThreads(a.proc.PID)
+	}
+	if a.dbgThreadList != nil {
+		a.dbgThreadList.Refresh()
+	}
+}
+
+func (a *App) refreshModules() {
+	a.dbgModules = nil
+	if a.proc != nil {
+		if regions, err := mem.Regions(a.proc.PID); err == nil {
+			for _, r := range regions {
+				if r.FileBacked() && r.Offset == 0 {
+					a.dbgModules = append(a.dbgModules, r)
+				}
+			}
+		}
+	}
+	if a.dbgModuleList != nil {
+		a.dbgModuleList.Refresh()
+	}
+}
+
+// selectThread rebinds the debugger to another thread, re-attaching when it was
+// already attached.
+func (a *App) selectThread(tid int) {
+	if tid == a.dbgTID {
+		return
+	}
+	wasAttached := a.dbgAttached
+	if a.dbgSession != nil {
+		_ = a.dbgSession.Detach()
+		_ = a.dbgSession.Close()
+		a.dbgSession = nil
+		a.dbgAttached = false
+	}
+	a.dbgTID = tid
+	a.dbgBreakpoints = map[uint64]bool{}
+	a.refreshBreakpointList()
+	a.refreshThreads()
+	a.dbgStatus.SetText(i18n.Tf("debugger.thread_selected", map[string]any{"TID": tid}))
+	if wasAttached {
+		a.debuggerAttach()
+	}
+}
+
+// followRegister opens the Memory Viewer at RIP or RSP.
+func (a *App) followRegister(rip bool) {
+	if a.dbgSession == nil {
+		a.fail(fmt.Errorf("%s", i18n.T("error.attach_first")))
+		return
+	}
+	regs, err := a.dbgSession.Registers()
+	if err != nil {
+		a.fail(err)
+		return
+	}
+	addr := regs.RSP
+	if rip {
+		addr = regs.RIP
+	}
+	a.openMemoryViewer()
+	a.loadMemory(addr)
 }
 
 func (a *App) buildDebugger() {
@@ -97,6 +197,87 @@ func (a *App) buildDebugger() {
 			t.Refresh()
 		},
 	)
+	a.dbgThreadList = a.newDebuggerList(
+		func() int { return len(a.dbgThreads) },
+		func() fyne.CanvasObject { return a.monoText("") },
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			t := o.(*canvas.Text)
+			if id < 0 || id >= len(a.dbgThreads) {
+				t.Text = ""
+				t.Refresh()
+				return
+			}
+			tid := a.dbgThreads[id]
+			mark := "  "
+			if tid == a.dbgTID {
+				mark = "* "
+			}
+			name := ""
+			if a.proc != nil {
+				name = threadName(a.proc.PID, tid)
+			}
+			t.Text = fmt.Sprintf("%s%d  %s", mark, tid, name)
+			t.Color = a.pal().text
+			t.Refresh()
+		},
+	)
+	a.dbgThreadList.OnSelected = func(id widget.ListItemID) {
+		if id >= 0 && id < len(a.dbgThreads) {
+			a.selectThread(a.dbgThreads[id])
+		}
+	}
+	a.dbgModuleList = a.newDebuggerList(
+		func() int { return len(a.dbgModules) },
+		func() fyne.CanvasObject { return a.monoText("") },
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			t := o.(*canvas.Text)
+			if id < 0 || id >= len(a.dbgModules) {
+				t.Text = ""
+				t.Refresh()
+				return
+			}
+			r := a.dbgModules[id]
+			t.Text = fmt.Sprintf("0x%012x  %10s  %s", r.Start, humanBytes(r.Size()), r.Path)
+			t.Color = a.pal().text
+			t.Refresh()
+		},
+	)
+	a.dbgModuleList.OnSelected = func(id widget.ListItemID) {
+		if id >= 0 && id < len(a.dbgModules) {
+			a.openMemoryViewer()
+			a.loadMemory(a.dbgModules[id].Start)
+		}
+	}
+	a.dbgStackList = a.newDebuggerList(
+		func() int { return len(a.dbgStack) },
+		func() fyne.CanvasObject { return a.monoText("") },
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			t := o.(*canvas.Text)
+			if id < 0 || id >= len(a.dbgStack) {
+				t.Text = ""
+				t.Refresh()
+				return
+			}
+			t.Text = a.dbgStack[id]
+			t.Color = a.pal().text
+			t.Refresh()
+		},
+	)
+	a.dbgTraceList = a.newDebuggerList(
+		func() int { return len(a.dbgTrace) },
+		func() fyne.CanvasObject { return a.monoText("") },
+		func(id widget.ListItemID, o fyne.CanvasObject) {
+			t := o.(*canvas.Text)
+			if id < 0 || id >= len(a.dbgTrace) {
+				t.Text = ""
+				t.Refresh()
+				return
+			}
+			t.Text = a.dbgTrace[id]
+			t.Color = a.pal().text
+			t.Refresh()
+		},
+	)
 
 	controls := container.NewHBox(
 		newHintButton(i18n.T("debugger.attach"), "debugger.hint.attach", a.debuggerAttach),
@@ -113,16 +294,28 @@ func (a *App) buildDebugger() {
 		newHintButton(i18n.T("debugger.find_accesses"), "debugger.hint.find_accesses", func() { a.debuggerWatch(false) }),
 		newHintButton(i18n.T("debugger.stop_watch"), "debugger.hint.stop_watch", a.debuggerStopWatch),
 	)
+	follow := container.NewHBox(
+		newHintButton(i18n.T("debugger.follow_rip"), "debugger.hint.follow_rip", func() { a.followRegister(true) }),
+		newHintButton(i18n.T("debugger.follow_rsp"), "debugger.hint.follow_rsp", func() { a.followRegister(false) }),
+		newHintButton(i18n.T("debugger.refresh"), "debugger.hint.refresh", a.debuggerRefresh),
+	)
 	a.dbgRegEdit = newHintEntry("debugger.hint.register_edit")
 	a.dbgRegEdit.SetPlaceHolder(i18n.T("debugger.register_edit_placeholder"))
 	register := container.NewHBox(
 		a.dbgRegEdit,
 		newHintButton(i18n.T("debugger.set_register"), "debugger.hint.set_register", a.debuggerSetRegister),
 	)
-	top := container.NewVBox(controls, watch, register, a.dbgStatus)
-	lists := container.NewVSplit(a.dbgRegs, container.NewVSplit(a.dbgBPList, a.dbgHits))
-	lists.SetOffset(0.5)
-	a.dbgWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(top, nil, nil, nil, lists), a.dbgWin.Canvas()))
+	top := container.NewVBox(container.NewHScroll(controls), container.NewHScroll(watch), follow, register, a.dbgStatus)
+	tabs := container.NewAppTabs(
+		container.NewTabItem(i18n.T("debugger.tab.registers"), a.dbgRegs),
+		container.NewTabItem(i18n.T("debugger.tab.threads"), a.dbgThreadList),
+		container.NewTabItem(i18n.T("debugger.tab.modules"), a.dbgModuleList),
+		container.NewTabItem(i18n.T("debugger.tab.breakpoints"), a.dbgBPList),
+		container.NewTabItem(i18n.T("debugger.tab.hits"), a.dbgHits),
+		container.NewTabItem(i18n.T("debugger.tab.stack"), a.dbgStackList),
+		container.NewTabItem(i18n.T("debugger.tab.trace"), a.dbgTraceList),
+	)
+	a.dbgWin.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewBorder(top, nil, nil, nil, tabs), a.dbgWin.Canvas()))
 }
 
 // dbgList is a list that also handles the debugger's bare function keys, which
@@ -163,13 +356,29 @@ func (a *App) ensureDebuggerSession() bool {
 	if a.dbgSession != nil {
 		return true
 	}
-	s, err := debugger.NewSession(a.cfg.Debugger.Backend, a.proc.PID, debugger.Options{GDBPath: a.cfg.Debugger.GDBPath})
+	tid := a.debuggerTID()
+	if tid <= 0 {
+		a.fail(fmt.Errorf("%s", i18n.T("error.no_process")))
+		return false
+	}
+	s, err := debugger.NewSession(a.cfg.Debugger.Backend, tid, debugger.Options{GDBPath: a.cfg.Debugger.GDBPath})
 	if err != nil {
 		a.fail(err)
 		return false
 	}
 	a.dbgSession = s
 	return true
+}
+
+// debuggerTID returns the thread the debugger is bound to.
+func (a *App) debuggerTID() int {
+	if a.dbgTID != 0 {
+		return a.dbgTID
+	}
+	if a.proc != nil {
+		return a.proc.PID
+	}
+	return 0
 }
 
 func (a *App) debuggerAttach() {
@@ -180,8 +389,9 @@ func (a *App) debuggerAttach() {
 		a.fail(err)
 		return
 	}
-	log.Info("debugger attached", "pid", a.proc.PID)
-	a.dbgStatus.SetText(i18n.Tf("debugger.attached_to", map[string]any{"PID": a.proc.PID}))
+	a.dbgAttached = true
+	log.Info("debugger attached", "tid", a.debuggerTID())
+	a.dbgStatus.SetText(i18n.Tf("debugger.attached_to", map[string]any{"PID": a.debuggerTID()}))
 	a.debuggerRefresh()
 }
 
@@ -193,7 +403,8 @@ func (a *App) debuggerDetach() {
 		a.fail(err)
 		return
 	}
-	log.Info("debugger detached", "pid", a.proc.PID)
+	a.dbgAttached = false
+	log.Info("debugger detached", "tid", a.debuggerTID())
 	a.dbgStatus.SetText(i18n.T("debugger.detached"))
 }
 
@@ -493,6 +704,8 @@ func (a *App) debuggerRefresh() {
 	if a.dbgRegs != nil {
 		a.dbgRegs.Refresh()
 	}
+	a.refreshThreads()
+	a.refreshModules()
 }
 
 func (a *App) refreshBreakpointList() {

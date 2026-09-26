@@ -185,6 +185,16 @@ type App struct {
 	dbgBPList      *dbgList
 	dbgBPLabels    []string
 	dbgRegEdit     *toolTipEntry
+	dbgTID         int
+	dbgAttached    bool
+	dbgThreads     []int
+	dbgThreadList  *dbgList
+	dbgModules     []mem.Region
+	dbgModuleList  *dbgList
+	dbgStack       []string
+	dbgStackList   *dbgList
+	dbgTrace       []string
+	dbgTraceList   *dbgList
 
 	asmWin     fyne.Window
 	asmEditor  *codeEditor
