@@ -2158,10 +2158,47 @@ func (a *App) addAddressDialog() {
 }
 
 func (a *App) clearTable() {
+	for _, r := range a.entryRoots {
+		a.removeSubtreeHooks(r)
+	}
 	a.resetTree()
 	a.syncFreezeTargets()
 	a.table.Refresh()
 	a.updateScanControls()
+}
+
+// newTable starts a fresh cheat table after confirming if it is not empty.
+func (a *App) newTable() {
+	if len(a.entryRoots) == 0 {
+		a.resetScanState()
+		return
+	}
+	dialog.ShowConfirm(i18n.T("dialog.new_table.title"), i18n.T("dialog.new_table.body"), func(ok bool) {
+		if ok {
+			a.resetScanState()
+		}
+	}, a.win)
+}
+
+// resetScanState clears the cheat table, scan session and symbols.
+func (a *App) resetScanState() {
+	a.clearTable()
+	a.session = nil
+	a.results = nil
+	a.foundOrder = nil
+	a.foundLive = nil
+	a.foundSel = -1
+	a.foundMulti = nil
+	a.symbols = nil
+	a.dbgBreakpoints = map[uint64]*dbgBreakpoint{}
+	a.refreshBreakpointList()
+	if a.foundList != nil {
+		a.foundList.Refresh()
+	}
+	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
+	a.updateScanTypeOptions()
+	a.updateScanControls()
+	a.setStatusText(i18n.T("status.new_table"))
 }
 
 func parseAddress(s string) (uint64, error) {

@@ -38,6 +38,22 @@ func (a *App) showSettings() {
 	align.SetText(strconv.Itoa(a.cfg.Scan.Alignment))
 	limit := widget.NewEntry()
 	limit.SetText(strconv.Itoa(a.cfg.UI.ResultLimit))
+	refresh := widget.NewEntry()
+	refresh.SetText(strconv.Itoa(a.cfg.UI.RefreshMS))
+	snapshot := widget.NewEntry()
+	snapshot.SetText(strconv.FormatInt(a.cfg.Scan.SnapshotLimit, 10))
+	epsilon := widget.NewEntry()
+	epsilon.SetText(strconv.FormatFloat(a.cfg.Scan.FloatEpsilon, 'g', -1, 64))
+	logLevel := widget.NewSelect([]string{"debug", "info", "warn", "error"}, nil)
+	logLevel.SetSelected(a.cfg.Log.Level)
+	backend := widget.NewSelect([]string{"ptrace", "gdbmi"}, nil)
+	if a.cfg.Debugger.Backend == "" {
+		backend.SetSelected("ptrace")
+	} else {
+		backend.SetSelected(a.cfg.Debugger.Backend)
+	}
+	gdbPath := widget.NewEntry()
+	gdbPath.SetText(a.cfg.Debugger.GDBPath)
 	icons := widget.NewCheck(i18n.T("settings.show_process_icons"), nil)
 	icons.SetChecked(a.cfg.UI.ProcessIcons)
 	autoAttach := widget.NewEntry()
@@ -56,6 +72,12 @@ func (a *App) showSettings() {
 		widget.NewFormItem(i18n.T("settings.writable_only"), writable),
 		widget.NewFormItem(i18n.T("settings.alignment"), align),
 		widget.NewFormItem(i18n.T("settings.result_limit"), limit),
+		widget.NewFormItem(i18n.T("settings.refresh_ms"), refresh),
+		widget.NewFormItem(i18n.T("settings.snapshot_limit"), snapshot),
+		widget.NewFormItem(i18n.T("settings.float_epsilon"), epsilon),
+		widget.NewFormItem(i18n.T("settings.log_level"), logLevel),
+		widget.NewFormItem(i18n.T("settings.debugger_backend"), backend),
+		widget.NewFormItem(i18n.T("settings.gdb_path"), gdbPath),
 		widget.NewFormItem(i18n.T("settings.process_list"), icons),
 		widget.NewFormItem(i18n.T("settings.auto_attach"), autoAttach),
 		widget.NewFormItem(i18n.T("settings.auto_attach_regex"), autoRegex),
@@ -84,6 +106,22 @@ func (a *App) showSettings() {
 		if n, err := strconv.Atoi(strings.TrimSpace(limit.Text)); err == nil && n >= 0 {
 			a.cfg.UI.ResultLimit = n
 		}
+		if n, err := strconv.Atoi(strings.TrimSpace(refresh.Text)); err == nil && n >= 50 {
+			a.cfg.UI.RefreshMS = n
+		}
+		if n, err := strconv.ParseInt(strings.TrimSpace(snapshot.Text), 10, 64); err == nil && n >= 0 {
+			a.cfg.Scan.SnapshotLimit = n
+		}
+		if f, err := strconv.ParseFloat(strings.TrimSpace(epsilon.Text), 64); err == nil && f >= 0 {
+			a.cfg.Scan.FloatEpsilon = f
+		}
+		if logLevel.Selected != "" {
+			a.cfg.Log.Level = logLevel.Selected
+		}
+		if backend.Selected != "" {
+			a.cfg.Debugger.Backend = backend.Selected
+		}
+		a.cfg.Debugger.GDBPath = strings.TrimSpace(gdbPath.Text)
 		a.cfg.UI.ProcessIcons = icons.Checked
 		a.showIcons = icons.Checked
 		a.cfg.Process.AutoAttach = strings.TrimSpace(autoAttach.Text)

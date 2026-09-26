@@ -41,6 +41,8 @@ process:
 ui:
   # Number of scan results shown at once.
   result_limit: 1000
+  # Cheat-table and Found-list refresh interval in milliseconds (minimum 50).
+  refresh_ms: 500
   # Palette family: cyberpunk, nord, dracula or tokyo-night.
   theme: cyberpunk
   # Palette variant: light, dark, or system (follow the desktop preference).

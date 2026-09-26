@@ -541,6 +541,8 @@ func setActionEnabled(action *widget.ToolbarAction, enabled bool) {
 func (a *App) mainMenu() *fyne.MainMenu {
 	openProc := fyne.NewMenuItem(i18n.T("menu.file.open_process"), a.openProcessList)
 	openProc.Shortcut = ctrl(fyne.KeyP)
+	newTable := fyne.NewMenuItem(i18n.T("menu.file.new"), a.newTable)
+	newTable.Shortcut = ctrl(fyne.KeyN)
 	load := fyne.NewMenuItem(i18n.T("menu.file.load"), a.loadTable)
 	load.Shortcut = ctrl(fyne.KeyO)
 	save := fyne.NewMenuItem(i18n.T("menu.file.save"), a.saveTable)
@@ -553,6 +555,7 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	quit := fyne.NewMenuItem(i18n.T("menu.file.quit"), a.fapp.Quit)
 	file := fyne.NewMenu(i18n.T("menu.file"),
 		openProc,
+		newTable,
 		fyne.NewMenuItemSeparator(),
 		load, save, saveAs, saveCE,
 		fyne.NewMenuItemSeparator(),
@@ -720,7 +723,16 @@ func (a *App) shutdown() {
 }
 
 func (a *App) freezeLoop() {
-	ticker := time.NewTicker(50 * time.Millisecond)
+	const freezeTick = 50 * time.Millisecond
+	refresh := a.cfg.UI.RefreshMS
+	if refresh < int(freezeTick/time.Millisecond) {
+		refresh = 500
+	}
+	every := refresh / int(freezeTick/time.Millisecond)
+	if every < 1 {
+		every = 1
+	}
+	ticker := time.NewTicker(freezeTick)
 	defer ticker.Stop()
 	tick := 0
 	var lastWriteErr time.Time
@@ -743,7 +755,7 @@ func (a *App) freezeLoop() {
 			}
 			a.mu.Unlock()
 			tick++
-			if tick%10 == 0 {
+			if tick%every == 0 {
 				fyne.Do(func() {
 					changed := a.refreshEntries()
 					a.refreshFoundValues()

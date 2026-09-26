@@ -70,6 +70,9 @@ type ProcessConfig struct {
 // UIConfig holds presentation defaults.
 type UIConfig struct {
 	ResultLimit int `yaml:"result_limit"`
+	// RefreshMS is the cheat-table and Found-list refresh interval in
+	// milliseconds (clamped to at least 50).
+	RefreshMS int `yaml:"refresh_ms"`
 	// Theme is the palette family: cyberpunk, nord, dracula or tokyo-night.
 	Theme string `yaml:"theme"`
 	// ThemeVariant is light, dark or system.
@@ -93,7 +96,7 @@ func Default() Config {
 		Debugger:  DebuggerConfig{Backend: "ptrace", GDBPath: "gdb"},
 		Speedhack: SpeedhackConfig{Enabled: false, Scale: 1.0, Delta: 0.5},
 		UI: UIConfig{
-			ResultLimit: 1000, Theme: "cyberpunk", ThemeVariant: "light",
+			ResultLimit: 1000, RefreshMS: 500, Theme: "cyberpunk", ThemeVariant: "light",
 			Language: "en", Scale: 1.0, FontSize: 14, ProcessIcons: true,
 		},
 		Log: LogConfig{Level: "info"},
