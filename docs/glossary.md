@@ -27,6 +27,9 @@ Terms used across the codebase, ADRs and UI.
   model Firstspark implements for scripts (`AddressList`, `MemoryRecord`,
   `Memscan`, `Process`, memory helpers, timers); GUI and OS-integration units
   are non-goals (ADR 0039).
+- **CE custom type conversion** — the assembly `ConvertRoutine` /
+  `ConvertBackRoutine` a Cheat Engine custom type defines; Firstspark can run
+  the integer case through the JIT behind a SysV shim (ADR 0048).
 - **Cheat Engine table (`.CT`)** — Cheat Engine's XML format: an element-based
   schema with a nested entry tree, per-type metadata and embedded Auto
   Assembler/Lua scripts. Distinct from firstspark's own attribute-based schema

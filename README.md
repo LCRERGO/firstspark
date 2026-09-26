@@ -191,7 +191,8 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
 - **Cheat Engine tables**: import/export covers the tree, expressions, scripts,
   colour, last state, hotkeys, the core Lua API and preserved unknown elements
   (ADR 0037, ADR 0046); GUI/VCL-script tables are out of scope (ADR 0039), and
-  custom-type `ConvertRoutine` bodies are preserved but not applied.
+  custom-type `ConvertRoutine` bodies are preserved but not applied yet (scoped
+  in ADR 0048).
 
 ## License
 
