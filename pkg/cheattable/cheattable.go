@@ -26,6 +26,8 @@ type Entry struct {
 	Hotkey string `xml:"Hotkey,attr,omitempty" json:"hotkey,omitempty"`
 	// Display is the value format: "decimal", "hex" or "binary".
 	Display string `xml:"Display,attr,omitempty" json:"display,omitempty"`
+	// ShowAsSigned renders integer values as signed instead of unsigned.
+	ShowAsSigned bool `xml:"ShowAsSigned,attr,omitempty" json:"show_as_signed,omitempty"`
 	// Frozen marks a locked value.
 	Frozen bool `xml:"Frozen,attr,omitempty" json:"frozen,omitempty"`
 	// Encoding is the string encoding for string types (e.g. "utf16le").

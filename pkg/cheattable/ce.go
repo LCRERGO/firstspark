@@ -161,6 +161,7 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 			continue
 		}
 		leaf := Entry{Description: ceDescription(e.Description), Type: typeName, Children: children}
+		leaf.ShowAsSigned = e.ShowAsSigned
 		if e.ShowAsHex {
 			leaf.Display = "hex"
 		}

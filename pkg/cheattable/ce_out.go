@@ -23,6 +23,7 @@ type ceOut struct {
 	Description     string   `xml:"Description,omitempty"`
 	GroupHeader     int      `xml:"GroupHeader,omitempty"`
 	ShowAsHex       int      `xml:"ShowAsHex,omitempty"`
+	ShowAsSigned    int      `xml:"ShowAsSigned,omitempty"`
 	VariableType    string   `xml:"VariableType,omitempty"`
 	Address         string   `xml:"Address,omitempty"`
 	Offsets         []string `xml:"Offsets>Offset,omitempty"`
@@ -74,6 +75,9 @@ func entryToCE(e *Entry) ceOut {
 	}
 	if e.Display == "hex" {
 		out.ShowAsHex = 1
+	}
+	if e.ShowAsSigned {
+		out.ShowAsSigned = 1
 	}
 	out.Address, out.Offsets = ceAddress(e)
 	if len(e.Children) > 0 {

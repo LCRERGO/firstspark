@@ -2,6 +2,7 @@ package cheattable
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -169,6 +170,26 @@ func TestExportCERoundTrip(t *testing.T) {
 	custom := findEntry(back.Entries, "custom")
 	if custom == nil || custom.Type != "mystruct" {
 		t.Fatalf("custom type lost: %+v", custom)
+	}
+}
+
+func TestShowAsSignedRoundTrip(t *testing.T) {
+	tbl := &Table{Version: SchemaVersion}
+	tbl.Entries = []Entry{{ID: 1, Description: "signed", Address: "0x1000", Type: "dword", ShowAsSigned: true}}
+	data, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	if !strings.Contains(string(data), "ShowAsSigned") {
+		t.Fatal("MarshalCE did not emit ShowAsSigned")
+	}
+	back, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	e := findEntry(back.Entries, "signed")
+	if e == nil || !e.ShowAsSigned {
+		t.Fatalf("ShowAsSigned lost: %+v", e)
 	}
 }
 
