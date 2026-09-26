@@ -15,6 +15,8 @@ Terms used across the codebase, ADRs and UI.
   configured pattern while no target is chosen, so a restarted target comes
   back by itself (ADR 0036). It selects the memory target; it does not attach
   the ptrace debugger.
+- **Bigger than / Smaller than** — first- and next-scan modes that keep values
+  strictly above or below the scan value (ADR 0041).
 - **Bitfield** — a value that occupies a range of bits inside a wider container;
   edited with read-modify-write so neighbouring bits are preserved (ADR 0030).
 - **CE core Lua API** — the bounded subset of Cheat Engine's Lua table-object
@@ -36,6 +38,12 @@ Terms used across the codebase, ADRs and UI.
   hotkeys and metadata (`pkg/cheattable`).
 - **Code cave** — executable memory allocated in the target to hold a hook
   handler or relocated instructions (`pkg/inject`).
+- **Copy-on-write region** — a private mapping (`p` in `/proc/<pid>/maps`);
+  the scan's *Copy on write* filter keeps only these (ADR 0041).
+- **Executable filter** — the scan option that keeps only executable regions,
+  only non-executable regions, or any (ADR 0041).
+- **First value** — the value an address held during the initial scan, kept on
+  the result so *Same as first scan* can compare against it (ADR 0041).
 - **Found list** — the scan-results list beside the scan panel, with columns
   Address / Value / Previous. Its Value column is re-read live and its address
   column shows a module-relative `module+0xoffset` for static addresses
@@ -46,6 +54,8 @@ Terms used across the codebase, ADRs and UI.
   a fresh read) and by Change value; the live read never touches it.
 - **Group header** — a cheat-table entry that holds no address or value and
   exists only to parent child records in the tree (ADR 0038).
+- **Grouped scan** — a value type matching a contiguous sequence of typed
+  values, written `4:75 4:* 4:100`, where `*` is a wildcard (ADR 0041).
 - **Hardware watchpoint** — a data breakpoint implemented with the x86 debug
   registers DR0–DR3 (`pkg/debugger/hardware.go`).
 - **Inline hook** — overwriting a function prologue with a jump into a code cave
@@ -61,6 +71,10 @@ Terms used across the codebase, ADRs and UI.
 - **Previous value** — the value a Found-list address held in the scan before
   the latest one; empty after a first scan (ADR 0040).
 - **Region** — one entry of `/proc/<pid>/maps` (`pkg/mem/region.go`).
+- **Same as first scan** — a next-scan mode that keeps addresses whose current
+  value still equals their first-scan value (ADR 0041).
+- **Scan range** — the optional Start/Stop address bounds that clip the scanned
+  regions (ADR 0041).
 - **Scan session** — the state of a scan: options, selected regions, results and
   undo history (`pkg/scan/session.go`).
 - **Speedhack** — scaling a process's perceived time by hooking the libc time

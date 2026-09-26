@@ -14,9 +14,10 @@ or GDB runtime dependency.
 | --- | --- |
 | Process listing and region enumeration (`/proc`) | implemented |
 | Cross-process read/write (`process_vm_readv`/`writev`) | implemented |
-| Memory scanner: byte/word/dword/qword/float/double/string/AOB/binary/all | implemented |
+| Memory scanner: byte/word/dword/qword/float/double/string/AOB/binary/all/grouped | implemented |
 | String encodings: UTF-8/16/32 (LE and BE) | implemented |
-| Scan modes: exact, unknown initial, changed, unchanged, increased, decreased, increased-by, decreased-by, value-between | implemented |
+| Scan modes: exact, bigger-than, smaller-than, unknown initial, changed, unchanged, increased, decreased, increased-by, decreased-by, value-between, same-as-first | implemented |
+| Scan filters: writable, executable, copy-on-write, alignment, region scope and start/stop range | implemented |
 | Undo scan | implemented |
 | User-defined value types (Lua 5.1 scripts, or Auto Assembler via a local JIT) | implemented |
 | Cheat table: pointer records, bitfields, hex/binary display, hotkeys, ASLR-safe chains | implemented |
