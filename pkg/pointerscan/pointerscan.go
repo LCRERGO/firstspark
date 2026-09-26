@@ -54,8 +54,35 @@ func BuildPointermap(p *mem.Process, o BuildOptions) (*Pointermap, error) {
 	if o.Chunk <= 0 {
 		o.Chunk = 1 << 20
 	}
+	b := newMapBuilder(o, regions)
 	pm := &Pointermap{}
-	index := map[uint64][]uint64{}
+	for _, r := range regions {
+		if !includedRegion(r, o) {
+			continue
+		}
+		if r.FileBacked() {
+			pm.statics = append(pm.statics, StaticRegion{
+				Start: r.Start, End: r.End,
+				Module: filepath.Base(r.Path),
+				Base:   r.Start - r.Offset,
+			})
+		}
+		b.scanRegion(p, r)
+	}
+	pm.entries = entriesFromIndex(b.index)
+	return pm, nil
+}
+
+// includedRegion reports whether a region is in the pointermap scope.
+func includedRegion(r mem.Region, o BuildOptions) bool {
+	if !r.Readable() || r.Size() == 0 {
+		return false
+	}
+	return !o.WritableOnly || r.Writable()
+}
+
+// addressBounds returns the lowest start and highest end of the mapped regions.
+func addressBounds(regions []mem.Region) (uint64, uint64) {
 	var minAddr, maxAddr uint64
 	for _, r := range regions {
 		if r.Size() == 0 {
@@ -68,56 +95,68 @@ func BuildPointermap(p *mem.Process, o BuildOptions) (*Pointermap, error) {
 			maxAddr = r.End
 		}
 	}
-	var scanned uint64
+	return minAddr, maxAddr
+}
+
+// mapBuilder accumulates the pointer reverse index.
+type mapBuilder struct {
+	chunk, step       int
+	minAddr, maxAddr  uint64
+	maxBytes, scanned uint64
+	index             map[uint64][]uint64
+}
+
+func newMapBuilder(o BuildOptions, regions []mem.Region) *mapBuilder {
+	minAddr, maxAddr := addressBounds(regions)
 	step := 1
 	if o.Aligned {
 		step = 8
 	}
-	for _, r := range regions {
-		if !r.Readable() || r.Size() == 0 {
-			continue
+	return &mapBuilder{
+		chunk: o.Chunk, step: step, minAddr: minAddr, maxAddr: maxAddr,
+		maxBytes: o.MaxBytes, index: map[uint64][]uint64{},
+	}
+}
+
+// scanRegion indexes the pointer-sized values inside one region, chunk by chunk.
+func (b *mapBuilder) scanRegion(p *mem.Process, r mem.Region) {
+	for off := uint64(0); off < r.Size(); off += uint64(b.chunk) {
+		if b.maxBytes > 0 && b.scanned >= b.maxBytes {
+			return
 		}
-		if o.WritableOnly && !r.Writable() {
-			continue
+		want := uint64(b.chunk)
+		if want > r.Size()-off {
+			want = r.Size() - off
 		}
-		if r.FileBacked() {
-			pm.statics = append(pm.statics, StaticRegion{
-				Start: r.Start, End: r.End,
-				Module: filepath.Base(r.Path),
-				Base:   r.Start - r.Offset,
-			})
+		data, err := p.Read(r.Start+off, int(want))
+		if len(data) > 0 {
+			b.scanned += uint64(len(data))
+			b.indexPointers(data, r.Start+off)
 		}
-		for off := uint64(0); off < r.Size(); off += uint64(o.Chunk) {
-			if o.MaxBytes > 0 && scanned >= o.MaxBytes {
-				break
-			}
-			want := uint64(o.Chunk)
-			if want > r.Size()-off {
-				want = r.Size() - off
-			}
-			data, rerr := p.Read(r.Start+off, int(want))
-			if len(data) > 0 {
-				scanned += uint64(len(data))
-				for i := 0; i+8 <= len(data); i += step {
-					v := binary.LittleEndian.Uint64(data[i:])
-					if v == 0 || v < minAddr || v > maxAddr {
-						continue
-					}
-					addr := r.Start + off + uint64(i)
-					index[v] = append(index[v], addr)
-				}
-			}
-			if rerr != nil {
-				break
-			}
+		if err != nil {
+			return
 		}
 	}
-	pm.entries = make([]entry, 0, len(index))
+}
+
+// indexPointers adds every in-range pointer in data at base to the index.
+func (b *mapBuilder) indexPointers(data []byte, base uint64) {
+	for i := 0; i+8 <= len(data); i += b.step {
+		v := binary.LittleEndian.Uint64(data[i:])
+		if v == 0 || v < b.minAddr || v > b.maxAddr {
+			continue
+		}
+		b.index[v] = append(b.index[v], base+uint64(i))
+	}
+}
+
+func entriesFromIndex(index map[uint64][]uint64) []entry {
+	out := make([]entry, 0, len(index))
 	for v, addrs := range index {
-		pm.entries = append(pm.entries, entry{value: v, addrs: addrs})
+		out = append(out, entry{value: v, addrs: addrs})
 	}
-	sort.Slice(pm.entries, func(i, j int) bool { return pm.entries[i].value < pm.entries[j].value })
-	return pm, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].value < out[j].value })
+	return out
 }
 
 // wireEntry is the JSON form of an index entry.

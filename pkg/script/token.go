@@ -32,48 +32,27 @@ type Token struct {
 func Tokenize(src string) []Token {
 	r := []rune(src)
 	var out []Token
-	i := 0
-	for i < len(r) {
+	for i := 0; i < len(r); {
+		start := i
 		switch {
 		case r[i] == '-' && i+1 < len(r) && r[i+1] == '-':
-			start := i
-			i += 2
-			if i < len(r) && r[i] == '[' {
-				if end, ok := longBracketEnd(r, i); ok {
-					i = end
-				} else {
-					for i < len(r) && r[i] != '\n' {
-						i++
-					}
-				}
-			} else {
-				for i < len(r) && r[i] != '\n' {
-					i++
-				}
-			}
+			i = scanComment(r, i)
 			out = append(out, Token{TokenComment, start, i, string(r[start:i])})
 		case r[i] == '"' || r[i] == '\'':
-			start := i
 			i = scanQuoted(r, i)
 			out = append(out, Token{TokenString, start, i, string(r[start:i])})
 		case r[i] == '[' && i+1 < len(r) && (r[i+1] == '[' || r[i+1] == '='):
 			if end, ok := longBracketEnd(r, i); ok {
-				out = append(out, Token{TokenString, i, end, string(r[i:end])})
 				i = end
+				out = append(out, Token{TokenString, start, i, string(r[start:i])})
 			} else {
 				i++
 			}
 		case isDigit(r[i]):
-			start := i
-			for i < len(r) && (isHexDigit(r[i]) || r[i] == '.' || r[i] == 'x' || r[i] == 'X') {
-				i++
-			}
+			i = scanNumber(r, i)
 			out = append(out, Token{TokenNumber, start, i, string(r[start:i])})
 		case isAlpha(r[i]):
-			start := i
-			for i < len(r) && isAlnum(r[i]) {
-				i++
-			}
+			i = scanIdentifier(r, i)
 			text := string(r[start:i])
 			kind := TokenIdentifier
 			if keywords[text] {
@@ -83,12 +62,41 @@ func Tokenize(src string) []Token {
 		case isSpace(r[i]):
 			i++
 		default:
-			start := i
 			i++
 			out = append(out, Token{TokenOperator, start, i, string(r[start:i])})
 		}
 	}
 	return out
+}
+
+// scanComment consumes a `--` comment, including a long-bracket body.
+func scanComment(r []rune, i int) int {
+	i += 2
+	if i < len(r) && r[i] == '[' {
+		if end, ok := longBracketEnd(r, i); ok {
+			return end
+		}
+	}
+	for i < len(r) && r[i] != '\n' {
+		i++
+	}
+	return i
+}
+
+// scanNumber consumes a numeric literal.
+func scanNumber(r []rune, i int) int {
+	for i < len(r) && (isHexDigit(r[i]) || r[i] == '.' || r[i] == 'x' || r[i] == 'X') {
+		i++
+	}
+	return i
+}
+
+// scanIdentifier consumes an identifier or keyword.
+func scanIdentifier(r []rune, i int) int {
+	for i < len(r) && isAlnum(r[i]) {
+		i++
+	}
+	return i
 }
 
 func scanQuoted(r []rune, i int) int {

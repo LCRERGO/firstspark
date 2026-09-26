@@ -91,63 +91,16 @@ func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 		display:  parseDisplay(e.Display),
 		unsigned: !e.ShowAsSigned,
 	}
-	if s := strings.TrimSpace(e.Offsets); s != "" {
-		for _, part := range strings.Split(s, ",") {
-			if part = strings.TrimSpace(part); part != "" {
-				node.exprOffsets = append(node.exprOffsets, part)
-			}
-		}
-	}
-	var typ scan.ValueType
-	var bit *bitSpec
-	if strings.EqualFold(e.Type, "bitfield") {
-		bit = &bitSpec{size: e.BitSize, offset: e.BitOffset, width: e.BitWidth, signed: e.BitSigned}
-		typ = typeForSize(bit.size)
-	} else if parsed, terr := scan.ParseValueType(e.Type); terr == nil {
-		typ = parsed
-	} else {
-		typ = a.defaultValueType()
-	}
-	node.typ = typ
-	node.bit = bit
+	node.exprOffsets = splitOffsets(e.Offsets)
+	node.typ, node.bit = a.storedType(e)
 	if !node.group && node.expr == "" {
 		if addr, err := e.AddressValue(); err == nil {
 			node.addr = addr
 		}
 	}
-	if pc, ok := cheattable.ParsePointerChain(e.Pointer); ok {
-		upc := &pointerChain{module: pc.Module, base: pc.Base, offset: pc.Offset, offsets: pc.Offsets}
-		node.pointer = upc
-		if a.proc != nil {
-			if resolved, rerr := resolvePointer(a.proc, upc); rerr == nil {
-				node.addr = resolved
-			}
-		} else if pc.Module == "" {
-			node.addr = pc.Base
-		}
-	}
+	a.applyStoredPointer(node, e)
 	if !node.group {
-		var v scan.Value
-		if strings.TrimSpace(e.Value) != "" {
-			if parsed, perr := scan.ParseValue(typ, e.Value); perr == nil {
-				v = parsed
-			}
-		}
-		if len(v.Raw) == 0 && a.proc != nil && node.expr == "" && typ.Size() > 0 {
-			if raw, rerr := a.proc.Read(node.addr, typ.Size()); rerr == nil {
-				v = scan.NewValue(typ, raw)
-			}
-		}
-		node.value = v
-		node.orig = v
-		if e.Frozen {
-			node.frozen = true
-			node.frozenValue = v
-		}
-		if key, kerr := parseHotkey(e.Hotkey); kerr == nil && node.addr != 0 {
-			node.hotkey = key
-			a.bindHotkey(key, node.addr)
-		}
+		a.loadStoredValue(node, e, node.typ)
 	}
 	for j := range e.Children {
 		child := a.entryFromStored(&e.Children[j])
@@ -155,6 +108,74 @@ func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 		node.children = append(node.children, child)
 	}
 	return node
+}
+
+// splitOffsets parses the comma-separated Cheat Engine offset list.
+func splitOffsets(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// storedType resolves the entry's value type, handling the bitfield pseudo-type.
+func (a *App) storedType(e *cheattable.Entry) (scan.ValueType, *bitSpec) {
+	if strings.EqualFold(e.Type, "bitfield") {
+		bit := &bitSpec{size: e.BitSize, offset: e.BitOffset, width: e.BitWidth, signed: e.BitSigned}
+		return typeForSize(bit.size), bit
+	}
+	if parsed, err := scan.ParseValueType(e.Type); err == nil {
+		return parsed, nil
+	}
+	return a.defaultValueType(), nil
+}
+
+// applyStoredPointer resolves a stored pointer chain into node.addr.
+func (a *App) applyStoredPointer(node *tableEntry, e *cheattable.Entry) {
+	pc, ok := cheattable.ParsePointerChain(e.Pointer)
+	if !ok {
+		return
+	}
+	upc := &pointerChain{module: pc.Module, base: pc.Base, offset: pc.Offset, offsets: pc.Offsets}
+	node.pointer = upc
+	if a.proc != nil {
+		if resolved, err := resolvePointer(a.proc, upc); err == nil {
+			node.addr = resolved
+		}
+	} else if pc.Module == "" {
+		node.addr = pc.Base
+	}
+}
+
+// loadStoredValue restores the value, frozen state and hotkey of a leaf.
+func (a *App) loadStoredValue(node *tableEntry, e *cheattable.Entry, typ scan.ValueType) {
+	var v scan.Value
+	if strings.TrimSpace(e.Value) != "" {
+		if parsed, err := scan.ParseValue(typ, e.Value); err == nil {
+			v = parsed
+		}
+	}
+	if len(v.Raw) == 0 && a.proc != nil && node.expr == "" && typ.Size() > 0 {
+		if raw, err := a.proc.Read(node.addr, typ.Size()); err == nil {
+			v = scan.NewValue(typ, raw)
+		}
+	}
+	node.value = v
+	node.orig = v
+	if e.Frozen {
+		node.frozen = true
+		node.frozenValue = v
+	}
+	if key, err := parseHotkey(e.Hotkey); err == nil && node.addr != 0 {
+		node.hotkey = key
+		a.bindHotkey(key, node.addr)
+	}
 }
 
 func (a *App) saveTable() { a.saveTableAs() }

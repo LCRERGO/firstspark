@@ -77,32 +77,42 @@ var jccCodes = map[string]byte{
 	"jg": 0xF, "jnle": 0xF,
 }
 
+// simpleOpcodes are mnemonics with a fixed encoding and no operands.
+var simpleOpcodes = map[string][]byte{
+	"nop":     {0x90},
+	"ret":     {0xC3},
+	"leave":   {0xC9},
+	"int3":    {0xCC},
+	"syscall": {0x0F, 0x05},
+	"cdq":     {0x99},
+	"cqo":     {0x48, 0x99},
+	"pushfq":  {0x9C},
+	"popfq":   {0x9D},
+}
+
+// incDecExt maps the group-3 mnemonics to their ModRM extension.
+var incDecExt = map[string]int{
+	"inc": 0, "dec": 1, "not": 2, "neg": 3, "mul": 4, "div": 6, "idiv": 7,
+}
+
+// shiftExt maps the group-2 mnemonics to their ModRM extension.
+var shiftExt = map[string]int{"shl": 4, "sal": 4, "shr": 5, "sar": 7}
+
 func encode(mnem string, ops []operand, addr uint64) ([]byte, error) {
-	switch mnem {
-	case "nop":
-		return []byte{0x90}, nil
-	case "ret":
-		return []byte{0xC3}, nil
-	case "leave":
-		return []byte{0xC9}, nil
-	case "int3":
-		return []byte{0xCC}, nil
-	case "syscall":
-		return []byte{0x0F, 0x05}, nil
-	case "cdq":
-		return []byte{0x99}, nil
-	case "cqo":
-		return []byte{0x48, 0x99}, nil
-	case "pushfq":
-		return []byte{0x9C}, nil
-	case "popfq":
-		return []byte{0x9D}, nil
+	if op, ok := simpleOpcodes[mnem]; ok {
+		return append([]byte(nil), op...), nil
 	}
 	if a, ok := arithOps[mnem]; ok {
 		return encodeArith(mnem, a, ops)
 	}
 	if cc, ok := jccCodes[mnem]; ok {
 		return encodeJcc(mnem, cc, ops, addr)
+	}
+	if ext, ok := incDecExt[mnem]; ok {
+		return encodeIncDec(mnem, ext, ops)
+	}
+	if ext, ok := shiftExt[mnem]; ok {
+		return encodeShift(shiftName(mnem), ext, ops)
 	}
 	switch mnem {
 	case "mov", "movabs":
@@ -117,26 +127,6 @@ func encode(mnem string, ops []operand, addr uint64) ([]byte, error) {
 		return encodeJump("jmp", ops, addr)
 	case "call":
 		return encodeJump("call", ops, addr)
-	case "inc":
-		return encodeIncDec("inc", 0, ops)
-	case "dec":
-		return encodeIncDec("dec", 1, ops)
-	case "not":
-		return encodeIncDec("not", 2, ops)
-	case "neg":
-		return encodeIncDec("neg", 3, ops)
-	case "mul":
-		return encodeIncDec("mul", 4, ops)
-	case "div":
-		return encodeIncDec("div", 6, ops)
-	case "idiv":
-		return encodeIncDec("idiv", 7, ops)
-	case "shl", "sal":
-		return encodeShift("shl", 4, ops)
-	case "shr":
-		return encodeShift("shr", 5, ops)
-	case "sar":
-		return encodeShift("sar", 7, ops)
 	case "test":
 		return encodeTest(ops)
 	case "imul":
@@ -148,6 +138,14 @@ func encode(mnem string, ops []operand, addr uint64) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("asm: unsupported instruction %q", mnem)
 	}
+}
+
+// shiftName normalises "sal" to "shl" for the shared shift encoder.
+func shiftName(mnem string) string {
+	if mnem == "sal" {
+		return "shl"
+	}
+	return mnem
 }
 
 type rmEnc struct {
