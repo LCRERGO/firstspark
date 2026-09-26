@@ -286,7 +286,7 @@ func (a *App) resultsTable() *cheattable.Table {
 		typ = a.session.Options().Type
 	}
 	for _, r := range a.results {
-		t.Add("", fmt.Sprintf("0x%x", r.Addr), typ.String(), r.Prev.String())
+		t.Add("", fmt.Sprintf("0x%x", r.Addr), typ.String(), r.Value.String())
 	}
 	return t
 }

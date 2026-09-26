@@ -20,11 +20,13 @@ var ErrNoInitialScan = errors.New("scan: no initial scan performed")
 // scanChunk bounds the working set used while scanning a single region.
 const scanChunk = 1 * 1024 * 1024
 
-// Result is a single scan hit together with the value observed during the
-// previous pass.
+// Result is a single scan hit. Value is the value observed during the pass
+// that produced the result (the baseline for the next comparison); Previous is
+// the value the address held in the pass before that, empty on a first scan.
 type Result struct {
-	Addr uint64
-	Prev Value
+	Addr     uint64
+	Value    Value
+	Previous Value
 }
 
 // Progress reports how far a scan has advanced.
@@ -72,6 +74,25 @@ func (s *Session) Count() int { return len(s.results) }
 
 // Started reports whether an initial scan has completed.
 func (s *Session) Started() bool { return s.started }
+
+// Delete removes every result for which keep returns false and reports how many
+// were removed. It is how the GUI drops results the user deleted.
+func (s *Session) Delete(keep func(Result) bool) int {
+	kept := s.results[:0]
+	removed := 0
+	for _, r := range s.results {
+		if keep(r) {
+			kept = append(kept, r)
+			continue
+		}
+		removed++
+	}
+	for i := len(kept); i < len(s.results); i++ {
+		s.results[i] = Result{}
+	}
+	s.results = kept
+	return removed
+}
 
 // SetMode changes the scan mode used by subsequent Next calls.
 func (s *Session) SetMode(m ScanMode) { s.opts.Mode = m }
@@ -265,7 +286,7 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 	}
 	var total uint64
 	for _, r := range s.results {
-		w := len(r.Prev.Raw)
+		w := len(r.Value.Raw)
 		if w == 0 {
 			w = s.opts.width()
 		}
@@ -303,7 +324,7 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 					return
 				}
 				res := s.results[i]
-				w := len(res.Prev.Raw)
+				w := len(res.Value.Raw)
 				if w == 0 {
 					w = s.opts.width()
 				}
@@ -313,8 +334,8 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 					continue
 				}
 				cur := NewValue(s.opts.Type, raw)
-				if s.keep(cur, res.Prev) {
-					local = append(local, Result{Addr: res.Addr, Prev: cur})
+				if s.keep(cur, res.Value) {
+					local = append(local, Result{Addr: res.Addr, Value: cur, Previous: res.Value})
 					atomic.AddInt64(&matches, 1)
 				}
 			}
@@ -453,18 +474,18 @@ func (s *Session) scanBytes(ctx context.Context, addr uint64, data []byte, limit
 func (s *Session) consider(addr uint64, raw []byte, out *[]Result, matches *int64) error {
 	switch s.opts.Mode {
 	case ModeUnknown:
-		s.appendResult(out, matches, Result{Addr: addr, Prev: NewValue(s.opts.Type, raw)})
+		s.appendResult(out, matches, Result{Addr: addr, Value: NewValue(s.opts.Type, raw)})
 	case ModeExact:
 		if s.opts.Type == TypeAll {
 			for _, v := range s.matchAll(raw) {
-				s.appendResult(out, matches, Result{Addr: addr, Prev: v})
+				s.appendResult(out, matches, Result{Addr: addr, Value: v})
 			}
 		} else if s.matchExact(raw) {
-			s.appendResult(out, matches, Result{Addr: addr, Prev: NewValue(s.opts.Type, raw)})
+			s.appendResult(out, matches, Result{Addr: addr, Value: NewValue(s.opts.Type, raw)})
 		}
 	case ModeBetween:
 		if s.matchBetween(raw) {
-			s.appendResult(out, matches, Result{Addr: addr, Prev: NewValue(s.opts.Type, raw)})
+			s.appendResult(out, matches, Result{Addr: addr, Value: NewValue(s.opts.Type, raw)})
 		}
 	}
 	return nil

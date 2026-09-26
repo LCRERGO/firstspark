@@ -112,3 +112,14 @@ func TestParseBetweenMode(t *testing.T) {
 		t.Fatalf("ParseScanMode = %v, %v", m, err)
 	}
 }
+
+func TestSessionDelete(t *testing.T) {
+	s := &Session{results: []Result{{Addr: 1}, {Addr: 2}, {Addr: 3}}}
+	removed := s.Delete(func(r Result) bool { return r.Addr != 2 })
+	if removed != 1 {
+		t.Fatalf("removed = %d, want 1", removed)
+	}
+	if len(s.results) != 2 || s.results[0].Addr != 1 || s.results[1].Addr != 3 {
+		t.Fatalf("results = %+v", s.results)
+	}
+}

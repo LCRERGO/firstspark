@@ -143,7 +143,7 @@ func (a *App) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
 		return
 	}
 	r := a.results[id.Row]
-	c.SetText(fmt.Sprintf("0x%012x  %s", r.Addr, r.Prev.String()))
+	c.SetText(fmt.Sprintf("0x%012x  %s", r.Addr, r.Value.String()))
 	if a.isFoundSelected(id.Row) {
 		c.Importance = widget.HighImportance
 	} else {
@@ -754,7 +754,7 @@ func (a *App) addResultToTable(i int) {
 		typ := a.foundValueType()
 		for _, idx := range sel {
 			r := a.results[idx]
-			a.entryRoots = append(a.entryRoots, &tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
+			a.entryRoots = append(a.entryRoots, &tableEntry{addr: r.Addr, typ: typ, value: r.Value, orig: r.Value})
 		}
 		a.rebuildVisible()
 		a.table.Refresh()
@@ -771,7 +771,7 @@ func (a *App) addResultToTable(i int) {
 	if a.session != nil {
 		typ = a.session.Options().Type
 	}
-	a.entryRoots = append(a.entryRoots, &tableEntry{addr: r.Addr, typ: typ, value: r.Prev, orig: r.Prev})
+	a.entryRoots = append(a.entryRoots, &tableEntry{addr: r.Addr, typ: typ, value: r.Value, orig: r.Value})
 	a.rebuildVisible()
 	a.table.Refresh()
 	a.setStatusText(i18n.Tf("status.added_to_table", map[string]any{"Addr": fmt.Sprintf("%x", r.Addr)}))
@@ -869,9 +869,9 @@ func (a *App) changeFoundValue(i int) {
 		return
 	}
 	typ := a.foundValueType()
-	text := a.results[i].Prev.String()
+	text := a.results[i].Value.String()
 	if a.hexBox != nil && a.hexBox.Checked {
-		text = hexOf(a.results[i].Prev)
+		text = hexOf(a.results[i].Value)
 	}
 	a.promptValue(text, func(input string) {
 		if i < 0 || i >= len(a.results) {
@@ -886,7 +886,7 @@ func (a *App) changeFoundValue(i int) {
 			a.fail(err)
 			return
 		}
-		a.results[i].Prev = v
+		a.results[i].Value = v
 		if a.foundList != nil {
 			a.foundList.Refresh()
 		}
@@ -909,7 +909,7 @@ func (a *App) changeFoundValues(sel []int) {
 			if err := a.writeValue(a.results[i].Addr, v); err != nil {
 				continue
 			}
-			a.results[i].Prev = v
+			a.results[i].Value = v
 			written++
 		}
 		if a.foundList != nil {
@@ -959,7 +959,7 @@ func (a *App) expandValueInput(input string, cur *tableEntry) string {
 func (a *App) expandFoundInput(input string, i int) string {
 	input = a.substituteDescriptions(input)
 	if d := scan.TypeByID(a.foundValueType()); d != nil && (d.Kind == scan.KindInt || d.Kind == scan.KindFloat) {
-		curText := a.results[i].Prev.String()
+		curText := a.results[i].Value.String()
 		input = replaceValueIdent(input, "oldvalue", curText)
 		input = replaceValueIdent(input, "value", curText)
 	}

@@ -196,13 +196,13 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 		results = results[:limit]
 	}
 	for _, r := range results {
-		fmt.Printf("0x%x = %s\n", r.Addr, r.Prev.String())
+		fmt.Printf("0x%x = %s\n", r.Addr, r.Value.String())
 	}
 
 	if export != "" {
 		tbl := &cheattable.Table{}
 		for _, r := range results {
-			tbl.Add("", fmt.Sprintf("0x%x", r.Addr), r.Prev.Type.String(), r.Prev.String())
+			tbl.Add("", fmt.Sprintf("0x%x", r.Addr), r.Value.Type.String(), r.Value.String())
 		}
 		if err := tbl.Save(export); err != nil {
 			return err
