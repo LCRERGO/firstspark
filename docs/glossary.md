@@ -40,6 +40,8 @@ Terms used across the codebase, ADRs and UI.
   handler or relocated instructions (`pkg/inject`).
 - **Copy-on-write region** — a private mapping (`p` in `/proc/<pid>/maps`);
   the scan's *Copy on write* filter keeps only these (ADR 0041).
+- **Duplicate record** — a deep copy of a cheat-table record (and its subtree)
+  appended as a new root; created from the context menu (ADR 0042).
 - **Executable filter** — the scan option that keeps only executable regions,
   only non-executable regions, or any (ADR 0041).
 - **First value** — the value an address held during the initial scan, kept on
@@ -70,6 +72,8 @@ Terms used across the codebase, ADRs and UI.
 - **PIE** — position-independent executable; its load base moves with ASLR.
 - **Previous value** — the value a Found-list address held in the scan before
   the latest one; empty after a first scan (ADR 0040).
+- **Record type** — the value type of a cheat-table entry; it can be changed in
+  place, re-reading the value at the same address (ADR 0042).
 - **Region** — one entry of `/proc/<pid>/maps` (`pkg/mem/region.go`).
 - **Same as first scan** — a next-scan mode that keeps addresses whose current
   value still equals their first-scan value (ADR 0041).
@@ -77,6 +81,9 @@ Terms used across the codebase, ADRs and UI.
   regions (ADR 0041).
 - **Scan session** — the state of a scan: options, selected regions, results and
   undo history (`pkg/scan/session.go`).
+- **Signed/unsigned display** — whether an integer cheat-table entry is
+  formatted as signed; toggled per record and persisted in `.CT`/JSON
+  (ADR 0042).
 - **Speedhack** — scaling a process's perceived time by hooking the libc time
   functions (`pkg/speedhack`).
 - **Static address** — an address inside a file-backed module region, shown as

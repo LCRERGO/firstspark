@@ -20,7 +20,7 @@ or GDB runtime dependency.
 | Scan filters: writable, executable, copy-on-write, alignment, region scope and start/stop range | implemented |
 | Undo scan | implemented |
 | User-defined value types (Lua 5.1 scripts, or Auto Assembler via a local JIT) | implemented |
-| Cheat table: pointer records, bitfields, hex/binary display, hotkeys, ASLR-safe chains | implemented |
+| Cheat table: pointer records, bitfields, hex/binary/signed display, hotkeys, groups, reorder, copy/paste, ASLR-safe chains | implemented |
 | Pointer scanner (N-level, cached pointermap, `.ptr` load/save) | implemented |
 | Hex viewer/editor | partial (viewer + byte-level read/write API) |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
