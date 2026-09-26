@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. P0–P3 are implemented; P4 remains open.
+Accepted. P0–P4 are implemented.
 
 ## Context
 
@@ -85,7 +85,9 @@ Routine ABIs to support, in order:
   string path, and `RegisterCE` accepts `USESSTRING` with `MAXSTRINGSIZE`.
 - **P4 — pure-Go fallback (optional, large).** A translator for the common
   integer instruction subset so the headless (`!cgo`) build can apply
-  conversions without `pkg/jit`.
+  conversions without `pkg/jit`. Implemented as `pkg/aaexec`, a bounded x86-64
+  interpreter; `buildAA` uses it whenever the JIT is unavailable, and rejects
+  routines outside the subset.
 
 ## Risks
 
@@ -106,7 +108,9 @@ Routine ABIs to support, in order:
 
 - Imported CE custom types format and parse values like CE does for the common
   integer case, instead of showing raw bytes.
-- The feature is CGO-only until P4; the headless build keeps `RegisterRaw`.
+- Conversions run on both builds: the CGO build uses `pkg/jit`, and the headless
+  build falls back to the `pkg/aaexec` interpreter, which covers the common
+  instruction subset and rejects the rest.
 - Import reports per-type fallback reasons, so an unsupported routine is visible
   rather than silently wrong.
 - This closes the ADR 0037 S5 follow-up for integer types and narrows it to

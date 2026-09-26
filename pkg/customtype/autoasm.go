@@ -8,15 +8,32 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/LCRERGO/firstspark/pkg/aaexec"
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
 	"github.com/LCRERGO/firstspark/pkg/jit"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
-// aaProgram is a compiled Auto Assembler conversion pair loaded into this
-// process.
+// runner executes compiled conversion code. It is backed by the cgo JIT when
+// available, otherwise by the pure-Go interpreter (ADR 0048 P4).
+type runner interface {
+	SetData([]byte)
+	DataPtr() uintptr
+	DataCopy(int) []byte
+	SetBytesOff(int, []byte)
+	PtrOff(int) uintptr
+	CopyOff(int, int) []byte
+	Call(entry uintptr, args ...uintptr) uintptr
+	Err() error
+	Close()
+}
+
+// forceInterpreter makes buildAA skip the JIT; it exists for tests.
+var forceInterpreter bool
+
+// aaProgram is a compiled Auto Assembler conversion pair.
 type aaProgram struct {
-	prog       *jit.Program
+	run        runner
 	read       uintptr
 	write      uintptr
 	size       int
@@ -54,36 +71,57 @@ func buildAA(def Definition) (*aaProgram, error) {
 	if stringKind {
 		bufLen = def.Size + textSize + 1
 	}
-	prog, err := jit.New(len(probe)+16, bufLen)
+	run, read, write, err := loadCode(section, len(probe)+16, bufLen, def.Size)
 	if err != nil {
 		return nil, err
 	}
+	return &aaProgram{
+		run: run, read: read, write: write, size: def.Size,
+		stringKind: stringKind, textOff: def.Size, textSize: textSize,
+	}, nil
+}
+
+// loadCode prefers the JIT and falls back to the interpreter when it is
+// unavailable or fails to load.
+func loadCode(section *autoasm.Section, codeSize, bufLen, valueSize int) (runner, uintptr, uintptr, error) {
+	if !forceInterpreter {
+		if prog, err := jit.New(codeSize, bufLen); err == nil {
+			if run, read, write, ok := loadJIT(prog, section); ok {
+				return run, read, write, nil
+			}
+			prog.Close()
+		}
+	}
+	ip, err := aaexec.Compile(section.Items, bufLen, valueSize)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	read, ok := ip.Entry("convertroutine")
+	if !ok {
+		ip.Close()
+		return nil, 0, 0, fmt.Errorf("script defines no ConvertRoutine")
+	}
+	var write uintptr
+	if w, ok := ip.Entry("convertbackroutine"); ok {
+		write = w
+	}
+	return ip, read, write, nil
+}
+
+func loadJIT(prog *jit.Program, section *autoasm.Section) (runner, uintptr, uintptr, bool) {
 	code, labels, err := autoasm.Assemble(section, uint64(prog.Base()), nil)
-	if err != nil {
-		prog.Close()
-		return nil, err
-	}
-	if err := prog.Load(code); err != nil {
-		prog.Close()
-		return nil, err
-	}
-	if err := prog.Seal(); err != nil {
-		prog.Close()
-		return nil, err
+	if err != nil || prog.Load(code) != nil || prog.Seal() != nil {
+		return nil, 0, 0, false
 	}
 	readOff, ok := labelOffset(labels, prog.Base(), "convertroutine")
 	if !ok {
-		prog.Close()
-		return nil, fmt.Errorf("script defines no ConvertRoutine")
+		return nil, 0, 0, false
 	}
-	p := &aaProgram{
-		prog: prog, read: prog.Entry(readOff), size: def.Size,
-		stringKind: stringKind, textOff: def.Size, textSize: textSize,
-	}
+	var write uintptr
 	if off, ok := labelOffset(labels, prog.Base(), "convertbackroutine"); ok {
-		p.write = prog.Entry(off)
+		write = prog.Entry(off)
 	}
-	return p, nil
+	return prog, prog.Entry(readOff), write, true
 }
 
 func isStringKind(kind string) bool {
@@ -98,8 +136,8 @@ func isStringKind(kind string) bool {
 func (p *aaProgram) readInt(raw []byte) int64 {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.prog.SetData(raw)
-	return int64(p.prog.Call(p.read, p.prog.DataPtr()))
+	p.run.SetData(raw)
+	return int64(p.run.Call(p.read, p.run.DataPtr(), 0, 0))
 }
 
 func (p *aaProgram) writeInt(n int64) []byte {
@@ -108,8 +146,8 @@ func (p *aaProgram) writeInt(n int64) []byte {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.prog.Call(p.write, uintptr(n), p.prog.DataPtr())
-	return p.prog.DataCopy(p.size)
+	p.run.Call(p.write, uintptr(n), p.run.DataPtr(), 0)
+	return p.run.DataCopy(p.size)
 }
 
 // readString runs the CE-style three-argument string routine into the text
@@ -117,10 +155,10 @@ func (p *aaProgram) writeInt(n int64) []byte {
 func (p *aaProgram) readString(raw []byte) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.prog.SetData(raw)
-	p.prog.SetBytesOff(p.textOff, make([]byte, p.textSize+1))
-	p.prog.Call(p.read, p.prog.DataPtr(), 0, p.prog.PtrOff(p.textOff))
-	b := p.prog.CopyOff(p.textOff, p.textSize+1)
+	p.run.SetData(raw)
+	p.run.SetBytesOff(p.textOff, make([]byte, p.textSize+1))
+	p.run.Call(p.read, p.run.DataPtr(), 0, p.run.PtrOff(p.textOff))
+	b := p.run.CopyOff(p.textOff, p.textSize+1)
 	if i := bytes.IndexByte(b, 0); i >= 0 {
 		b = b[:i]
 	}
@@ -137,13 +175,13 @@ func (p *aaProgram) writeString(s string) ([]byte, error) {
 	defer p.mu.Unlock()
 	buf := make([]byte, p.textSize+1)
 	copy(buf, s)
-	p.prog.SetBytesOff(p.textOff, buf)
-	p.prog.SetBytesOff(0, make([]byte, p.size))
-	p.prog.Call(p.write, p.prog.PtrOff(p.textOff), 0, p.prog.DataPtr())
-	return p.prog.DataCopy(p.size), nil
+	p.run.SetBytesOff(p.textOff, buf)
+	p.run.SetBytesOff(0, make([]byte, p.size))
+	p.run.Call(p.write, p.run.PtrOff(p.textOff), 0, p.run.DataPtr())
+	return p.run.DataCopy(p.size), nil
 }
 
-func (p *aaProgram) Close() { p.prog.Close() }
+func (p *aaProgram) Close() { p.run.Close() }
 
 // RegisterAA compiles an Auto Assembler script whose [ENABLE] section defines
 // a `ConvertRoutine` label (bytes pointer in RDI, value in RAX) and an

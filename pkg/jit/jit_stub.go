@@ -45,5 +45,8 @@ func (p *Program) CopyOff(int, int) []byte { return nil }
 // Call is a stub.
 func (p *Program) Call(uintptr, ...uintptr) uintptr { return 0 }
 
+// Err is a stub.
+func (p *Program) Err() error { return nil }
+
 // Close is a stub.
 func (p *Program) Close() {}

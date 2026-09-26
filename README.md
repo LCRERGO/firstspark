@@ -192,8 +192,9 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
   colour, last state, hotkeys, the core Lua API and preserved unknown elements
   (ADR 0037, ADR 0046); GUI/VCL-script tables are out of scope (ADR 0039).
   Integer, float and string custom-type `ConvertRoutine` conversions are applied
-  through the JIT; routines that depend on the address argument or use
-  unsupported instructions fall back to raw (ADR 0048).
+  on both builds — natively via `pkg/jit` under CGO, or interpreted by
+  `pkg/aaexec` headless; routines outside that subset or that depend on the
+  address argument fall back to raw (ADR 0048).
 
 ## License
 

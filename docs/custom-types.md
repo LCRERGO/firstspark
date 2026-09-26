@@ -175,9 +175,11 @@ Conventions:
   are ignored.
 
 Because the routine runs in Firstspark's process, a faulty script can crash the
-application — the same trust model as Cheat Engine's Auto Assembler. Auto
-Assembler types need the CGO build (`make`); the headless build supports Lua
-types only.
+application — the same trust model as Cheat Engine's Auto Assembler. The CGO
+build (`make`) executes the routine natively through `pkg/jit`; the headless
+build interprets the same common instruction subset in pure Go (`pkg/aaexec`)
+and rejects routines outside it, so a headless build still supports Auto
+Assembler types without CGO.
 
 ## Differences from Cheat Engine
 

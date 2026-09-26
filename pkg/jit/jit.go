@@ -184,6 +184,9 @@ func (p *Program) Call(entry uintptr, args ...uintptr) uintptr {
 	return uintptr(C.jit_call6(C.uintptr_t(entry), a[0], a[1], a[2], a[3], a[4], a[5]))
 }
 
+// Err reports the last execution error. The JIT never fails at call time.
+func (p *Program) Err() error { return nil }
+
 // Close releases the code and data regions.
 func (p *Program) Close() {
 	if p.buf != nil {
