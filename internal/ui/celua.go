@@ -158,6 +158,9 @@ func (a *App) newLuaRuntime() *celua.Runtime {
 			return nil, fmt.Errorf("process %q not found", name)
 		},
 		Show: func(s string) { a.setStatusText(s) },
+		Output: func(s string) {
+			a.appendLuaOutput(s)
+		},
 		Clipboard: func(s string) {
 			if a.fapp != nil {
 				a.fapp.Clipboard().SetContent(s)

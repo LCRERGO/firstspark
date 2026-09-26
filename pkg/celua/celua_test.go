@@ -1,12 +1,24 @@
 package celua
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/script"
 )
+
+func TestPrintOutput(t *testing.T) {
+	var out []string
+	r := New(Config{Output: func(s string) { out = append(out, s) }})
+	if err := r.Eval(`print("hello", 42)`); err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if len(out) != 1 || !strings.Contains(out[0], "hello") || !strings.Contains(out[0], "42") {
+		t.Fatalf("output = %v", out)
+	}
+}
 
 func TestCreateAndAppendRecord(t *testing.T) {
 	tab := &fakeTable{recs: map[string]*fakeRecord{}}

@@ -205,7 +205,13 @@ type App struct {
 	asmExec    *autoasm.Executor
 	asmBackend debugger.Backend
 
-	luaRT *celua.Runtime
+	luaRT      *celua.Runtime
+	luaWin     fyne.Window
+	luaLines   []string
+	luaList    *widget.List
+	luaInput   *luaInput
+	luaHistory []string
+	luaHistPos int
 
 	ctWin       fyne.Window
 	ctList      *widget.List
@@ -597,7 +603,8 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	dissectItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	autoasmItem := fyne.NewMenuItem(i18n.T("menu.tools.auto_assemble"), a.openAutoAssemble)
 	autoasmItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
-	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, speed, hotkeysItem)
+	luaItem := fyne.NewMenuItem(i18n.T("menu.tools.lua"), a.openLuaConsole)
+	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, luaItem, speed, hotkeysItem)
 
 	about := fyne.NewMenuItem(i18n.T("menu.help.about"), a.showAbout)
 	help := fyne.NewMenu(i18n.T("menu.help"), about)

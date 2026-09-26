@@ -51,6 +51,8 @@ type Config struct {
 	OpenProcess func(name string) (*mem.Process, error)
 	// Show displays a message (showMessage/ShowMessage).
 	Show func(string)
+	// Output receives print output. When nil, print falls back to Show.
+	Output func(string)
 	// Version is returned by getCEVersion.
 	Version float64
 	// Now overrides the clock used by timers (for tests).
@@ -176,6 +178,7 @@ func (r *Runtime) apiGlobals() map[string]script.Value {
 		"messageDialog": noopFunc("messageDialog"),
 		"showMessage":   script.GoFunc("showMessage", r.showMessage),
 		"ShowMessage":   script.GoFunc("ShowMessage", r.showMessage),
+		"print":         script.GoFunc("print", r.printLine),
 		"getCEVersion":  script.GoFunc("getCEVersion", func([]script.Value) ([]script.Value, error) { return []script.Value{script.Float(r.cfg.Version)}, nil }),
 		"targetIs64Bit": script.GoFunc("targetIs64Bit", func([]script.Value) ([]script.Value, error) { return []script.Value{script.Bool(true)}, nil }),
 		"openProcess":   script.GoFunc("openProcess", r.openProcess),
@@ -500,6 +503,21 @@ func (r *Runtime) getAddressSafe(args []script.Value) ([]script.Value, error) {
 func (r *Runtime) showMessage(args []script.Value) ([]script.Value, error) {
 	if r.cfg.Show != nil && len(args) > 0 {
 		r.cfg.Show(args[0].Str())
+	}
+	return nil, nil
+}
+
+// printLine implements Lua's print, rendering arguments separated by tabs.
+func (r *Runtime) printLine(args []script.Value) ([]script.Value, error) {
+	parts := make([]string, len(args))
+	for i, a := range args {
+		parts[i] = a.String()
+	}
+	line := strings.Join(parts, "\t")
+	if r.cfg.Output != nil {
+		r.cfg.Output(line)
+	} else if r.cfg.Show != nil {
+		r.cfg.Show(line)
 	}
 	return nil, nil
 }
