@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -78,18 +79,23 @@ func (a *App) applyTable(tbl *cheattable.Table) {
 // entryFromStored converts a stored (possibly nested) entry into a tree node.
 func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 	node := &tableEntry{
-		desc:     e.Description,
-		group:    e.Group,
-		expr:     e.Expr,
-		script:   e.Script,
-		display:  parseDisplay(e.Display),
-		unsigned: !e.ShowAsSigned,
+		desc:      e.Description,
+		group:     e.Group,
+		expr:      e.Expr,
+		script:    e.Script,
+		display:   parseDisplay(e.Display),
+		unsigned:  !e.ShowAsSigned,
+		color:     e.Color,
+		ceHotkeys: append([]cheattable.CEHotkey(nil), e.CEHotkeys...),
+		extra:     append([]cheattable.RawElement(nil), e.ExtraElements...),
 	}
 	node.exprOffsets = splitOffsets(e.Offsets)
 	node.typ, node.bit = a.storedType(e)
 	if !node.group && node.expr == "" {
 		if addr, err := e.AddressValue(); err == nil {
 			node.addr = addr
+		} else if e.LastAddress != "" {
+			node.addr = parseHexLoose(e.LastAddress)
 		}
 	}
 	a.applyStoredPointer(node, e)
@@ -150,8 +156,12 @@ func (a *App) applyStoredPointer(node *tableEntry, e *cheattable.Entry) {
 // loadStoredValue restores the value, frozen state and hotkey of a leaf.
 func (a *App) loadStoredValue(node *tableEntry, e *cheattable.Entry, typ scan.ValueType) {
 	var v scan.Value
-	if strings.TrimSpace(e.Value) != "" {
-		if parsed, err := scan.ParseValue(typ, e.Value); err == nil {
+	text := e.Value
+	if strings.TrimSpace(text) == "" {
+		text = e.LastValue
+	}
+	if strings.TrimSpace(text) != "" {
+		if parsed, err := scan.ParseValue(typ, text); err == nil {
 			v = parsed
 		}
 	}
@@ -162,7 +172,7 @@ func (a *App) loadStoredValue(node *tableEntry, e *cheattable.Entry, typ scan.Va
 	}
 	node.value = v
 	node.orig = v
-	if e.Frozen {
+	if e.Frozen || e.Activated {
 		node.frozen = true
 		node.frozenValue = v
 	}
@@ -170,6 +180,17 @@ func (a *App) loadStoredValue(node *tableEntry, e *cheattable.Entry, typ scan.Va
 		node.hotkey = key
 		a.bindHotkey(key, node.addr)
 	}
+}
+
+// parseHexLoose parses a hexadecimal address string, tolerating a 0x prefix.
+func parseHexLoose(s string) uint64 {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+	n, err := strconv.ParseUint(s, 16, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func (a *App) saveTable() { a.saveTableAs() }
@@ -250,7 +271,15 @@ func (a *App) tableFromEntries() *cheattable.Table {
 
 // entryToStored serialises a tree node and its children.
 func entryToStored(e *tableEntry) *cheattable.Entry {
-	out := &cheattable.Entry{Description: e.desc, Group: e.group, Expr: e.expr, Script: e.script}
+	out := &cheattable.Entry{
+		Description:   e.desc,
+		Group:         e.group,
+		Expr:          e.expr,
+		Script:        e.script,
+		Color:         e.color,
+		CEHotkeys:     e.ceHotkeys,
+		ExtraElements: e.extra,
+	}
 	if len(e.exprOffsets) > 0 {
 		out.Offsets = strings.Join(e.exprOffsets, ",")
 	}

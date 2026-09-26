@@ -1,0 +1,81 @@
+package cheattable
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestCEExtrasRoundTrip(t *testing.T) {
+	data := []byte(`<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"hp"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>1000</Address>
+      <Color>00FF00</Color>
+      <LastState RealAddress="1000" Value="42" Activated="1"/>
+      <Hotkeys>
+        <Hotkey><Action>Toggle Activation</Action><Keys><Key>112</Key></Keys></Hotkey>
+      </Hotkeys>
+      <UnknownThing>hello</UnknownThing>
+    </CheatEntry>
+  </CheatEntries>
+</CheatTable>`)
+	tbl, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(tbl.Entries) != 1 {
+		t.Fatalf("entries = %d", len(tbl.Entries))
+	}
+	e := tbl.Entries[0]
+	if e.Color != "00FF00" {
+		t.Errorf("Color = %q", e.Color)
+	}
+	if e.LastValue != "42" || e.LastAddress != "1000" || !e.Activated {
+		t.Errorf("LastState = %+v", e)
+	}
+	if e.Hotkey != "F1" {
+		t.Errorf("Hotkey = %q, want F1", e.Hotkey)
+	}
+	if len(e.CEHotkeys) != 1 || e.CEHotkeys[0].Keys != "112" {
+		t.Errorf("CEHotkeys = %+v", e.CEHotkeys)
+	}
+	if len(e.ExtraElements) != 1 || e.ExtraElements[0].Name != "UnknownThing" || e.ExtraElements[0].Text != "hello" {
+		t.Errorf("ExtraElements = %+v", e.ExtraElements)
+	}
+
+	out, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	for _, want := range []string{"Color", "00FF00", "LastState", "RealAddress", "Activated", "Hotkeys", "112", "UnknownThing", "hello"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("export missing %q:\n%s", want, out)
+		}
+	}
+
+	back, err := Parse(out)
+	if err != nil {
+		t.Fatalf("re-Parse: %v", err)
+	}
+	e2 := back.Entries[0]
+	if e2.Color != "00FF00" || !e2.Activated || e2.Hotkey != "F1" || len(e2.ExtraElements) != 1 {
+		t.Fatalf("re-import = %+v", e2)
+	}
+}
+
+func TestFirstsparkHotkeyExportsAsCEHotkey(t *testing.T) {
+	tbl := &Table{Version: SchemaVersion, Entries: []Entry{
+		{ID: 1, Description: "hp", Address: "0x1000", Type: "dword", Hotkey: "F5"},
+	}}
+	data, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	if !strings.Contains(string(data), "<Key>116</Key>") {
+		t.Fatalf("F5 should export as VK 116:\n%s", data)
+	}
+}

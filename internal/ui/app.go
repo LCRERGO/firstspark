@@ -26,6 +26,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/asm"
 	"github.com/LCRERGO/firstspark/pkg/autoasm"
 	"github.com/LCRERGO/firstspark/pkg/celua"
+	"github.com/LCRERGO/firstspark/pkg/cheattable"
 	"github.com/LCRERGO/firstspark/pkg/config"
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/debugger"
@@ -65,6 +66,9 @@ type tableEntry struct {
 	script      string
 	scriptExec  *autoasm.Executor
 	scriptBE    debugger.Backend
+	color       string
+	ceHotkeys   []cheattable.CEHotkey
+	extra       []cheattable.RawElement
 }
 
 // activePanel identifies which result list the focused shortcuts act on.

@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -17,22 +18,302 @@ type ceOutTable struct {
 	CheatEntries            []ceOut  `xml:"CheatEntries>CheatEntry"`
 }
 
-// ceOut is one Cheat Engine record.
+// ceOut is one Cheat Engine record written by MarshalCE. It marshals itself so
+// the optional LastState/Color/Hotkeys elements and preserved unknown elements
+// can be emitted in Cheat Engine's order.
 type ceOut struct {
-	ID              int      `xml:"ID,omitempty"`
-	Description     string   `xml:"Description,omitempty"`
-	GroupHeader     int      `xml:"GroupHeader,omitempty"`
-	ShowAsHex       int      `xml:"ShowAsHex,omitempty"`
-	ShowAsSigned    int      `xml:"ShowAsSigned,omitempty"`
-	VariableType    string   `xml:"VariableType,omitempty"`
-	Address         string   `xml:"Address,omitempty"`
-	Offsets         []string `xml:"Offsets>Offset,omitempty"`
-	Length          int      `xml:"Length,omitempty"`
-	Unicode         int      `xml:"Unicode,omitempty"`
-	ByteLength      int      `xml:"ByteLength,omitempty"`
-	CustomType      string   `xml:"CustomType,omitempty"`
-	AssemblerScript string   `xml:"AssemblerScript,omitempty"`
-	Children        []ceOut  `xml:"CheatEntries>CheatEntry,omitempty"`
+	ID              int
+	Description     string
+	GroupHeader     int
+	ShowAsHex       int
+	ShowAsSigned    int
+	Color           string
+	VariableType    string
+	Address         string
+	Offsets         []string
+	Length          int
+	Unicode         int
+	ByteLength      int
+	CustomType      string
+	AssemblerScript string
+	LastState       *ceOutLastState
+	Hotkeys         []ceOutHotkey
+	Extras          []RawElement
+	Children        []ceOut
+}
+
+type ceOutLastState struct {
+	RealAddress string
+	Value       string
+	Activated   bool
+}
+
+type ceOutHotkey struct {
+	Action        string
+	Active        bool
+	OnlyWhileDown bool
+	Keys          []int
+	Value         string
+	Description   string
+	ID            int
+}
+
+// MarshalXML writes the record's child elements.
+func (o ceOut) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
+	start := xml.StartElement{Name: xml.Name{Local: "CheatEntry"}}
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	if err := o.encodeChildren(enc); err != nil {
+		return err
+	}
+	return enc.EncodeToken(start.End())
+}
+
+func (o ceOut) encodeChildren(enc *xml.Encoder) error {
+	if err := ceElemInt(enc, "ID", o.ID); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "Description", o.Description); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "Address", o.Address); err != nil {
+		return err
+	}
+	if len(o.Offsets) > 0 {
+		if err := ceContainer(enc, "Offsets", "Offset", o.Offsets); err != nil {
+			return err
+		}
+	}
+	if o.LastState != nil {
+		if err := o.LastState.encode(enc); err != nil {
+			return err
+		}
+	}
+	if err := ceElemInt(enc, "ShowAsHex", o.ShowAsHex); err != nil {
+		return err
+	}
+	if o.ShowAsSigned == 1 {
+		if err := ceElem(enc, "ShowAsSigned", "1"); err != nil {
+			return err
+		}
+	}
+	if err := ceElem(enc, "Color", o.Color); err != nil {
+		return err
+	}
+	if err := ceElemInt(enc, "GroupHeader", o.GroupHeader); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "VariableType", o.VariableType); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "CustomType", o.CustomType); err != nil {
+		return err
+	}
+	if err := ceElemInt(enc, "Length", o.Length); err != nil {
+		return err
+	}
+	if err := ceElemInt(enc, "Unicode", o.Unicode); err != nil {
+		return err
+	}
+	if err := ceElemInt(enc, "ByteLength", o.ByteLength); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "AssemblerScript", o.AssemblerScript); err != nil {
+		return err
+	}
+	if len(o.Hotkeys) > 0 {
+		if err := encodeHotkeys(enc, o.Hotkeys); err != nil {
+			return err
+		}
+	}
+	for _, ex := range o.Extras {
+		if err := ceElem(enc, ex.Name, ex.Text); err != nil {
+			return err
+		}
+	}
+	if len(o.Children) > 0 {
+		wrap := xml.StartElement{Name: xml.Name{Local: "CheatEntries"}}
+		if err := enc.EncodeToken(wrap); err != nil {
+			return err
+		}
+		for _, c := range o.Children {
+			if err := enc.Encode(c); err != nil {
+				return err
+			}
+		}
+		if err := enc.EncodeToken(wrap.End()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ls ceOutLastState) encode(enc *xml.Encoder) error {
+	start := xml.StartElement{Name: xml.Name{Local: "LastState"}}
+	if ls.RealAddress != "" {
+		start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: "RealAddress"}, Value: ls.RealAddress})
+	}
+	if ls.Value != "" {
+		start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: "Value"}, Value: ls.Value})
+	}
+	if ls.Activated {
+		start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: "Activated"}, Value: "1"})
+	}
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	return enc.EncodeToken(start.End())
+}
+
+func encodeHotkeys(enc *xml.Encoder, hks []ceOutHotkey) error {
+	wrap := xml.StartElement{Name: xml.Name{Local: "Hotkeys"}}
+	if err := enc.EncodeToken(wrap); err != nil {
+		return err
+	}
+	for _, hk := range hks {
+		start := xml.StartElement{Name: xml.Name{Local: "Hotkey"}}
+		if !hk.Active {
+			start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: "Active"}, Value: "0"})
+		}
+		if hk.OnlyWhileDown {
+			start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: "OnlyWhileDown"}, Value: "1"})
+		}
+		if err := enc.EncodeToken(start); err != nil {
+			return err
+		}
+		if err := ceElem(enc, "Action", hk.Action); err != nil {
+			return err
+		}
+		if len(hk.Keys) > 0 {
+			keys := make([]string, len(hk.Keys))
+			for i, k := range hk.Keys {
+				keys[i] = strconv.Itoa(k)
+			}
+			if err := ceContainer(enc, "Keys", "Key", keys); err != nil {
+				return err
+			}
+		}
+		if err := ceElem(enc, "Value", hk.Value); err != nil {
+			return err
+		}
+		if err := ceElem(enc, "Description", hk.Description); err != nil {
+			return err
+		}
+		if err := ceElemInt(enc, "ID", hk.ID); err != nil {
+			return err
+		}
+		if err := enc.EncodeToken(start.End()); err != nil {
+			return err
+		}
+	}
+	return enc.EncodeToken(wrap.End())
+}
+
+// ceElem writes <name>text</name> when text is non-empty.
+func ceElem(enc *xml.Encoder, name, text string) error {
+	if text == "" {
+		return nil
+	}
+	start := xml.StartElement{Name: xml.Name{Local: name}}
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	if err := enc.EncodeToken(xml.CharData(text)); err != nil {
+		return err
+	}
+	return enc.EncodeToken(start.End())
+}
+
+func ceElemInt(enc *xml.Encoder, name string, v int) error {
+	if v == 0 {
+		return nil
+	}
+	return ceElem(enc, name, strconv.Itoa(v))
+}
+
+// ceContainer writes <outer><inner>v</inner>...</outer>.
+func ceContainer(enc *xml.Encoder, outer, inner string, values []string) error {
+	start := xml.StartElement{Name: xml.Name{Local: outer}}
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	for _, v := range values {
+		if err := ceElem(enc, inner, v); err != nil {
+			return err
+		}
+	}
+	return enc.EncodeToken(start.End())
+}
+
+func entryToCE(e *Entry) ceOut {
+	out := ceOut{ID: e.ID, Description: ceQuote(e.Description), Color: e.Color}
+	switch {
+	case e.Group && e.Script != "":
+		out.GroupHeader = 1
+		out.VariableType = "Auto Assembler Script"
+		out.AssemblerScript = e.Script
+	case e.Group:
+		out.GroupHeader = 1
+	default:
+		out.VariableType, out.CustomType = ceVariableType(e)
+		out.Length, out.Unicode, out.ByteLength = ceTypeExtras(e)
+	}
+	if e.Display == "hex" {
+		out.ShowAsHex = 1
+	}
+	if e.ShowAsSigned {
+		out.ShowAsSigned = 1
+	}
+	if e.LastValue != "" || e.LastAddress != "" || e.Activated {
+		out.LastState = &ceOutLastState{
+			RealAddress: strings.TrimPrefix(e.LastAddress, "0x"),
+			Value:       e.LastValue,
+			Activated:   e.Activated,
+		}
+	}
+	out.Hotkeys = ceHotkeysFromEntry(e)
+	out.Extras = e.ExtraElements
+	out.Address, out.Offsets = ceAddress(e)
+	if len(e.Children) > 0 {
+		for i := range e.Children {
+			out.Children = append(out.Children, entryToCE(&e.Children[i]))
+		}
+	}
+	return out
+}
+
+// ceHotkeysFromEntry returns the CE hotkeys to emit: the preserved ones, or a
+// single Toggle Activation binding for a Firstspark hotkey.
+func ceHotkeysFromEntry(e *Entry) []ceOutHotkey {
+	var out []ceOutHotkey
+	for _, hk := range e.CEHotkeys {
+		out = append(out, ceOutHotkey{
+			Action:        hk.Action,
+			Active:        hk.Active,
+			OnlyWhileDown: hk.OnlyWhileDown,
+			Keys:          parseKeyList(hk.Keys),
+			Value:         hk.Value,
+			Description:   hk.Description,
+			ID:            hk.ID,
+		})
+	}
+	if len(out) == 0 && e.Hotkey != "" {
+		if vk, ok := vkCode(e.Hotkey); ok {
+			out = append(out, ceOutHotkey{Action: "Toggle Activation", Active: true, Keys: []int{vk}})
+		}
+	}
+	return out
+}
+
+func parseKeyList(s string) []int {
+	var out []int
+	for _, part := range strings.Split(s, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // MarshalCE renders the table as a Cheat Engine .CT document.
@@ -58,34 +339,6 @@ func (t *Table) ExportCE(path string) error {
 		return fmt.Errorf("cheattable: write %s: %w", path, err)
 	}
 	return nil
-}
-
-func entryToCE(e *Entry) ceOut {
-	out := ceOut{ID: e.ID, Description: ceQuote(e.Description)}
-	switch {
-	case e.Group && e.Script != "":
-		out.GroupHeader = 1
-		out.VariableType = "Auto Assembler Script"
-		out.AssemblerScript = e.Script
-	case e.Group:
-		out.GroupHeader = 1
-	default:
-		out.VariableType, out.CustomType = ceVariableType(e)
-		out.Length, out.Unicode, out.ByteLength = ceTypeExtras(e)
-	}
-	if e.Display == "hex" {
-		out.ShowAsHex = 1
-	}
-	if e.ShowAsSigned {
-		out.ShowAsSigned = 1
-	}
-	out.Address, out.Offsets = ceAddress(e)
-	if len(e.Children) > 0 {
-		for i := range e.Children {
-			out.Children = append(out.Children, entryToCE(&e.Children[i]))
-		}
-	}
-	return out
 }
 
 // ceVariableType maps a firstspark Entry to CE's VariableType (and CustomType).

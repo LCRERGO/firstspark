@@ -51,8 +51,37 @@ type Entry struct {
 	// Script is the Auto Assembler source of a script record. It is written as
 	// a child element and is not executed on import (ADR 0039).
 	Script string `xml:"Script" json:"script,omitempty" yaml:"script,omitempty"`
+	// Color is the Cheat Engine row colour (opaque 6-hex, BGR order).
+	Color string `xml:"Color,attr,omitempty" json:"color,omitempty" yaml:"color,omitempty"`
+	// LastValue, LastAddress and Activated mirror Cheat Engine's <LastState>.
+	LastValue   string `xml:"LastValue,attr,omitempty" json:"last_value,omitempty" yaml:"last_value,omitempty"`
+	LastAddress string `xml:"LastAddress,attr,omitempty" json:"last_address,omitempty" yaml:"last_address,omitempty"`
+	Activated   bool   `xml:"Activated,attr,omitempty" json:"activated,omitempty" yaml:"activated,omitempty"`
+	// CEHotkeys preserves Cheat Engine hotkeys that have no Firstspark
+	// equivalent, for faithful re-export.
+	CEHotkeys []CEHotkey `xml:"CEHotkeys>CEHotkey,omitempty" json:"ce_hotkeys,omitempty" yaml:"ce_hotkeys,omitempty"`
+	// ExtraElements preserves unmodelled Cheat Engine child elements (name and
+	// text), so a re-export keeps them.
+	ExtraElements []RawElement `xml:"ExtraElements>RawElement,omitempty" json:"extra_elements,omitempty" yaml:"extra_elements,omitempty"`
 	// Children are the nested records of a group or script.
 	Children []Entry `xml:"CheatEntries>CheatEntry,omitempty" json:"children,omitempty" yaml:"children,omitempty"`
+}
+
+// CEHotkey mirrors one Cheat Engine <Hotkey> child.
+type CEHotkey struct {
+	Action        string `xml:"Action,attr,omitempty" json:"action,omitempty" yaml:"action,omitempty"`
+	Keys          string `xml:"Keys,attr,omitempty" json:"keys,omitempty" yaml:"keys,omitempty"`
+	Value         string `xml:"Value,attr,omitempty" json:"value,omitempty" yaml:"value,omitempty"`
+	Description   string `xml:"Description,attr,omitempty" json:"description,omitempty" yaml:"description,omitempty"`
+	ID            int    `xml:"ID,attr,omitempty" json:"id,omitempty" yaml:"id,omitempty"`
+	Active        bool   `xml:"Active,attr,omitempty" json:"active,omitempty" yaml:"active,omitempty"`
+	OnlyWhileDown bool   `xml:"OnlyWhileDown,attr,omitempty" json:"only_while_down,omitempty" yaml:"only_while_down,omitempty"`
+}
+
+// RawElement is a Cheat Engine child element Firstspark does not model.
+type RawElement struct {
+	Name string `xml:"Name,attr,omitempty" json:"name,omitempty" yaml:"name,omitempty"`
+	Text string `xml:"Text,attr,omitempty" json:"text,omitempty" yaml:"text,omitempty"`
 }
 
 // MarshalXML writes an entry without emitting an empty <CheatEntries> wrapper.
@@ -91,6 +120,10 @@ func (e Entry) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
 	boolean("Group", e.Group)
 	set("Expr", e.Expr)
 	set("Offsets", e.Offsets)
+	set("Color", e.Color)
+	set("LastValue", e.LastValue)
+	set("LastAddress", e.LastAddress)
+	boolean("Activated", e.Activated)
 
 	if err := enc.EncodeToken(start); err != nil {
 		return err
@@ -109,6 +142,34 @@ func (e Entry) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
 			return err
 		}
 		if err := enc.EncodeToken(se.End()); err != nil {
+			return err
+		}
+	}
+	if len(e.CEHotkeys) > 0 {
+		wrap := xml.StartElement{Name: xml.Name{Local: "CEHotkeys"}}
+		if err := enc.EncodeToken(wrap); err != nil {
+			return err
+		}
+		for _, hk := range e.CEHotkeys {
+			if err := enc.Encode(hk); err != nil {
+				return err
+			}
+		}
+		if err := enc.EncodeToken(wrap.End()); err != nil {
+			return err
+		}
+	}
+	if len(e.ExtraElements) > 0 {
+		wrap := xml.StartElement{Name: xml.Name{Local: "ExtraElements"}}
+		if err := enc.EncodeToken(wrap); err != nil {
+			return err
+		}
+		for _, raw := range e.ExtraElements {
+			if err := enc.Encode(raw); err != nil {
+				return err
+			}
+		}
+		if err := enc.EncodeToken(wrap.End()); err != nil {
 			return err
 		}
 	}
@@ -151,10 +212,14 @@ type ImportStats struct {
 }
 
 // CustomTypeDef is a Cheat Engine custom type definition extracted from a
-// table's scripts (ADR 0037 S5).
+// table's scripts (ADR 0037 S5). ConvertRoutine and ConvertBackRoutine hold the
+// Auto Assembler bodies when present; Firstspark registers the type raw because
+// translating arbitrary assembly conversions is a separate follow-up.
 type CustomTypeDef struct {
-	Name string
-	Size int
+	Name               string
+	Size               int
+	ConvertRoutine     string
+	ConvertBackRoutine string
 }
 
 // PointerChain is a parsed pointer path. When Module is set, Offset is relative

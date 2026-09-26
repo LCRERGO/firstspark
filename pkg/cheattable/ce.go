@@ -16,22 +16,50 @@ type ceTable struct {
 // ceEntry is one Cheat Engine record. CE nests children under parents and
 // stores values as child elements rather than attributes.
 type ceEntry struct {
-	ID            int       `xml:"ID"`
-	Description   string    `xml:"Description"`
-	VariableType  string    `xml:"VariableType"`
-	Address       string    `xml:"Address"`
-	Offsets       []string  `xml:"Offsets>Offset"`
-	GroupHeader   bool      `xml:"GroupHeader"`
-	ShowAsHex     bool      `xml:"ShowAsHex"`
-	ShowAsSigned  bool      `xml:"ShowAsSigned"`
-	Length        int       `xml:"Length"`
-	Unicode       bool      `xml:"Unicode"`
-	CodePage      int       `xml:"CodePage"`
-	ZeroTerminate bool      `xml:"ZeroTerminate"`
-	ByteLength    int       `xml:"ByteLength"`
-	CustomType    string    `xml:"CustomType"`
-	Script        string    `xml:"AssemblerScript"`
-	Entries       []ceEntry `xml:"CheatEntries>CheatEntry"`
+	ID            int          `xml:"ID"`
+	Description   string       `xml:"Description"`
+	VariableType  string       `xml:"VariableType"`
+	Address       string       `xml:"Address"`
+	Offsets       []string     `xml:"Offsets>Offset"`
+	GroupHeader   bool         `xml:"GroupHeader"`
+	ShowAsHex     bool         `xml:"ShowAsHex"`
+	ShowAsSigned  bool         `xml:"ShowAsSigned"`
+	Length        int          `xml:"Length"`
+	Unicode       bool         `xml:"Unicode"`
+	CodePage      int          `xml:"CodePage"`
+	ZeroTerminate bool         `xml:"ZeroTerminate"`
+	ByteLength    int          `xml:"ByteLength"`
+	CustomType    string       `xml:"CustomType"`
+	Script        string       `xml:"AssemblerScript"`
+	Color         string       `xml:"Color"`
+	LastState     *ceLastState `xml:"LastState"`
+	Hotkeys       []ceHotkey   `xml:"Hotkeys>Hotkey"`
+	Extra         []ceExtra    `xml:",any"`
+	Entries       []ceEntry    `xml:"CheatEntries>CheatEntry"`
+}
+
+// ceLastState is Cheat Engine's cached value/address for a record.
+type ceLastState struct {
+	RealAddress string `xml:"RealAddress,attr"`
+	Value       string `xml:"Value,attr"`
+	Activated   string `xml:"Activated,attr"`
+}
+
+// ceHotkey is one Cheat Engine hotkey binding.
+type ceHotkey struct {
+	Action        string `xml:"Action"`
+	Active        string `xml:"Active,attr"`
+	OnlyWhileDown string `xml:"OnlyWhileDown,attr"`
+	Keys          []int  `xml:"Keys>Key"`
+	Value         string `xml:"Value"`
+	Description   string `xml:"Description"`
+	ID            string `xml:"ID"`
+}
+
+// ceExtra captures an unmodelled Cheat Engine child element.
+type ceExtra struct {
+	XMLName xml.Name
+	Text    string `xml:",chardata"`
 }
 
 // parseCE converts a Cheat Engine document into Firstspark's model, preserving
@@ -77,13 +105,13 @@ func parseCustomTypeDefs(script string) []CustomTypeDef {
 			return out
 		}
 		script = script[i+len(marker):]
-		if name, size := customTypeFromAA(script); name != "" && size > 0 {
-			out = append(out, CustomTypeDef{Name: name, Size: size})
+		if def, ok := customTypeFromAA(script); ok {
+			out = append(out, def)
 		}
 	}
 }
 
-func customTypeFromAA(s string) (string, int) {
+func customTypeFromAA(s string) (CustomTypeDef, bool) {
 	name := ""
 	size := 0
 	lines := strings.Split(s, "\n")
@@ -115,7 +143,41 @@ func customTypeFromAA(s string) (string, int) {
 			break
 		}
 	}
-	return name, size
+	if name == "" || size <= 0 {
+		return CustomTypeDef{}, false
+	}
+	return CustomTypeDef{
+		Name:               name,
+		Size:               size,
+		ConvertRoutine:     extractAARoutine(lines, "ConvertRoutine"),
+		ConvertBackRoutine: extractAARoutine(lines, "ConvertBackRoutine"),
+	}, true
+}
+
+// extractAARoutine returns the lines after a `label:` up to the next label.
+func extractAARoutine(lines []string, label string) string {
+	start := -1
+	for i, l := range lines {
+		if strings.TrimSpace(l) == label+":" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	var out []string
+	for i := start + 1; i < len(lines); i++ {
+		t := strings.TrimSpace(lines[i])
+		if t == "" {
+			continue
+		}
+		if strings.HasSuffix(t, ":") && !strings.HasPrefix(t, "//") && !strings.HasPrefix(t, ";") {
+			break
+		}
+		out = append(out, strings.TrimSpace(lines[i]))
+	}
+	return strings.Join(out, "\n")
 }
 
 func (s *ImportStats) skip(reason string) {
@@ -138,18 +200,21 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 		e := &entries[i]
 		children := convertCE(e.Entries, stats)
 		if strings.EqualFold(strings.TrimSpace(e.VariableType), "Auto Assembler Script") {
-			out = append(out, Entry{
+			g := Entry{
 				Description: ceDescription(e.Description),
 				Group:       true,
 				Script:      e.Script,
 				Children:    children,
-			})
+			}
+			applyCEExtras(&g, e)
+			out = append(out, g)
 			stats.Imported++
 			continue
 		}
 		if e.GroupHeader {
 			g := Entry{Description: ceDescription(e.Description), Group: true, Children: children}
 			applyCEAddress(&g, e)
+			applyCEExtras(&g, e)
 			out = append(out, g)
 			stats.Imported++
 			continue
@@ -165,6 +230,7 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 		if e.ShowAsHex {
 			leaf.Display = "hex"
 		}
+		applyCEExtras(&leaf, e)
 		switch applyCEAddress(&leaf, e) {
 		case addrResolved, addrExpr:
 			out = append(out, leaf)
@@ -175,6 +241,100 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 		}
 	}
 	return out
+}
+
+// applyCEExtras copies the Cheat Engine fields Firstspark models loosely: row
+// colour, cached last state, hotkeys and unmodelled elements.
+func applyCEExtras(entry *Entry, e *ceEntry) {
+	entry.Color = strings.TrimSpace(e.Color)
+	if e.LastState != nil {
+		entry.LastAddress = strings.TrimSpace(e.LastState.RealAddress)
+		entry.LastValue = e.LastState.Value
+		entry.Activated = e.LastState.Activated == "1"
+	}
+	entry.CEHotkeys = convertHotkeys(e.Hotkeys)
+	if len(e.Extra) > 0 {
+		entry.ExtraElements = convertExtras(e.Extra)
+	}
+	if entry.Hotkey == "" {
+		entry.Hotkey = simpleToggleHotkey(e.Hotkeys)
+	}
+}
+
+func convertHotkeys(hks []ceHotkey) []CEHotkey {
+	var out []CEHotkey
+	for _, h := range hks {
+		keys := make([]string, len(h.Keys))
+		for i, k := range h.Keys {
+			keys[i] = strconv.Itoa(k)
+		}
+		id, _ := strconv.Atoi(strings.TrimSpace(h.ID))
+		out = append(out, CEHotkey{
+			Action:        strings.TrimSpace(h.Action),
+			Keys:          strings.Join(keys, ","),
+			Value:         h.Value,
+			Description:   h.Description,
+			ID:            id,
+			Active:        h.Active != "0",
+			OnlyWhileDown: h.OnlyWhileDown == "1",
+		})
+	}
+	return out
+}
+
+func convertExtras(extras []ceExtra) []RawElement {
+	var out []RawElement
+	for _, e := range extras {
+		out = append(out, RawElement{Name: e.XMLName.Local, Text: strings.TrimSpace(e.Text)})
+	}
+	return out
+}
+
+// simpleToggleHotkey maps a single-key "Toggle Activation" hotkey to a
+// Firstspark hotkey name (F1..F12 or a letter/digit).
+func simpleToggleHotkey(hks []ceHotkey) string {
+	for _, h := range hks {
+		if !strings.EqualFold(strings.TrimSpace(h.Action), "Toggle Activation") {
+			continue
+		}
+		if len(h.Keys) != 1 {
+			continue
+		}
+		if name := vkName(h.Keys[0]); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// vkName maps a Windows virtual-key code to a Firstspark hotkey name.
+func vkName(vk int) string {
+	switch {
+	case vk >= 0x70 && vk <= 0x7B:
+		return fmt.Sprintf("F%d", vk-0x70+1)
+	case vk >= 'A' && vk <= 'Z':
+		return string(rune(vk))
+	case vk >= '0' && vk <= '9':
+		return string(rune(vk))
+	default:
+		return ""
+	}
+}
+
+// vkCode is the inverse of vkName.
+func vkCode(name string) (int, bool) {
+	name = strings.ToUpper(strings.TrimSpace(name))
+	if len(name) == 1 {
+		if (name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= '0' && name[0] <= '9') {
+			return int(name[0]), true
+		}
+	}
+	if strings.HasPrefix(name, "F") {
+		if n, err := strconv.Atoi(name[1:]); err == nil && n >= 1 && n <= 12 {
+			return 0x70 + n - 1, true
+		}
+	}
+	return 0, false
 }
 
 // applyCEAddress sets either a resolvable address (and pointer chain) or the
