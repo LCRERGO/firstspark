@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -140,17 +141,17 @@ func (a *App) buildFoundList() {
 		func(id widget.TableCellID, o fyne.CanvasObject) { a.updateFoundCell(id, o) },
 	)
 	a.foundList.ShowHeaderRow = true
-	a.foundList.CreateHeader = func() fyne.CanvasObject { return a.monoText("") }
+	a.foundList.CreateHeader = func() fyne.CanvasObject { return a.newFoundHeader() }
 	a.foundList.UpdateHeader = func(id widget.TableCellID, o fyne.CanvasObject) {
-		t := o.(*canvas.Text)
+		h := o.(*foundHeader)
+		h.col = id.Col
 		if id.Col < 0 || id.Col >= len(headers) {
-			t.Text = ""
-			t.Refresh()
+			h.setText("")
+			h.setColor(a.pal().primary)
 			return
 		}
-		t.Text = headers[id.Col]
-		t.Color = a.pal().primary
-		t.Refresh()
+		h.setText(headers[id.Col])
+		h.setColor(a.pal().primary)
 	}
 	a.foundList.SetColumnWidth(0, 170)
 	a.foundList.SetColumnWidth(1, 130)
@@ -188,16 +189,28 @@ func (a *App) foundCellText(col, idx int) string {
 		return fmt.Sprintf("0x%x", r.Addr)
 	case 1:
 		if v, ok := a.foundLive[idx]; ok {
-			return v.String()
+			return a.displayFoundValue(v)
 		}
-		return r.Value.String()
+		return a.displayFoundValue(r.Value)
 	case 2:
 		if len(r.Previous.Raw) == 0 {
 			return "-"
 		}
-		return r.Previous.String()
+		return a.displayFoundValue(r.Previous)
 	default:
 		return ""
+	}
+}
+
+// displayFoundValue renders a Found value using the list-wide display format.
+func (a *App) displayFoundValue(v scan.Value) string {
+	switch a.foundDisplay {
+	case displayHex:
+		return hexOf(v)
+	case displayBinary:
+		return binaryOf(v)
+	default:
+		return v.String()
 	}
 }
 
@@ -242,6 +255,119 @@ func (c *foundCell) MouseDown(e *desktop.MouseEvent) {
 		return
 	}
 	c.app.selectFoundRow(c.app.foundResult(c.row), e.Modifier)
+}
+
+// foundHeader is a clickable column header that sorts the Found list.
+type foundHeader struct {
+	widget.BaseWidget
+	app  *App
+	text *canvas.Text
+	col  int
+}
+
+func (a *App) newFoundHeader() *foundHeader {
+	h := &foundHeader{app: a, text: a.th.monoText("", a.pal().primary)}
+	h.ExtendBaseWidget(h)
+	return h
+}
+
+func (h *foundHeader) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(h.text)
+}
+
+func (h *foundHeader) setText(s string) {
+	h.text.Text = s
+	h.text.Refresh()
+}
+
+func (h *foundHeader) setColor(c color.Color) {
+	h.text.Color = c
+	h.text.Refresh()
+}
+
+func (h *foundHeader) Tapped(*fyne.PointEvent) { h.app.sortFound(h.col) }
+
+// sortFound cycles a column through ascending, descending and unsorted scan
+// order, reordering only the foundOrder view.
+func (a *App) sortFound(col int) {
+	if col < 0 || col > 2 {
+		return
+	}
+	switch {
+	case a.foundSortCol != col:
+		a.foundSortCol = col
+		a.foundSortAsc = true
+	case a.foundSortAsc:
+		a.foundSortAsc = false
+	default:
+		a.foundSortCol = -1
+	}
+	a.applyFoundSort()
+	a.refreshFound()
+}
+
+// applyFoundSort rebuilds foundOrder from the active sort column.
+func (a *App) applyFoundSort() {
+	if a.foundSortCol < 0 {
+		a.foundOrder = identityOrder(len(a.results))
+		return
+	}
+	order := identityOrder(len(a.results))
+	col := a.foundSortCol
+	sort.SliceStable(order, func(i, j int) bool {
+		if a.foundSortAsc {
+			return a.foundLess(order[i], order[j], col)
+		}
+		return a.foundLess(order[j], order[i], col)
+	})
+	a.foundOrder = order
+}
+
+// foundLess orders two results by column: address, live value or previous.
+func (a *App) foundLess(i, j, col int) bool {
+	switch col {
+	case 0:
+		return a.results[i].Addr < a.results[j].Addr
+	case 1:
+		vi, vj := a.results[i].Value, a.results[j].Value
+		if v, ok := a.foundLive[i]; ok {
+			vi = v
+		}
+		if v, ok := a.foundLive[j]; ok {
+			vj = v
+		}
+		return valueLess(vi, vj)
+	default:
+		return valueLess(a.results[i].Previous, a.results[j].Previous)
+	}
+}
+
+// valueLess orders two values numerically when both are numeric and textually
+// otherwise.
+func valueLess(a, b scan.Value) bool {
+	ta, tb := scan.TypeByID(a.Type), scan.TypeByID(b.Type)
+	if numericKind(ta) && numericKind(tb) {
+		return numericValue(ta, a) < numericValue(tb, b)
+	}
+	return a.String() < b.String()
+}
+
+func numericKind(t *scan.Type) bool {
+	return t != nil && (t.Kind == scan.KindInt || t.Kind == scan.KindFloat)
+}
+
+func numericValue(t *scan.Type, v scan.Value) float64 {
+	if t.Kind == scan.KindFloat {
+		return v.Float64()
+	}
+	return float64(v.Int64())
+}
+
+// refreshFound repaints the found list.
+func (a *App) refreshFound() {
+	if a.foundList != nil {
+		a.foundList.Refresh()
+	}
 }
 
 // selectFoundRow updates the Found-list selection: plain selects one row, Ctrl
@@ -346,6 +472,8 @@ func (a *App) foundMenu(row int, rel fyne.Position, anchor fyne.CanvasObject) {
 	menu := fyne.NewMenu("",
 		fyne.NewMenuItem(i18n.T("menu.change_value"), a.changeValueSelected),
 		fyne.NewMenuItem(i18n.T("results.add_to_table"), func() { a.addResultToTable(idx) }),
+		fyne.NewMenuItem(i18n.T("menu.copy_address"), func() { a.copyFoundAddr(idx) }),
+		fyne.NewMenuItem(i18n.T("menu.copy_value"), func() { a.copyFoundValue(idx) }),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(i18n.T("menu.browse"), func() { a.browseFoundAddr(addr) }),
 		fyne.NewMenuItem(i18n.T("menu.disassemble"), func() { a.browseFoundAddr(addr) }),
@@ -353,9 +481,49 @@ func (a *App) foundMenu(row int, rel fyne.Position, anchor fyne.CanvasObject) {
 		fyne.NewMenuItem(i18n.T("menu.find_writes"), func() { a.findWhatWritesAddr(addr, true) }),
 		fyne.NewMenuItem(i18n.T("menu.find_accesses"), func() { a.findWhatWritesAddr(addr, false) }),
 		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.show_decimal"), func() { a.setFoundDisplay(displayDefault) }),
+		fyne.NewMenuItem(i18n.T("menu.show_hex"), func() { a.setFoundDisplay(displayHex) }),
+		fyne.NewMenuItem(i18n.T("menu.show_binary"), func() { a.setFoundDisplay(displayBinary) }),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem(i18n.T("menu.delete"), a.deleteFoundResults),
 	)
 	widget.ShowPopUpMenuAtRelativePosition(menu, a.win.Canvas(), rel, anchor)
+}
+
+// copyFoundAddr puts a result's address on the clipboard.
+func (a *App) copyFoundAddr(idx int) {
+	if idx < 0 || idx >= len(a.results) {
+		return
+	}
+	a.fapp.Clipboard().SetContent(fmt.Sprintf("0x%x", a.results[idx].Addr))
+}
+
+// copyFoundValue puts a result's current value on the clipboard.
+func (a *App) copyFoundValue(idx int) {
+	if idx < 0 || idx >= len(a.results) {
+		return
+	}
+	v := a.results[idx].Value
+	if live, ok := a.foundLive[idx]; ok {
+		v = live
+	}
+	a.fapp.Clipboard().SetContent(a.displayFoundValue(v))
+}
+
+// setFoundDisplay switches the Found list value format.
+func (a *App) setFoundDisplay(d displayFormat) {
+	a.foundDisplay = d
+	a.refreshFound()
+}
+
+// copySelection handles Ctrl+C: it copies the selected Found address. Text
+// fields keep their own clipboard handling because Fyne consumes the shortcut
+// before the canvas sees it.
+func (a *App) copySelection() {
+	if a.activePanel != panelFound || a.foundSel < 0 || a.foundSel >= len(a.results) {
+		return
+	}
+	a.copyFoundAddr(a.foundSel)
 }
 
 // browseFoundAddr opens the memory viewer at addr.
@@ -388,7 +556,7 @@ func (a *App) deleteFoundResults() {
 	if a.session != nil {
 		a.session.Delete(func(r scan.Result) bool { return !drop[r.Addr] })
 	}
-	a.foundOrder = identityOrder(len(a.results))
+	a.applyFoundSort()
 	a.foundLive = nil
 	a.foundSel = -1
 	a.foundMulti = nil
@@ -493,8 +661,8 @@ func (a *App) setResults(r []scan.Result) {
 		r = r[:limit]
 	}
 	a.results = append([]scan.Result(nil), r...)
-	a.foundOrder = identityOrder(len(a.results))
 	a.foundLive = nil
+	a.applyFoundSort()
 	a.foundSel = -1
 	a.foundMulti = nil
 	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))

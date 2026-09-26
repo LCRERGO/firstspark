@@ -95,6 +95,8 @@ func valueHintKey(t scan.ValueType) string {
 		return "scan.hint.value_text"
 	case scan.TypeFloat, scan.TypeDouble:
 		return "scan.hint.value_float"
+	case scan.TypeGrouped:
+		return "scan.hint.value_grouped"
 	default:
 		return "scan.hint.value_int"
 	}
@@ -108,8 +110,8 @@ func (a *App) applyHints() {
 	if a.valueType != nil {
 		setHint(a.valueType, i18n.T("scan.hint.value_type"))
 	}
-	if a.compareEntry != nil {
-		setHint(a.compareEntry, i18n.T("scan.hint.compare"))
+	if a.compareSelect != nil {
+		setHint(a.compareSelect, i18n.T("scan.hint.compare"))
 	}
 	a.updateValueHint()
 }

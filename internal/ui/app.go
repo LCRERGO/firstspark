@@ -115,6 +115,9 @@ type App struct {
 	foundSel     int
 	foundMulti   map[int]bool
 	foundCount   *widget.Label
+	foundDisplay displayFormat
+	foundSortCol int
+	foundSortAsc bool
 	status       *widget.Label
 
 	entries         []*tableEntry
@@ -126,29 +129,33 @@ type App struct {
 	activePanel     activePanel
 	hotkeyShortcuts map[uint64]fyne.Shortcut
 
-	scanType     *ttwidget.Select
-	valueType    *ttwidget.Select
-	hexBox       *ttwidget.Check
-	valueEntry   *toolTipEntry
-	value2Entry  *toolTipEntry
-	compareEntry *toolTipEntry
-	writable     *ttwidget.Check
-	speedhack    *ttwidget.Check
-	speedScale   *toolTipEntry
-	speedHooks   []*inject.Hook
-	speedApplied bool
-	alignEntry   *toolTipEntry
-	scanBtn      *ttwidget.Button
-	nextBtn      *ttwidget.Button
-	undoBtn      *ttwidget.Button
-	stopBtn      *ttwidget.Button
-	andLabel     *widget.Label
-	valuePair    *fyne.Container
-	scanProgress *progressLine
-	scanStatus   *widget.Label
-	scopeSelect  *ttwidget.Select
-	scanCancel   context.CancelFunc
-	scanning     bool
+	scanType      *ttwidget.Select
+	valueType     *ttwidget.Select
+	hexBox        *ttwidget.Check
+	valueEntry    *toolTipEntry
+	value2Entry   *toolTipEntry
+	compareSelect *ttwidget.Select
+	execSelect    *ttwidget.Select
+	cowCheck      *ttwidget.Check
+	startEntry    *toolTipEntry
+	stopEntry     *toolTipEntry
+	writable      *ttwidget.Check
+	speedhack     *ttwidget.Check
+	speedScale    *toolTipEntry
+	speedHooks    []*inject.Hook
+	speedApplied  bool
+	alignEntry    *toolTipEntry
+	scanBtn       *ttwidget.Button
+	nextBtn       *ttwidget.Button
+	undoBtn       *ttwidget.Button
+	stopBtn       *ttwidget.Button
+	andLabel      *widget.Label
+	valuePair     *fyne.Container
+	scanProgress  *progressLine
+	scanStatus    *widget.Label
+	scopeSelect   *ttwidget.Select
+	scanCancel    context.CancelFunc
+	scanning      bool
 
 	openProcAction *widget.ToolbarAction
 	loadAction     *widget.ToolbarAction
@@ -253,6 +260,7 @@ func Run(cfg config.Config) error {
 		freezeTargets: map[uint64]scan.Value{},
 		stop:          make(chan struct{}),
 		foundSel:      -1,
+		foundSortCol:  -1,
 		tableSel:      -1,
 		procSortCol:   0,
 		procSortAsc:   true,
@@ -309,10 +317,16 @@ func (a *App) buildWidgets() {
 	a.value2Entry.SetPlaceHolder(i18n.T("app.upper_bound_placeholder"))
 	a.value2Entry.OnSubmitted = func(string) { a.scanAction() }
 
-	a.compareEntry = newToolTipEntry()
-	a.compareEntry.SetText("==")
+	a.compareSelect = newHintSelect(compareLabels(), "scan.hint.compare", nil)
+	a.compareSelect.SetSelected(scan.OpEqual.String())
 
-	a.scanType = ttwidget.NewSelect(scanTypeLabels(), func(string) { a.updateScanControls() })
+	a.execSelect = newHintSelect(execLabels(), "scan.hint.executable", nil)
+	a.execSelect.SetSelected(execLabel(scan.ExecAny))
+	a.cowCheck = newHintCheck(i18n.T("scan.copy_on_write"), "scan.hint.copy_on_write", nil)
+	a.startEntry = newHintEntry("scan.hint.range")
+	a.stopEntry = newHintEntry("scan.hint.range")
+
+	a.scanType = ttwidget.NewSelect(scanTypeLabelsFor(false), func(string) { a.updateScanControls() })
 	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
 	a.valueType = ttwidget.NewSelect(valueTypeOptions(), func(label string) {
 		if n := customTypeAlignment(label); n > 0 {
@@ -429,8 +443,8 @@ func (a *App) updateScanControls() {
 		}
 		a.value2Entry.Refresh()
 	}
-	if a.compareEntry != nil {
-		setEnabled(a.compareEntry, mode == scan.ModeExact)
+	if a.compareSelect != nil {
+		setEnabled(a.compareSelect, mode == scan.ModeExact)
 	}
 
 	hasTable := len(a.entryRoots) > 0
@@ -439,6 +453,25 @@ func (a *App) updateScanControls() {
 	setActionEnabled(a.memViewAction, a.proc != nil)
 	setActionEnabled(a.addAddrAction, a.proc != nil)
 	setActionEnabled(a.clearAction, hasTable)
+}
+
+// updateScanTypeOptions swaps the Scan Type list between the first-scan and
+// next-scan sets, keeping the current choice when it is still available.
+func (a *App) updateScanTypeOptions() {
+	if a.scanType == nil {
+		return
+	}
+	options := scanTypeLabelsFor(a.session != nil)
+	current := a.scanType.Selected
+	a.scanType.Options = options
+	a.scanType.Refresh()
+	for _, o := range options {
+		if o == current {
+			return
+		}
+	}
+	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
+	a.updateScanControls()
 }
 
 type disableable interface {

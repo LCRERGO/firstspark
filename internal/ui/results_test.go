@@ -107,3 +107,34 @@ func TestStaticInfo(t *testing.T) {
 		t.Fatal("unmapped address should not be static")
 	}
 }
+
+func TestFoundSort(t *testing.T) {
+	a := newTestApp(t)
+	a.results = []scan.Result{{Addr: 0x30}, {Addr: 0x10}, {Addr: 0x20}}
+	a.applyFoundSort()
+
+	a.sortFound(0)
+	if a.foundOrder[0] != 1 || a.foundOrder[1] != 2 || a.foundOrder[2] != 0 {
+		t.Fatalf("ascending order = %v", a.foundOrder)
+	}
+	a.sortFound(0)
+	if a.foundOrder[0] != 0 || a.foundOrder[2] != 1 {
+		t.Fatalf("descending order = %v", a.foundOrder)
+	}
+	a.sortFound(0)
+	if a.foundOrder[0] != 0 || a.foundOrder[1] != 1 || a.foundOrder[2] != 2 {
+		t.Fatalf("cleared order = %v", a.foundOrder)
+	}
+}
+
+func TestFoundDisplayFormat(t *testing.T) {
+	a := newTestApp(t)
+	v := scan.NewValue(scan.TypeDword, []byte{0x2A, 0, 0, 0})
+	if got := a.displayFoundValue(v); got != v.String() {
+		t.Fatalf("decimal = %q", got)
+	}
+	a.setFoundDisplay(displayHex)
+	if got := a.displayFoundValue(v); got != hexOf(v) {
+		t.Fatalf("hex = %q, want %q", got, hexOf(v))
+	}
+}

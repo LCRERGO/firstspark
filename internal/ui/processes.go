@@ -516,6 +516,8 @@ func (a *App) selectProcessObj(p mem.Process) {
 	a.session = nil
 	a.regionSel = nil
 	a.results = nil
+	a.foundOrder = nil
+	a.foundLive = nil
 	a.foundSel = -1
 	a.foundMulti = nil
 	if a.foundList != nil {
@@ -523,6 +525,7 @@ func (a *App) selectProcessObj(p mem.Process) {
 	}
 	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.setStatusText(i18n.Tf("status.selected_process", map[string]any{"Name": p.Name, "PID": p.PID}))
+	a.updateScanTypeOptions()
 	a.updateScanControls()
 }
 

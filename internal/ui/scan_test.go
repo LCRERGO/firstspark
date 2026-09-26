@@ -23,7 +23,7 @@ func TestScanControlsFollowState(t *testing.T) {
 	if !a.value2Entry.Disabled() {
 		t.Fatal("the upper bound should be disabled for exact scans")
 	}
-	if a.compareEntry.Disabled() {
+	if a.compareSelect.Disabled() {
 		t.Fatal("Compare should be enabled for exact scans")
 	}
 
@@ -41,7 +41,7 @@ func TestScanControlsFollowState(t *testing.T) {
 	if !a.value2Entry.Visible() || !a.andLabel.Visible() {
 		t.Fatal("the upper bound and 'and' label should be shown for between scans")
 	}
-	if !a.compareEntry.Disabled() {
+	if !a.compareSelect.Disabled() {
 		t.Fatal("Compare should be disabled for between scans")
 	}
 

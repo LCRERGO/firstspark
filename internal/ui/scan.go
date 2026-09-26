@@ -192,13 +192,17 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		valueRow,
 		scanRow(i18n.T("scan.type_label"), a.scanType),
 		scanRow(i18n.T("scan.value_type_label"), container.NewBorder(nil, nil, nil, newHintButton("…", "scan.hint.custom_types", a.showCustomTypes), a.valueType)),
-		scanRow(i18n.T("scan.compare_label"), a.compareEntry),
+		scanRow(i18n.T("scan.compare_label"), a.compareSelect),
 		widget.NewSeparator(),
 		a.th.heading(i18n.T("scan.options_heading"), a.th.size, a.pal().primary),
 		a.writable,
 		scanRow(i18n.T("scan.alignment_label"), a.alignEntry),
 		scanRow(i18n.T("scan.region_scope_label"),
 			container.NewBorder(nil, nil, nil, newHintButton(i18n.T("regions.manage"), "scan.hint.regions", a.showRegionManager), a.scopeSelect)),
+		scanRow(i18n.T("scan.executable_label"), a.execSelect),
+		a.cowCheck,
+		scanRow(i18n.T("scan.range_label"),
+			container.New(flexRow{weights: []float32{1, 0, 1}}, a.startEntry, widget.NewLabel(i18n.T("scan.range_to")), a.stopEntry)),
 		widget.NewSeparator(),
 		a.speedhack,
 		scanRow(i18n.T("scan.speedhack_scale"), a.speedScale),
@@ -363,6 +367,7 @@ func (a *App) finishScan(s *scan.Session, first bool, err error) {
 	default:
 		if first {
 			a.session = s
+			a.updateScanTypeOptions()
 		}
 		a.setResults(s.Results())
 		if first {
@@ -405,11 +410,7 @@ func (a *App) scanOptions() (scan.Options, error) {
 	opts := scan.DefaultOptions()
 	opts.Type = parseCEValueType(a.valueType.Selected)
 	opts.Mode = parseCEScanType(a.scanType.Selected)
-	cmp, err := scan.ParseCompareOp(a.compareEntry.Text)
-	if err != nil {
-		return opts, err
-	}
-	opts.Compare = cmp
+	opts.Compare = parseCompareLabel(a.compareSelect.Selected)
 	opts.WritableOnly = a.writable.Checked
 	opts.Alignment = a.cfg.Scan.Alignment
 	if n, err := strconv.Atoi(strings.TrimSpace(a.alignEntry.Text)); err == nil && n >= 0 {
@@ -423,7 +424,22 @@ func (a *App) scanOptions() (scan.Options, error) {
 		opts.Scope = scan.ScopeAllReadable
 	}
 	opts.Epsilon = a.cfg.Scan.FloatEpsilon
-	if modeNeedsValue(opts.Mode) {
+	opts.Executable = parseExecLabel(a.execSelect.Selected)
+	opts.CopyOnWrite = a.cowCheck.Checked
+	var err error
+	if opts.Start, err = optionalAddr(a.startEntry.Text); err != nil {
+		return opts, err
+	}
+	if opts.Stop, err = optionalAddr(a.stopEntry.Text); err != nil {
+		return opts, err
+	}
+	if opts.Type == scan.TypeGrouped {
+		gp, err := scan.ParseGrouped(a.valueText())
+		if err != nil {
+			return opts, err
+		}
+		opts.Grouped = gp
+	} else if modeNeedsValue(opts.Mode) {
 		v, err := scan.ParseValue(opts.Type, a.valueText())
 		if err != nil {
 			return opts, err
@@ -438,6 +454,14 @@ func (a *App) scanOptions() (scan.Options, error) {
 		opts.Value2 = v
 	}
 	return opts, nil
+}
+
+// optionalAddr parses an optional hexadecimal address entry.
+func optionalAddr(s string) (uint64, error) {
+	if strings.TrimSpace(s) == "" {
+		return 0, nil
+	}
+	return parseAddress(s)
 }
 
 // upperText returns the upper bound for a Value-between scan.

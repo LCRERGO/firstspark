@@ -21,6 +21,7 @@ func newTestApp(t *testing.T) *App {
 		freezeTargets: map[uint64]scan.Value{},
 		stop:          make(chan struct{}),
 		foundSel:      -1,
+		foundSortCol:  -1,
 		tableSel:      -1,
 		procSortCol:   0,
 		procSortAsc:   true,
