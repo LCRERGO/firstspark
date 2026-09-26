@@ -141,6 +141,40 @@ func (p *Program) DataCopy(n int) []byte {
 	return out
 }
 
+// PtrOff returns the address of an offset into the data buffer.
+func (p *Program) PtrOff(off int) uintptr {
+	if off < 0 {
+		off = 0
+	}
+	if off > p.buflen {
+		off = p.buflen
+	}
+	return uintptr(unsafe.Add(p.buf, off))
+}
+
+// SetBytesOff copies b into the data buffer at off.
+func (p *Program) SetBytesOff(off int, b []byte) {
+	if off < 0 || off > p.buflen {
+		return
+	}
+	view := unsafe.Slice((*byte)(p.buf), p.buflen)
+	copy(view[off:], b)
+}
+
+// CopyOff returns a copy of n bytes from the data buffer at off.
+func (p *Program) CopyOff(off, n int) []byte {
+	if off < 0 || off >= p.buflen || n <= 0 {
+		return nil
+	}
+	if off+n > p.buflen {
+		n = p.buflen - off
+	}
+	view := unsafe.Slice((*byte)(p.buf), p.buflen)
+	out := make([]byte, n)
+	copy(out, view[off:off+n])
+	return out
+}
+
 // Call invokes entry with up to six integer arguments and returns RAX.
 func (p *Program) Call(entry uintptr, args ...uintptr) uintptr {
 	var a [6]C.uintptr_t

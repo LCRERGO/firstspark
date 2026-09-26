@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. P0–P2 are implemented; P3–P4 remain open.
+Accepted. P0–P3 are implemented; P4 remains open.
 
 ## Context
 
@@ -81,7 +81,8 @@ Routine ABIs to support, in order:
   (bit-pattern reinterpretation) and accept `USESFLOAT`. Implemented and
   unit-tested.
 - **P3 — string (large).** `kind: string`, the three-argument ABI and the output
-  buffer.
+  buffer. Implemented: `jit.Program` gained offset buffers, `RegisterAA` gained a
+  string path, and `RegisterCE` accepts `USESSTRING` with `MAXSTRINGSIZE`.
 - **P4 — pure-Go fallback (optional, large).** A translator for the common
   integer instruction subset so the headless (`!cgo`) build can apply
   conversions without `pkg/jit`.

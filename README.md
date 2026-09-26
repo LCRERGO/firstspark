@@ -191,8 +191,9 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
 - **Cheat Engine tables**: import/export covers the tree, expressions, scripts,
   colour, last state, hotkeys, the core Lua API and preserved unknown elements
   (ADR 0037, ADR 0046); GUI/VCL-script tables are out of scope (ADR 0039).
-  Integer and float custom-type `ConvertRoutine` conversions are applied through
-  the JIT; string and address-dependent routines fall back to raw (ADR 0048).
+  Integer, float and string custom-type `ConvertRoutine` conversions are applied
+  through the JIT; routines that depend on the address argument or use
+  unsupported instructions fall back to raw (ADR 0048).
 
 ## License
 

@@ -74,6 +74,42 @@ func TestRegisterCEFloat(t *testing.T) {
 	}
 }
 
+func TestRegisterCEString(t *testing.T) {
+	// A 4-byte string type whose routine copies the four bytes through, with a
+	// NUL-terminated output buffer on read.
+	conv := CEConversion{
+		Name:               "fs_ce_str4",
+		Size:               4,
+		MaxStringSize:      8,
+		UsesString:         true,
+		ConvertRoutine:     "mov eax, [rcx]\nmov [r8], eax",
+		ConvertBackRoutine: "mov eax, [rcx]\nmov [r8], eax",
+	}
+	typ, err := RegisterCE(conv)
+	if err != nil {
+		if strings.Contains(err.Error(), "not supported in this build") {
+			t.Skip("jit unavailable in this build")
+		}
+		t.Fatalf("RegisterCE: %v", err)
+	}
+	if typ.Kind != scan.KindString {
+		t.Fatalf("kind = %v, want string", typ.Kind)
+	}
+	if got := typ.Text(scan.Value{Type: typ.ID, Raw: []byte("ABCD")}); got != "ABCD" {
+		t.Fatalf("Text = %q, want ABCD", got)
+	}
+	if got := typ.Format(scan.Value{Type: typ.ID, Raw: []byte("abcd")}); got != "abcd" {
+		t.Fatalf("Format = %q, want abcd", got)
+	}
+	parsed, err := typ.Parse("WXYZ")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if string(parsed.Raw) != "WXYZ" {
+		t.Fatalf("Parse = %q, want WXYZ", parsed.Raw)
+	}
+}
+
 func TestRegisterCEUnsupported(t *testing.T) {
 	cases := []CEConversion{
 		{UsesFloat: true, Size: 8, ConvertRoutine: "ret"},

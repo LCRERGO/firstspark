@@ -37,6 +37,7 @@ types:
 | `kind` | no | `int` (default), `float` or `string`; selects how values are compared. |
 | `script` | yes | The Lua script defining the conversions. |
 | `alignment` | no | Preferred scan alignment in bytes; defaults to the type size. |
+| `max_string_size` | no | Conversion buffer for a string Auto Assembler type (default 64). |
 | `description` | no | Free text shown in the manager. |
 
 ## The script
@@ -163,8 +164,13 @@ Conventions:
   output bytes in **RSI**; it writes `size` bytes.
 - `kind: int` and `kind: float` are supported. A float type's routine returns the
   IEEE-754 single bit pattern as an integer, and the value is interpreted as a
-  32-bit float (Cheat Engine's `USESFLOAT` convention). String Auto Assembler
-  types are rejected; use a Lua type for those.
+  32-bit float (Cheat Engine's `USESFLOAT` convention).
+- `kind: string` takes three arguments instead: the value pointer in **RDI**,
+  the address (always 0 here) in **RSI**, and the output pointer in **RDX**.
+  `ConvertRoutine` writes a NUL-terminated string to the output buffer;
+  `ConvertBackRoutine` writes `size` bytes to the output pointer. Set
+  `max_string_size` to bound the conversion buffer (default 64). This matches
+  Cheat Engine's `USESSTRING` convention.
 - The script must be self-contained (no external symbols); `alloc` directives
   are ignored.
 

@@ -33,6 +33,15 @@ func (p *Program) DataPtr() uintptr { return 0 }
 // DataCopy is a stub.
 func (p *Program) DataCopy(int) []byte { return nil }
 
+// PtrOff is a stub.
+func (p *Program) PtrOff(int) uintptr { return 0 }
+
+// SetBytesOff is a stub.
+func (p *Program) SetBytesOff(int, []byte) {}
+
+// CopyOff is a stub.
+func (p *Program) CopyOff(int, int) []byte { return nil }
+
 // Call is a stub.
 func (p *Program) Call(uintptr, ...uintptr) uintptr { return 0 }
 

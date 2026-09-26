@@ -1,6 +1,7 @@
 package customtype
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strconv"
@@ -15,11 +16,14 @@ import (
 // aaProgram is a compiled Auto Assembler conversion pair loaded into this
 // process.
 type aaProgram struct {
-	prog  *jit.Program
-	read  uintptr
-	write uintptr
-	size  int
-	mu    sync.Mutex
+	prog       *jit.Program
+	read       uintptr
+	write      uintptr
+	size       int
+	stringKind bool
+	textOff    int
+	textSize   int
+	mu         sync.Mutex
 }
 
 func buildAA(def Definition) (*aaProgram, error) {
@@ -41,7 +45,16 @@ func buildAA(def Definition) (*aaProgram, error) {
 	if err != nil {
 		return nil, err
 	}
-	prog, err := jit.New(len(probe)+16, def.Size+16)
+	stringKind := isStringKind(def.Kind)
+	textSize := def.MaxStringSize
+	if textSize <= 0 {
+		textSize = 64
+	}
+	bufLen := def.Size + 16
+	if stringKind {
+		bufLen = def.Size + textSize + 1
+	}
+	prog, err := jit.New(len(probe)+16, bufLen)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +76,23 @@ func buildAA(def Definition) (*aaProgram, error) {
 		prog.Close()
 		return nil, fmt.Errorf("script defines no ConvertRoutine")
 	}
-	p := &aaProgram{prog: prog, read: prog.Entry(readOff), size: def.Size}
+	p := &aaProgram{
+		prog: prog, read: prog.Entry(readOff), size: def.Size,
+		stringKind: stringKind, textOff: def.Size, textSize: textSize,
+	}
 	if off, ok := labelOffset(labels, prog.Base(), "convertbackroutine"); ok {
 		p.write = prog.Entry(off)
 	}
 	return p, nil
+}
+
+func isStringKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "string", "text":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *aaProgram) readInt(raw []byte) int64 {
@@ -85,6 +110,37 @@ func (p *aaProgram) writeInt(n int64) []byte {
 	defer p.mu.Unlock()
 	p.prog.Call(p.write, uintptr(n), p.prog.DataPtr())
 	return p.prog.DataCopy(p.size)
+}
+
+// readString runs the CE-style three-argument string routine into the text
+// buffer and decodes it as a NUL-terminated string.
+func (p *aaProgram) readString(raw []byte) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.prog.SetData(raw)
+	p.prog.SetBytesOff(p.textOff, make([]byte, p.textSize+1))
+	p.prog.Call(p.read, p.prog.DataPtr(), 0, p.prog.PtrOff(p.textOff))
+	b := p.prog.CopyOff(p.textOff, p.textSize+1)
+	if i := bytes.IndexByte(b, 0); i >= 0 {
+		b = b[:i]
+	}
+	return string(b)
+}
+
+// writeString runs the reverse string routine, which writes size bytes at the
+// data pointer.
+func (p *aaProgram) writeString(s string) ([]byte, error) {
+	if p.write == 0 {
+		return nil, fmt.Errorf("customtype: type is read-only")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	buf := make([]byte, p.textSize+1)
+	copy(buf, s)
+	p.prog.SetBytesOff(p.textOff, buf)
+	p.prog.SetBytesOff(0, make([]byte, p.size))
+	p.prog.Call(p.write, p.prog.PtrOff(p.textOff), 0, p.prog.DataPtr())
+	return p.prog.DataCopy(p.size), nil
 }
 
 func (p *aaProgram) Close() { p.prog.Close() }
@@ -106,8 +162,8 @@ func RegisterAA(def Definition) (*scan.Type, error) {
 	if err != nil {
 		return nil, fmt.Errorf("customtype: %s: %w", name, err)
 	}
-	if kind != scan.KindInt && kind != scan.KindFloat {
-		return nil, fmt.Errorf("customtype: %s: auto-assembler types support only int and float", name)
+	if kind != scan.KindInt && kind != scan.KindFloat && kind != scan.KindString {
+		return nil, fmt.Errorf("customtype: %s: auto-assembler types support only int, float and string", name)
 	}
 	prog, err := buildAA(def)
 	if err != nil {
@@ -144,6 +200,20 @@ func RegisterAA(def Definition) (*scan.Type, error) {
 				return scan.Value{Type: t.ID, Raw: prog.writeInt(int64(math.Float32bits(float32(f))))}, nil
 			}
 			t.Encode = func(n int64) []byte { return prog.writeInt(n) }
+		}
+	} else if kind == scan.KindString {
+		t.Text = func(v scan.Value) string { return prog.readString(v.Raw) }
+		t.Format = func(v scan.Value) string { return prog.readString(v.Raw) }
+		t.Numeric = func(scan.Value) float64 { return 0 }
+		t.Int64 = func(scan.Value) int64 { return 0 }
+		if prog.write != 0 {
+			t.Parse = func(input string) (scan.Value, error) {
+				raw, err := prog.writeString(strings.Trim(strings.TrimSpace(input), `"`))
+				if err != nil {
+					return scan.Value{}, err
+				}
+				return scan.Value{Type: t.ID, Raw: raw}, nil
+			}
 		}
 	} else {
 		t.Int64 = func(v scan.Value) int64 { return prog.readInt(v.Raw) }

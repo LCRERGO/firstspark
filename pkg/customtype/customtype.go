@@ -26,6 +26,8 @@ type Definition struct {
 	Script      string `yaml:"script"`
 	Alignment   int    `yaml:"alignment,omitempty"`
 	Description string `yaml:"description,omitempty"`
+	// MaxStringSize is the conversion buffer for a string Auto Assembler type.
+	MaxStringSize int `yaml:"max_string_size,omitempty" json:"max_string_size,omitempty"`
 }
 
 type document struct {
