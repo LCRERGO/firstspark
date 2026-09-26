@@ -63,6 +63,9 @@ make build/gui      # same as `make`
 make build/headless # headless binary, no CGO or graphics libraries
 make run            # build the GUI and run it
 make test           # unit + integration tests
+make test/race      # the same under the race detector
+make lint           # gofmt + go vet (default and gui tags)
+make fuzz           # fuzz every FuzzXxx target for FUZZTIME (default 15s)
 ```
 
 The default build produces the Fyne GUI; the headless CLI is available via
@@ -77,13 +80,28 @@ bin/firstspark
 ```
 
 The window follows the Cheat Engine layout: a scan panel and **Found** list at
-the top, a **cheat table** below a splitter, and a separate **Memory Viewer**
-window. Open a process (`Ctrl+P`), choose a scan type and value type, enter a
-value and press **First Scan** (`Enter`). Refine with **Next Scan**, then
-double-click a found address to add it to the cheat table, where you can freeze
-or edit it. The Memory Viewer (`Ctrl+M`) shows the disassembly and hex dump for
-the selected address. The theme (light, dark or system) is set in
-**Edit → Settings**.
+the top, a **cheat table** below a splitter, and separate **Memory Viewer** and
+**Debugger** windows. Open a process (`Ctrl+P`).
+
+- **Scan panel**: phase-aware scan types (exact, bigger/smaller, value-between
+  and unknown first; then increased/decreased (+by), changed, unchanged and
+  same-as-first) with region filters (writable, executable, copy-on-write,
+  scope, region picker and start/stop range), grouped scans, the speedhack and
+  the unrandomizer.
+- **Found list**: Address / Value / Previous columns, live values, sortable
+  headers and a cell menu (change value, add to table, browse, disassemble,
+  find writes/accesses, copy, display format). Double-click adds a result to
+  the cheat table.
+- **Cheat table**: pointer records, bitfields, signed/hex/binary display,
+  hotkeys, groups, move/duplicate, clipboard, freeze-on-tick and edit-on-double-
+  click.
+- **Memory Viewer** (`Ctrl+M`): continuously scrollable hex with inline byte
+  editing, a region browser, disassembly, pointer follow, breakpoints and
+  `.bin` dump.
+- **Debugger**: register, thread, module, breakpoint, hit, call-stack and trace
+  tabs, with conditions.
+- **Tools ▸ Lua Engine**: a `print`-capable console; **Edit ▸ Settings** covers
+  theme, scale, scan limits, refresh interval, logging and the debugger backend.
 
 ### Headless
 
@@ -91,6 +109,8 @@ the selected address. The theme (light, dark or system) is set in
 bin/firstspark --list                       # list processes
 bin/firstspark --pid 1234 --type dword --mode exact --value 1000
 bin/firstspark --pid 1234 --type dword --mode unknown --next increased
+bin/firstspark --pid 1234 --type dword --mode between --value 0 --value2 100
+bin/firstspark --pid 1234 --type grouped --value "4:75 4:* 4:100"
 bin/firstspark --pid 1234 --type dword --mode exact --value 42 --export run.CT
 ```
 
@@ -115,17 +135,34 @@ script syntax.
 cmd/firstspark        entrypoint
 internal/app          CLI and wiring
 internal/ui           Fyne desktop UI (build tag gui)
+internal/i18n         message catalogs and helpers
 pkg/mem               /proc introspection + process_vm_readv/writev
-pkg/scan              scan engine (types, modes, snapshots)
+pkg/scan              scan engine (types, modes, session, snapshots, grouped)
 pkg/asm               x86-64 disassembler + pure-Go Intel assembler
-pkg/debugger          Backend interface, ptrace, gdbmi stub
-pkg/inject            inline trampoline hooking
+pkg/debugger          Backend interface, ptrace, gdbmi stub, session, remote call
+pkg/inject            inline trampoline hooking + remote mmap/mprotect
 pkg/speedhack         time-scaling hooks
-pkg/config            YAML configuration
+pkg/unrandomizer      constant rand/random/rand_r hooks
+pkg/pointerscan       N-level pointer scanner and pointermap
+pkg/dissect           structure dissection
+pkg/autoasm           Auto Assembler subset
+pkg/script            Lua 5.1.4-compatible subset
+pkg/celua             Cheat Engine Lua table-object runtime
+pkg/customtype        user-defined value types
 pkg/cheattable        .CT / JSON import and export
+pkg/config            YAML configuration
+pkg/combinator        parser combinators shared by the scripting stack
 ```
 
 See [`docs/architecture.md`](docs/architecture.md) for details.
+
+## Documentation
+
+- [`docs/architecture.md`](docs/architecture.md) — layering and scan model.
+- [`docs/usage.md`](docs/usage.md) — GUI and CLI walkthrough.
+- [`docs/custom-types.md`](docs/custom-types.md) — user-defined value types.
+- [`docs/glossary.md`](docs/glossary.md) — the project vocabulary.
+- [`docs/adr/`](docs/adr/) — architecture decision records.
 
 ## Notes and limitations
 
@@ -138,6 +175,18 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
   RIP-relative operands or relative branches.
 - **ptrace**: attaching requires a permissive environment; sandboxes that block
   `ptrace(2)` will return `EPERM`.
+- **Grouped scans**: segments match contiguously at the scan alignment; there
+  are no per-segment offsets or gaps yet.
+- **Debugger threads**: the ptrace backend traces one thread at a time;
+  selecting a thread rebinds the session, and clone/fork following is deferred
+  (ADR 0044).
+- **Call stack**: a best-effort frame-pointer walk; builds compiled without a
+  frame pointer may truncate it.
+- **Unrandomizer**: returns a constant only (no counter/pattern mode).
+- **gdbmi**: the backend is a stub; only ptrace is implemented.
+- **Cheat Engine tables**: import/export covers the tree, expressions, scripts
+  and the core Lua API (ADR 0037); GUI/VCL-script tables are out of scope
+  (ADR 0039).
 
 ## License
 
