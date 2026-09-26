@@ -22,7 +22,7 @@ or GDB runtime dependency.
 | User-defined value types (Lua 5.1 scripts, or Auto Assembler via a local JIT) | implemented |
 | Cheat table: pointer records, bitfields, hex/binary/signed display, hotkeys, groups, reorder, copy/paste, ASLR-safe chains | implemented |
 | Pointer scanner (N-level, cached pointermap, `.ptr` load/save) | implemented |
-| Hex viewer/editor | partial (viewer + byte-level read/write API) |
+| Hex viewer/editor with page scrolling, region browser, byte editing and dump | implemented |
 | Debugger backend interface with pure-Go ptrace implementation | implemented |
 | Breakpoints, single-step, registers | implemented |
 | Debugger GUI, hardware watchpoints, find-accesses/writes | implemented |

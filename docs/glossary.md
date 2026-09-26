@@ -19,6 +19,8 @@ Terms used across the codebase, ADRs and UI.
   strictly above or below the scan value (ADR 0041).
 - **Bitfield** — a value that occupies a range of bits inside a wider container;
   edited with read-modify-write so neighbouring bits are preserved (ADR 0030).
+- **Byte cursor** — the selected byte in the Memory Viewer; hex-nibble typing
+  writes it and Shift-click extends a selection (ADR 0043).
 - **CE core Lua API** — the bounded subset of Cheat Engine's Lua table-object
   model Firstspark implements for scripts (`AddressList`, `MemoryRecord`,
   `Memscan`, `Process`, memory helpers, timers); GUI and OS-integration units
@@ -46,6 +48,8 @@ Terms used across the codebase, ADRs and UI.
   only non-executable regions, or any (ADR 0041).
 - **First value** — the value an address held during the initial scan, kept on
   the result so *Same as first scan* can compare against it (ADR 0041).
+- **Follow pointer** — reading a qword at the Memory Viewer cursor and jumping to
+  the address it holds when that address is mapped (ADR 0043).
 - **Found list** — the scan-results list beside the scan panel, with columns
   Address / Value / Previous. Its Value column is re-read live and its address
   column shows a module-relative `module+0xoffset` for static addresses
@@ -65,6 +69,8 @@ Terms used across the codebase, ADRs and UI.
 - **Live value** — the value last read from the target process, shown in the
   cheat table's Value column and the Found list's Value column; every cheat-table
   row is re-read on the 500 ms UI tick, as are the Found results (ADR 0040).
+- **Memory Regions browser** — the Memory Viewer window that lists the process
+  memory map and jumps to a region (ADR 0043).
 - **Pointermap** — a reverse index from pointer values to the addresses that
   contain them, used by the pointer scan (`pkg/pointerscan`).
 - **Pointer scan** — searching for a chain of pointers, starting at a module or
