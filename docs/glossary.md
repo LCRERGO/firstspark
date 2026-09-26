@@ -36,6 +36,10 @@ Terms used across the codebase, ADRs and UI.
   hotkeys and metadata (`pkg/cheattable`).
 - **Code cave** — executable memory allocated in the target to hold a hook
   handler or relocated instructions (`pkg/inject`).
+- **Found list** — the scan-results list beside the scan panel, with columns
+  Address / Value / Previous. Its Value column is re-read live and its address
+  column shows a module-relative `module+0xoffset` for static addresses
+  (ADR 0040).
 - **Freeze (Active)** — holding a cheat-table entry at its frozen value by
   rewriting it on a 50 ms timer; the Active column shows it.
 - **Frozen value** — the value a frozen entry is held at. Set by freezing (from
@@ -47,17 +51,23 @@ Terms used across the codebase, ADRs and UI.
 - **Inline hook** — overwriting a function prologue with a jump into a code cave
   (`pkg/inject`).
 - **Live value** — the value last read from the target process, shown in the
-  cheat table's Value column; every row is re-read on the 500 ms UI tick.
+  cheat table's Value column and the Found list's Value column; every cheat-table
+  row is re-read on the 500 ms UI tick, as are the Found results (ADR 0040).
 - **Pointermap** — a reverse index from pointer values to the addresses that
   contain them, used by the pointer scan (`pkg/pointerscan`).
 - **Pointer scan** — searching for a chain of pointers, starting at a module or
   static address, that resolves to a target address.
 - **PIE** — position-independent executable; its load base moves with ASLR.
+- **Previous value** — the value a Found-list address held in the scan before
+  the latest one; empty after a first scan (ADR 0040).
 - **Region** — one entry of `/proc/<pid>/maps` (`pkg/mem/region.go`).
 - **Scan session** — the state of a scan: options, selected regions, results and
   undo history (`pkg/scan/session.go`).
 - **Speedhack** — scaling a process's perceived time by hooking the libc time
   functions (`pkg/speedhack`).
+- **Static address** — an address inside a file-backed module region, shown as
+  `module+0xoffset` and coloured green in the Found list; any other address is
+  dynamic (ADR 0040).
 - **Symbol** — a named address registered by an Auto Assembler/Lua script (for
   example `pSelectedCharacter`); cheat-table address expressions resolve against
   the symbol table (ADR 0037).
