@@ -148,6 +148,10 @@ type App struct {
 	speedScale    *toolTipEntry
 	speedHooks    []*inject.Hook
 	speedApplied  bool
+	unrandom      *ttwidget.Check
+	unrandomVal   *toolTipEntry
+	unrandomHook  []*inject.Hook
+	unrandomOn    bool
 	alignEntry    *toolTipEntry
 	scanBtn       *ttwidget.Button
 	nextBtn       *ttwidget.Button
@@ -383,6 +387,9 @@ func (a *App) buildWidgets() {
 	a.speedhack.SetChecked(a.cfg.Speedhack.Enabled)
 	a.speedScale = newHintEntry("scan.hint.speedhack_scale")
 	a.speedScale.SetText(strconv.FormatFloat(a.cfg.Speedhack.Scale, 'g', -1, 64))
+	a.unrandom = newHintCheck(i18n.T("scan.unrandomizer"), "scan.hint.unrandomizer", func(on bool) { a.setUnrandomizer(on) })
+	a.unrandomVal = newHintEntry("scan.hint.unrandomizer_value")
+	a.unrandomVal.SetText("0")
 
 	a.alignEntry = newHintEntry("scan.hint.alignment")
 	a.alignEntry.SetText(strconv.Itoa(a.cfg.Scan.Alignment))

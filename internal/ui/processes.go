@@ -512,6 +512,14 @@ func (a *App) selectProcessObj(p mem.Process) {
 	if a.speedhack != nil && a.speedhack.Checked {
 		a.setSpeedhack(true)
 	}
+	if a.unrandom != nil && a.unrandom.Checked {
+		a.unrandomHook = nil
+		a.unrandomOn = false
+		a.setUnrandomizer(true)
+	} else {
+		a.unrandomHook = nil
+		a.unrandomOn = false
+	}
 	a.processLabel.SetText(i18n.Tf("process.label", map[string]any{"Name": p.Name, "PID": p.PID}))
 	a.session = nil
 	a.regionSel = nil

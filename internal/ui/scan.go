@@ -21,6 +21,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/scan"
 	"github.com/LCRERGO/firstspark/pkg/speedhack"
+	"github.com/LCRERGO/firstspark/pkg/unrandomizer"
 )
 
 const scanLabelWidth float32 = 96
@@ -206,6 +207,8 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		widget.NewSeparator(),
 		a.speedhack,
 		scanRow(i18n.T("scan.speedhack_scale"), a.speedScale),
+		a.unrandom,
+		scanRow(i18n.T("scan.unrandomizer_value"), a.unrandomVal),
 	)
 	return container.NewVScroll(container.NewPadded(body))
 }
@@ -628,4 +631,79 @@ func (a *App) removeSpeedhack() {
 	}
 	log.Info("speedhack removed", "pid", pid)
 	a.speedHooks = nil
+}
+
+// setUnrandomizer installs or removes the constant-return RNG hooks.
+func (a *App) setUnrandomizer(on bool) {
+	if on == a.unrandomOn {
+		return
+	}
+	if on {
+		if err := a.installUnrandomizer(); err != nil {
+			a.fail(err)
+			if a.unrandom != nil {
+				a.unrandom.SetChecked(false)
+			}
+			return
+		}
+		a.unrandomOn = true
+		a.setStatusText(i18n.T("status.unrandomizer_enabled"))
+		return
+	}
+	a.removeUnrandomizer()
+	a.unrandomOn = false
+	a.setStatusText(i18n.T("status.unrandomizer_disabled"))
+}
+
+// installUnrandomizer attaches, hooks the RNG functions and detaches.
+func (a *App) installUnrandomizer() error {
+	if a.proc == nil {
+		return fmt.Errorf("%s", i18n.T("error.no_process"))
+	}
+	value := uint64(0)
+	if a.unrandomVal != nil {
+		if n, err := parseUintLoose(a.unrandomVal.Text); err == nil {
+			value = n
+		}
+	}
+	be, err := debugger.NewPtrace(a.proc.PID)
+	if err != nil {
+		return err
+	}
+	defer be.Close()
+	if err := be.Attach(); err != nil {
+		return err
+	}
+	defer be.Detach()
+	for _, sym := range unrandomizer.DefaultSymbols {
+		h, err := unrandomizer.Hook(be, a.proc.PID, sym, value)
+		if err != nil {
+			a.removeUnrandomizer()
+			return fmt.Errorf("unrandomizer: %s: %w", sym, err)
+		}
+		a.unrandomHook = append(a.unrandomHook, h)
+	}
+	log.Info("unrandomizer installed", "pid", a.proc.PID, "value", value, "hooks", len(a.unrandomHook))
+	return nil
+}
+
+// removeUnrandomizer restores the hooked prologues.
+func (a *App) removeUnrandomizer() {
+	if len(a.unrandomHook) == 0 {
+		return
+	}
+	if a.proc != nil {
+		if be, err := debugger.NewPtrace(a.proc.PID); err == nil {
+			if err := be.Attach(); err == nil {
+				for _, h := range a.unrandomHook {
+					if err := h.Remove(); err != nil {
+						log.Warn("unrandomizer hook removal failed", "pid", a.proc.PID, "err", err)
+					}
+				}
+				_ = be.Detach()
+			}
+			_ = be.Close()
+		}
+	}
+	a.unrandomHook = nil
 }
