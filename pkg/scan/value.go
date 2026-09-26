@@ -29,6 +29,7 @@ const (
 	TypeUTF16BE
 	TypeUTF32LE
 	TypeUTF32BE
+	TypeGrouped
 )
 
 // Size returns the width in bytes for fixed-width types and 0 for the

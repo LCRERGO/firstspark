@@ -71,6 +71,9 @@ const (
 	ModeIncreasedBy
 	ModeDecreasedBy
 	ModeBetween
+	ModeBigger
+	ModeSmaller
+	ModeSameAsFirst
 )
 
 func (m ScanMode) String() string {
@@ -93,6 +96,12 @@ func (m ScanMode) String() string {
 		return "decreased by"
 	case ModeBetween:
 		return "between"
+	case ModeBigger:
+		return "bigger"
+	case ModeSmaller:
+		return "smaller"
+	case ModeSameAsFirst:
+		return "same as first"
 	default:
 		return "unknown"
 	}
@@ -119,8 +128,51 @@ func ParseScanMode(s string) (ScanMode, error) {
 		return ModeDecreasedBy, nil
 	case "between", "value between", "range":
 		return ModeBetween, nil
+	case "bigger", "bigger than", "greater", "greater than", "gt":
+		return ModeBigger, nil
+	case "smaller", "smaller than", "less", "less than", "lt":
+		return ModeSmaller, nil
+	case "same as first", "same as first scan", "first":
+		return ModeSameAsFirst, nil
 	default:
 		return ModeExact, fmt.Errorf("scan: unknown scan mode %q", s)
+	}
+}
+
+// ExecutableMode selects which regions the executable permission filter keeps.
+type ExecutableMode int
+
+const (
+	// ExecAny keeps executable and non-executable regions.
+	ExecAny ExecutableMode = iota
+	// ExecOnly keeps executable regions only.
+	ExecOnly
+	// ExecNonExec keeps non-executable regions only.
+	ExecNonExec
+)
+
+func (m ExecutableMode) String() string {
+	switch m {
+	case ExecOnly:
+		return "only"
+	case ExecNonExec:
+		return "non-executable"
+	default:
+		return "any"
+	}
+}
+
+// ParseExecutableMode maps a textual filter to an ExecutableMode.
+func ParseExecutableMode(s string) (ExecutableMode, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "any":
+		return ExecAny, nil
+	case "only", "executable", "yes":
+		return ExecOnly, nil
+	case "non", "non-executable", "nonexec", "no":
+		return ExecNonExec, nil
+	default:
+		return ExecAny, fmt.Errorf("scan: unknown executable filter %q", s)
 	}
 }
 
@@ -142,8 +194,9 @@ const (
 type Options struct {
 	Type          ValueType
 	Mode          ScanMode
-	Value         Value // target for exact scans, delta for *By modes, lower bound for between
+	Value         Value // target for exact/bigger/smaller scans, delta for *By modes, lower bound for between
 	Value2        Value // upper bound for ModeBetween
+	Grouped       *GroupedPattern
 	Compare       CompareOp
 	WritableOnly  bool
 	Alignment     int
@@ -152,6 +205,10 @@ type Options struct {
 	Scope         RegionScope
 	Epsilon       float64
 	Regions       []mem.Region // optional explicit region set
+	Executable    ExecutableMode
+	CopyOnWrite   bool
+	Start         uint64 // optional inclusive lower bound override (0 = none)
+	Stop          uint64 // optional exclusive upper bound override (0 = none)
 }
 
 // DefaultOptions returns sensible defaults matching configs/config.yaml.
@@ -170,6 +227,12 @@ func DefaultOptions() Options {
 
 // width returns the number of bytes a single candidate occupies.
 func (o Options) width() int {
+	if o.Type == TypeGrouped {
+		if o.Grouped == nil {
+			return 0
+		}
+		return o.Grouped.Size()
+	}
 	switch o.Type {
 	case TypeString, TypeAOB, TypeBinary, TypeUTF16LE, TypeUTF16BE, TypeUTF32LE, TypeUTF32BE:
 		return len(o.Value.Raw)

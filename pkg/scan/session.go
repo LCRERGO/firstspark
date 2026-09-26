@@ -22,11 +22,14 @@ const scanChunk = 1 * 1024 * 1024
 
 // Result is a single scan hit. Value is the value observed during the pass
 // that produced the result (the baseline for the next comparison); Previous is
-// the value the address held in the pass before that, empty on a first scan.
+// the value the address held in the pass before that, and First is the value
+// captured by the initial scan. Previous is empty on a first scan; First is
+// only empty for results that predate the first scan.
 type Result struct {
 	Addr     uint64
 	Value    Value
 	Previous Value
+	First    Value
 }
 
 // Progress reports how far a scan has advanced.
@@ -110,7 +113,8 @@ func (s *Session) SetCompare(op CompareOp) { s.opts.Compare = op }
 // progress through onProgress. On error or cancellation the previous results
 // are left untouched.
 func (s *Session) First(ctx context.Context, onProgress func(Progress)) error {
-	if s.opts.Mode != ModeExact && s.opts.Mode != ModeUnknown && s.opts.Mode != ModeBetween {
+	if s.opts.Mode != ModeExact && s.opts.Mode != ModeUnknown && s.opts.Mode != ModeBetween &&
+		s.opts.Mode != ModeBigger && s.opts.Mode != ModeSmaller {
 		return fmt.Errorf("scan: %s is not a valid initial scan mode", s.opts.Mode)
 	}
 	if s.opts.Type.Variable() && s.opts.Mode != ModeExact {
@@ -198,12 +202,36 @@ func (s *Session) selectRegions() ([]mem.Region, error) {
 		if !s.regionInScope(r, exe) {
 			continue
 		}
+		if s.opts.Start != 0 || s.opts.Stop != 0 {
+			if s.opts.Start > r.Start {
+				r.Start = s.opts.Start
+			}
+			if s.opts.Stop != 0 && s.opts.Stop < r.End {
+				r.End = s.opts.Stop
+			}
+			if r.End <= r.Start {
+				continue
+			}
+		}
 		out = append(out, r)
 	}
 	return out, nil
 }
 
 func (s *Session) regionInScope(r mem.Region, exe string) bool {
+	switch s.opts.Executable {
+	case ExecOnly:
+		if !r.Executable() {
+			return false
+		}
+	case ExecNonExec:
+		if r.Executable() {
+			return false
+		}
+	}
+	if s.opts.CopyOnWrite && !r.Private() {
+		return false
+	}
 	switch s.opts.Scope {
 	case ScopeAllReadable:
 		return true
@@ -334,8 +362,8 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 					continue
 				}
 				cur := NewValue(s.opts.Type, raw)
-				if s.keep(cur, res.Value) {
-					local = append(local, Result{Addr: res.Addr, Value: cur, Previous: res.Value})
+				if s.keep(cur, res) {
+					local = append(local, Result{Addr: res.Addr, Value: cur, Previous: res.Value, First: res.First})
 					atomic.AddInt64(&matches, 1)
 				}
 			}
@@ -474,18 +502,21 @@ func (s *Session) scanBytes(ctx context.Context, addr uint64, data []byte, limit
 func (s *Session) consider(addr uint64, raw []byte, out *[]Result, matches *int64) error {
 	switch s.opts.Mode {
 	case ModeUnknown:
-		s.appendResult(out, matches, Result{Addr: addr, Value: NewValue(s.opts.Type, raw)})
-	case ModeExact:
-		if s.opts.Type == TypeAll {
+		v := NewValue(s.opts.Type, raw)
+		s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
+	case ModeExact, ModeBigger, ModeSmaller:
+		if s.opts.Mode == ModeExact && s.opts.Type == TypeAll {
 			for _, v := range s.matchAll(raw) {
-				s.appendResult(out, matches, Result{Addr: addr, Value: v})
+				s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
 			}
 		} else if s.matchExact(raw) {
-			s.appendResult(out, matches, Result{Addr: addr, Value: NewValue(s.opts.Type, raw)})
+			v := NewValue(s.opts.Type, raw)
+			s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
 		}
 	case ModeBetween:
 		if s.matchBetween(raw) {
-			s.appendResult(out, matches, Result{Addr: addr, Value: NewValue(s.opts.Type, raw)})
+			v := NewValue(s.opts.Type, raw)
+			s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
 		}
 	}
 	return nil
@@ -502,9 +533,19 @@ func (s *Session) capped(matches *int64) bool {
 }
 
 func (s *Session) matchExact(raw []byte) bool {
+	if s.opts.Type == TypeGrouped {
+		return s.opts.Grouped != nil && s.opts.Grouped.Match(raw)
+	}
 	t := TypeByID(s.opts.Type)
 	if t == nil {
 		return false
+	}
+	op := s.opts.Compare
+	switch s.opts.Mode {
+	case ModeBigger:
+		op = OpGreater
+	case ModeSmaller:
+		op = OpLess
 	}
 	switch t.Kind {
 	case KindString, KindBytes, KindBinary:
@@ -518,14 +559,15 @@ func (s *Session) matchExact(raw []byte) bool {
 		}
 		return bytes.Equal(raw, s.opts.Value.Raw)
 	default:
-		return t.Compare(NewValue(s.opts.Type, raw), s.opts.Value, s.opts.Compare, s.opts.Epsilon)
+		return t.Compare(NewValue(s.opts.Type, raw), s.opts.Value, op, s.opts.Epsilon)
 	}
 }
 
-func (s *Session) keep(cur, prev Value) bool {
+func (s *Session) keep(cur Value, res Result) bool {
 	t := TypeByID(s.opts.Type)
+	prev := res.Value
 	switch s.opts.Mode {
-	case ModeExact:
+	case ModeExact, ModeBigger, ModeSmaller:
 		return s.matchExact(cur.Raw)
 	case ModeChanged:
 		return !s.valueEqual(t, cur, prev)
@@ -541,6 +583,8 @@ func (s *Session) keep(cur, prev Value) bool {
 		return s.valueDelta(t, cur, prev, s.opts.Value, false)
 	case ModeBetween:
 		return s.matchBetween(cur.Raw)
+	case ModeSameAsFirst:
+		return s.valueEqual(t, cur, res.First)
 	default:
 		return false
 	}

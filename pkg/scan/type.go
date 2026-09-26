@@ -3,6 +3,7 @@ package scan
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -299,6 +300,15 @@ func registerBuiltins() {
 		Encode:  func(n int64) []byte { return encodeInteger(TypeQword, n) },
 		Int64:   func(v Value) int64 { return v.Int64() },
 		Numeric: func(v Value) float64 { return float64(v.Int64()) },
+	})
+	RegisterType(&Type{
+		ID: TypeGrouped, Name: "grouped", Label: "Grouped", Variable: true, Kind: KindBytes,
+		Parse: func(string) (Value, error) {
+			return Value{}, fmt.Errorf("scan: grouped values are parsed with ParseGrouped")
+		},
+		Format:  func(v Value) string { return formatBytes(v.Raw) },
+		Encode:  func(n int64) []byte { return []byte{byte(n)} },
+		Numeric: func(v Value) float64 { return 0 },
 	})
 }
 

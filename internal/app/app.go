@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/LCRERGO/firstspark/internal/i18n"
@@ -34,6 +36,10 @@ func Run(args []string) error {
 	value2 := fs.String("value2", "", "upper bound for a between scan")
 	compare := fs.String("compare", "", "comparison operator (== != > >= < <=)")
 	next := fs.String("next", "", "next scan mode (changed|unchanged|increased|decreased|...)")
+	exec := fs.String("exec", "", "executable region filter (any|only|non)")
+	cow := fs.Bool("cow", false, "scan copy-on-write regions only")
+	start := fs.String("start", "", "scan range start address (hex)")
+	stop := fs.String("stop", "", "scan range stop address (hex)")
 	export := fs.String("export", "", "export results to a .CT file")
 	logLevel := fs.String("log-level", "", "log level (debug|info|warn|error)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
@@ -75,7 +81,10 @@ func Run(args []string) error {
 		return err
 	}
 	if *pid > 0 {
-		return headlessScan(cfg, *pid, *typ, *mode, *value, *value2, *compare, *next, *export)
+		return headlessScan(cfg, *pid, scanFlags{
+			typ: *typ, mode: *mode, value: *value, value2: *value2, compare: *compare,
+			next: *next, exec: *exec, start: *start, stop: *stop, cow: *cow, export: *export,
+		})
 	}
 	return ui.Run(cfg)
 }
@@ -97,12 +106,20 @@ func listProcesses() error {
 	return w.Flush()
 }
 
-func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare, next, export string) error {
+// scanFlags carries the headless scan command line options.
+type scanFlags struct {
+	typ, mode, value, value2, compare, next string
+	exec, start, stop                       string
+	cow                                     bool
+	export                                  string
+}
+
+func headlessScan(cfg config.Config, pid int, f scanFlags) error {
 	proc, err := mem.Find(pid)
 	if err != nil {
 		return err
 	}
-	log.Info("headless scan", "pid", pid, "type", typ, "mode", mode, "next", next)
+	log.Info("headless scan", "pid", pid, "type", f.typ, "mode", f.mode, "next", f.next)
 	opts := scan.DefaultOptions()
 	opts.Alignment = cfg.Scan.Alignment
 	opts.SnapshotLimit = cfg.Scan.SnapshotLimit
@@ -110,43 +127,64 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 	opts.WritableOnly = cfg.Scan.WritableOnly
 	opts.MaxResults = cfg.UI.ResultLimit
 
-	if typ == "" {
-		typ = cfg.Scan.ValueType
+	if f.typ == "" {
+		f.typ = cfg.Scan.ValueType
 	}
-	vt, err := scan.ParseValueType(typ)
+	vt, err := scan.ParseValueType(f.typ)
 	if err != nil {
 		return err
 	}
 	opts.Type = vt
 
-	if mode != "" {
-		sm, err := scan.ParseScanMode(mode)
+	if f.mode != "" {
+		sm, err := scan.ParseScanMode(f.mode)
 		if err != nil {
 			return err
 		}
 		opts.Mode = sm
 	}
-	if compare != "" {
-		cmp, err := scan.ParseCompareOp(compare)
+	if f.compare != "" {
+		cmp, err := scan.ParseCompareOp(f.compare)
 		if err != nil {
 			return err
 		}
 		opts.Compare = cmp
 	}
-	if opts.Mode == scan.ModeExact || opts.Mode == scan.ModeIncreasedBy || opts.Mode == scan.ModeDecreasedBy {
-		v, err := scan.ParseValue(vt, value)
+	if f.exec != "" {
+		em, err := scan.ParseExecutableMode(f.exec)
+		if err != nil {
+			return err
+		}
+		opts.Executable = em
+	}
+	opts.CopyOnWrite = f.cow
+	if opts.Start, err = parseHexAddr(f.start); err != nil {
+		return err
+	}
+	if opts.Stop, err = parseHexAddr(f.stop); err != nil {
+		return err
+	}
+
+	if opts.Type == scan.TypeGrouped {
+		gp, err := scan.ParseGrouped(f.value)
+		if err != nil {
+			return err
+		}
+		opts.Grouped = gp
+	} else if modeTakesValue(opts.Mode) {
+		v, err := scan.ParseValue(vt, f.value)
 		if err != nil {
 			return err
 		}
 		opts.Value = v
 	}
 	if opts.Mode == scan.ModeBetween {
-		v, err := scan.ParseValue(vt, value)
+		v, err := scan.ParseValue(vt, f.value)
 		if err != nil {
 			return err
 		}
 		opts.Value = v
-		v2, err := scan.ParseValue(vt, value2)
+		v2, err := scan.ParseValue(vt, f.value2)
 		if err != nil {
 			return err
 		}
@@ -159,26 +197,26 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 	}
 	fmt.Println(i18n.Tf("cli.first_scan", map[string]any{"Count": session.Count()}))
 
-	if next != "" {
-		nm, err := scan.ParseScanMode(next)
+	if f.next != "" {
+		nm, err := scan.ParseScanMode(f.next)
 		if err != nil {
 			return err
 		}
 		session.SetMode(nm)
-		if nm == scan.ModeIncreasedBy || nm == scan.ModeDecreasedBy || nm == scan.ModeExact {
-			v, err := scan.ParseValue(vt, value)
+		if modeTakesValue(nm) && opts.Type != scan.TypeGrouped {
+			v, err := scan.ParseValue(vt, f.value)
 			if err != nil {
 				return err
 			}
 			session.SetValue(v)
 		}
 		if nm == scan.ModeBetween {
-			v, err := scan.ParseValue(vt, value)
+			v, err := scan.ParseValue(vt, f.value)
 			if err != nil {
 				return err
 			}
 			session.SetValue(v)
-			v2, err := scan.ParseValue(vt, value2)
+			v2, err := scan.ParseValue(vt, f.value2)
 			if err != nil {
 				return err
 			}
@@ -199,15 +237,39 @@ func headlessScan(cfg config.Config, pid int, typ, mode, value, value2, compare,
 		fmt.Printf("0x%x = %s\n", r.Addr, r.Value.String())
 	}
 
-	if export != "" {
+	if f.export != "" {
 		tbl := &cheattable.Table{}
 		for _, r := range results {
 			tbl.Add("", fmt.Sprintf("0x%x", r.Addr), r.Value.Type.String(), r.Value.String())
 		}
-		if err := tbl.Save(export); err != nil {
+		if err := tbl.Save(f.export); err != nil {
 			return err
 		}
-		fmt.Println(i18n.Tf("cli.exported", map[string]any{"Count": len(results), "Path": export}))
+		fmt.Println(i18n.Tf("cli.exported", map[string]any{"Count": len(results), "Path": f.export}))
 	}
 	return nil
+}
+
+// modeTakesValue reports whether a mode consumes the scan value.
+func modeTakesValue(m scan.ScanMode) bool {
+	switch m {
+	case scan.ModeExact, scan.ModeBigger, scan.ModeSmaller, scan.ModeIncreasedBy, scan.ModeDecreasedBy:
+		return true
+	default:
+		return false
+	}
+}
+
+// parseHexAddr parses an optional hexadecimal address; an empty string is 0.
+func parseHexAddr(s string) (uint64, error) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+	if s == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseUint(s, 16, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid address %q", s)
+	}
+	return n, nil
 }
