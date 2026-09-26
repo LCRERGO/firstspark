@@ -40,64 +40,73 @@ var directives = map[string]bool{
 func Tokenize(src string) []Token {
 	r := []rune(src)
 	var out []Token
-	i := 0
-	for i < len(r) {
+	for i := 0; i < len(r); {
+		start := i
 		switch {
-		case r[i] == '/' && i+1 < len(r) && r[i+1] == '/':
-			start := i
-			for i < len(r) && r[i] != '\n' {
-				i++
-			}
-			out = append(out, Token{TokenComment, start, i, string(r[start:i])})
-		case r[i] == ';':
-			start := i
-			for i < len(r) && r[i] != '\n' {
-				i++
-			}
+		case (r[i] == '/' && i+1 < len(r) && r[i+1] == '/') || r[i] == ';':
+			i = scanLineComment(r, i)
 			out = append(out, Token{TokenComment, start, i, string(r[start:i])})
 		case r[i] == '"' || r[i] == '\'':
-			start := i
 			i = scanQuoted(r, i)
 			out = append(out, Token{TokenString, start, i, string(r[start:i])})
 		case r[i] == '[':
-			start := i
-			for i < len(r) && r[i] != ']' && r[i] != '\n' {
-				i++
-			}
-			if i < len(r) && r[i] == ']' {
-				i++
-			}
+			i = scanBracket(r, i)
 			text := string(r[start:i])
+			kind := TokenPlain
 			if isSection(text) {
-				out = append(out, Token{TokenSection, start, i, text})
-			} else {
-				out = append(out, Token{TokenPlain, start, i, text})
+				kind = TokenSection
 			}
+			out = append(out, Token{kind, start, i, text})
 		case r[i] >= '0' && r[i] <= '9':
-			start := i
-			for i < len(r) && isWordByte(r[i]) {
-				i++
-			}
+			i = scanWord(r, i)
 			out = append(out, Token{TokenNumber, start, i, string(r[start:i])})
 		case isWordStart(r[i]):
-			start := i
-			for i < len(r) && isWordByte(r[i]) {
-				i++
-			}
+			i = scanWord(r, i)
 			word := string(r[start:i])
-			kind := TokenPlain
-			switch {
-			case i < len(r) && r[i] == ':':
-				kind = TokenLabel
-			case directives[strings.ToLower(word)]:
-				kind = TokenDirective
-			}
-			out = append(out, Token{kind, start, i, word})
+			out = append(out, Token{wordKind(r, i, word), start, i, word})
 		default:
 			i++
 		}
 	}
 	return out
+}
+
+// scanLineComment consumes a `//` or `;` comment up to the newline.
+func scanLineComment(r []rune, i int) int {
+	for i < len(r) && r[i] != '\n' {
+		i++
+	}
+	return i
+}
+
+// scanBracket consumes a `[...]` run.
+func scanBracket(r []rune, i int) int {
+	for i < len(r) && r[i] != ']' && r[i] != '\n' {
+		i++
+	}
+	if i < len(r) && r[i] == ']' {
+		i++
+	}
+	return i
+}
+
+// scanWord consumes an identifier, directive or numeric run.
+func scanWord(r []rune, i int) int {
+	for i < len(r) && isWordByte(r[i]) {
+		i++
+	}
+	return i
+}
+
+// wordKind classifies a word as a label, directive or plain text.
+func wordKind(r []rune, i int, word string) TokenKind {
+	if i < len(r) && r[i] == ':' {
+		return TokenLabel
+	}
+	if directives[strings.ToLower(word)] {
+		return TokenDirective
+	}
+	return TokenPlain
 }
 
 func isSection(s string) bool {
