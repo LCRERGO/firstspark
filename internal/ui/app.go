@@ -194,6 +194,7 @@ type App struct {
 	dbgModules     []mem.Region
 	dbgModuleList  *dbgList
 	dbgStack       []string
+	dbgStackAddrs  []uint64
 	dbgStackList   *dbgList
 	dbgTrace       []string
 	dbgTraceList   *dbgList

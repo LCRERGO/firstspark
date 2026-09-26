@@ -48,3 +48,17 @@ func TestListThreads(t *testing.T) {
 		t.Fatal("expected at least one thread")
 	}
 }
+
+func TestRegValuesOrder(t *testing.T) {
+	v := regValues(debugger.Registers{RIP: 7, RAX: 9, RFLAGS: 2})
+	if v[0] != 7 || v[3] != 9 || v[17] != 2 {
+		t.Fatalf("regValues = %v", v)
+	}
+}
+
+func TestTraceLine(t *testing.T) {
+	line := traceLine(3, debugger.Registers{RIP: 0x400000, RAX: 1})
+	if line == "" {
+		t.Fatal("empty trace line")
+	}
+}

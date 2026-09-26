@@ -109,6 +109,58 @@ func (a *App) refreshModules() {
 	}
 }
 
+// refreshCallStack walks the frame-pointer chain of the current thread. It is a
+// best-effort unwind: builds that omit the frame pointer may truncate it.
+func (a *App) refreshCallStack() {
+	a.dbgStack = a.dbgStack[:0]
+	a.dbgStackAddrs = a.dbgStackAddrs[:0]
+	if a.dbgSession != nil {
+		if regs, err := a.dbgSession.Registers(); err == nil {
+			a.walkStack(regs)
+		}
+	}
+	if a.dbgStackList != nil {
+		a.dbgStackList.Refresh()
+	}
+}
+
+func (a *App) walkStack(regs debugger.Registers) {
+	const maxFrames = 64
+	a.dbgStack = append(a.dbgStack, fmt.Sprintf("#0   0x%016x  %s", regs.RIP, a.instructionAt(regs.RIP)))
+	a.dbgStackAddrs = append(a.dbgStackAddrs, regs.RIP)
+	fp := regs.RBP
+	seen := map[uint64]bool{}
+	for i := 1; i < maxFrames && fp != 0 && !seen[fp]; i++ {
+		seen[fp] = true
+		raw, err := a.dbgSession.Read(fp, 16)
+		if err != nil || len(raw) < 16 {
+			break
+		}
+		next := binary.LittleEndian.Uint64(raw[:8])
+		ret := binary.LittleEndian.Uint64(raw[8:16])
+		if ret == 0 {
+			break
+		}
+		a.dbgStack = append(a.dbgStack, fmt.Sprintf("#%-3d 0x%016x  %s", i, ret, a.instructionAt(ret)))
+		a.dbgStackAddrs = append(a.dbgStackAddrs, ret)
+		if next <= fp {
+			break
+		}
+		fp = next
+	}
+}
+
+func (a *App) instructionAt(addr uint64) string {
+	raw, err := a.dbgSession.Read(addr, 16)
+	if err != nil {
+		return "?"
+	}
+	if ins := asm.Disassemble(raw, addr); len(ins) > 0 {
+		return ins[0].Text
+	}
+	return "?"
+}
+
 // selectThread rebinds the debugger to another thread, re-attaching when it was
 // already attached.
 func (a *App) selectThread(tid int) {
@@ -276,6 +328,14 @@ func (a *App) buildDebugger() {
 			t.Refresh()
 		},
 	)
+	a.dbgStackList.OnSelected = func(id widget.ListItemID) {
+		if id >= 0 && id < len(a.dbgStackAddrs) {
+			addr := a.dbgStackAddrs[id]
+			a.dbgAddrEntry.SetText(fmt.Sprintf("0x%x", addr))
+			a.openMemoryViewer()
+			a.loadMemory(addr)
+		}
+	}
 	a.dbgTraceList = a.newDebuggerList(
 		func() int { return len(a.dbgTrace) },
 		func() fyne.CanvasObject { return a.monoText("") },
@@ -310,6 +370,7 @@ func (a *App) buildDebugger() {
 	follow := container.NewHBox(
 		newHintButton(i18n.T("debugger.follow_rip"), "debugger.hint.follow_rip", func() { a.followRegister(true) }),
 		newHintButton(i18n.T("debugger.follow_rsp"), "debugger.hint.follow_rsp", func() { a.followRegister(false) }),
+		newHintButton(i18n.T("debugger.trace"), "debugger.hint.trace", a.debuggerTraceDialog),
 		newHintButton(i18n.T("debugger.refresh"), "debugger.hint.refresh", a.debuggerRefresh),
 	)
 	a.dbgRegEdit = newHintEntry("debugger.hint.register_edit")
@@ -755,6 +816,7 @@ func (a *App) debuggerRefresh() {
 	}
 	a.refreshThreads()
 	a.refreshModules()
+	a.refreshCallStack()
 }
 
 func (a *App) refreshBreakpointList() {
@@ -1049,6 +1111,80 @@ func parseUintLoose(s string) (uint64, error) {
 		return n, nil
 	}
 	return strconv.ParseUint(s, 16, 64)
+}
+
+// debuggerTraceDialog asks for a step count and starts a single-step trace.
+func (a *App) debuggerTraceDialog() {
+	if a.dbgSession == nil {
+		a.fail(fmt.Errorf("%s", i18n.T("error.attach_first")))
+		return
+	}
+	steps := widget.NewEntry()
+	steps.SetText("1000")
+	d := dialog.NewForm(i18n.T("debugger.trace"), i18n.T("action.apply"), i18n.T("action.cancel"),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T("debugger.trace_steps"), steps)},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			n, err := strconv.Atoi(strings.TrimSpace(steps.Text))
+			if err != nil || n <= 0 {
+				a.fail(fmt.Errorf("%s", i18n.T("error.trace_steps")))
+				return
+			}
+			a.runTrace(n)
+		}, a.dbgWin)
+	d.Resize(fyne.NewSize(360, 160))
+	d.Show()
+}
+
+// runTrace single-steps the target up to steps times, recording each stop.
+func (a *App) runTrace(steps int) {
+	a.dbgTrace = nil
+	if a.dbgTraceList != nil {
+		a.dbgTraceList.Refresh()
+	}
+	go func() {
+		lines := make([]string, 0, steps)
+		for i := 0; i < steps; i++ {
+			regs, err := a.dbgSession.Registers()
+			if err != nil {
+				fyne.Do(func() { a.fail(err) })
+				return
+			}
+			lines = append(lines, traceLine(i, regs))
+			if len(lines)%64 == 0 {
+				snapshot := append([]string(nil), lines...)
+				fyne.Do(func() {
+					a.dbgTrace = snapshot
+					if a.dbgTraceList != nil {
+						a.dbgTraceList.Refresh()
+					}
+				})
+			}
+			if err := a.dbgSession.Step(); err != nil {
+				fyne.Do(func() { a.fail(err) })
+				return
+			}
+			if _, err := a.dbgSession.Wait(); err != nil {
+				fyne.Do(func() { a.fail(err) })
+				return
+			}
+		}
+		fyne.Do(func() {
+			a.dbgTrace = lines
+			if a.dbgTraceList != nil {
+				a.dbgTraceList.Refresh()
+			}
+			a.dbgStatus.SetText(i18n.Tf("debugger.trace_done", map[string]any{"Count": len(lines)}))
+			a.debuggerRefresh()
+		})
+	}()
+}
+
+func traceLine(i int, regs debugger.Registers) string {
+	return fmt.Sprintf("%06d  0x%016x  RAX=%016x RBX=%016x RCX=%016x RDX=%016x RSP=%016x",
+		i, regs.RIP, regs.RAX, regs.RBX, regs.RCX, regs.RDX, regs.RSP)
 }
 
 func describeStop(reason debugger.StopReason) string {
