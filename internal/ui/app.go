@@ -105,14 +105,17 @@ type App struct {
 	themeChoices    []themeChoice
 	themeSystemItem *fyne.MenuItem
 
-	session    *scan.Session
-	regionSel  []mem.Region
-	results    []scan.Result
-	foundList  *widget.Table
-	foundSel   int
-	foundMulti map[int]bool
-	foundCount *widget.Label
-	status     *widget.Label
+	session      *scan.Session
+	regionSel    []mem.Region
+	results      []scan.Result
+	foundList    *widget.Table
+	foundOrder   []int
+	foundLive    map[int]scan.Value
+	foundRegions []mem.Region
+	foundSel     int
+	foundMulti   map[int]bool
+	foundCount   *widget.Label
+	status       *widget.Label
 
 	entries         []*tableEntry
 	entryRoots      []*tableEntry
@@ -668,10 +671,14 @@ func (a *App) freezeLoop() {
 			if tick%10 == 0 {
 				fyne.Do(func() {
 					changed := a.refreshEntries()
+					a.refreshFoundValues()
 					a.syncFreezeTargets()
 					a.runLuaTimers()
 					if changed && a.table != nil {
 						a.table.Refresh()
+					}
+					if a.foundList != nil {
+						a.foundList.Refresh()
 					}
 				})
 			}

@@ -5,7 +5,9 @@ package ui
 import (
 	"testing"
 
+	"github.com/LCRERGO/firstspark/pkg/mem"
 	"github.com/LCRERGO/firstspark/pkg/pointerscan"
+	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
 func TestChainToPointer(t *testing.T) {
@@ -55,5 +57,53 @@ func TestParseHotkey(t *testing.T) {
 	}
 	if _, err := parseHotkey("F13"); err == nil {
 		t.Fatal("expected an error for F13")
+	}
+}
+
+func TestFoundCellText(t *testing.T) {
+	a := newTestApp(t)
+	cur := scan.NewValue(scan.TypeDword, []byte{42, 0, 0, 0})
+	prev := scan.NewValue(scan.TypeDword, []byte{1, 0, 0, 0})
+	a.results = []scan.Result{
+		{Addr: 0x1000, Value: cur, Previous: prev},
+		{Addr: 0x2000, Value: cur},
+	}
+	a.foundOrder = identityOrder(len(a.results))
+
+	if got := a.foundCellText(0, 0); got != "0x1000" {
+		t.Fatalf("address = %q", got)
+	}
+	if got := a.foundCellText(1, 0); got != cur.String() {
+		t.Fatalf("value = %q, want %q", got, cur.String())
+	}
+	if got := a.foundCellText(2, 0); got != prev.String() {
+		t.Fatalf("previous = %q, want %q", got, prev.String())
+	}
+	if got := a.foundCellText(2, 1); got != "-" {
+		t.Fatalf("missing previous = %q, want -", got)
+	}
+
+	live := scan.NewValue(scan.TypeDword, []byte{9, 0, 0, 0})
+	a.foundLive = map[int]scan.Value{0: live}
+	if got := a.foundCellText(1, 0); got != live.String() {
+		t.Fatalf("live value = %q, want %q", got, live.String())
+	}
+}
+
+func TestStaticInfo(t *testing.T) {
+	a := newTestApp(t)
+	a.foundRegions = []mem.Region{
+		{Start: 0x400000, End: 0x500000, Perms: "r-xp", Offset: 0, Path: "/usr/bin/game"},
+		{Start: 0x7f0000000000, End: 0x7f0000001000, Perms: "rw-p", Offset: 0},
+	}
+	name, off, ok := a.staticInfo(0x401234)
+	if !ok || name != "game" || off != 0x1234 {
+		t.Fatalf("staticInfo = %q, %#x, %v", name, off, ok)
+	}
+	if _, _, ok := a.staticInfo(0x7f0000000000); ok {
+		t.Fatal("anonymous region should not be static")
+	}
+	if _, _, ok := a.staticInfo(0x999999); ok {
+		t.Fatal("unmapped address should not be static")
 	}
 }

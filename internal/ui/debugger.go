@@ -637,7 +637,11 @@ func (a *App) findWhatWrites(row int, writeOnly bool) {
 	if row < 0 || row >= len(a.entries) || a.entries[row].group || a.entries[row].expr != "" {
 		return
 	}
-	addr := a.entries[row].addr
+	a.findWhatWritesAddr(a.entries[row].addr, writeOnly)
+}
+
+// findWhatWritesAddr opens the debugger and watches an arbitrary address.
+func (a *App) findWhatWritesAddr(addr uint64, writeOnly bool) {
 	a.openDebugger()
 	a.dbgAddrEntry.SetText(fmt.Sprintf("0x%x", addr))
 	a.debuggerWatch(writeOnly)

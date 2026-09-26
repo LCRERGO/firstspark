@@ -4,6 +4,8 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -121,49 +123,125 @@ func binaryOf(v scan.Value) string {
 	}
 }
 
+// foundHeaders returns the translated Found-list column titles.
+func foundHeaders() []string {
+	return []string{
+		i18n.T("header.address"),
+		i18n.T("header.value"),
+		i18n.T("header.previous"),
+	}
+}
+
 func (a *App) buildFoundList() {
+	headers := foundHeaders()
 	a.foundList = widget.NewTable(
-		func() (int, int) { return len(a.results), 1 },
-		func() fyne.CanvasObject {
-			c := &foundCell{Label: widget.NewLabel(""), app: a}
-			c.TextStyle = fyne.TextStyle{Monospace: true}
-			return c
-		},
+		func() (int, int) { return len(a.results), len(headers) },
+		func() fyne.CanvasObject { return a.newFoundCell() },
 		func(id widget.TableCellID, o fyne.CanvasObject) { a.updateFoundCell(id, o) },
 	)
-	a.foundList.SetColumnWidth(0, 320)
+	a.foundList.ShowHeaderRow = true
+	a.foundList.CreateHeader = func() fyne.CanvasObject { return a.monoText("") }
+	a.foundList.UpdateHeader = func(id widget.TableCellID, o fyne.CanvasObject) {
+		t := o.(*canvas.Text)
+		if id.Col < 0 || id.Col >= len(headers) {
+			t.Text = ""
+			t.Refresh()
+			return
+		}
+		t.Text = headers[id.Col]
+		t.Color = a.pal().primary
+		t.Refresh()
+	}
+	a.foundList.SetColumnWidth(0, 170)
+	a.foundList.SetColumnWidth(1, 130)
+	a.foundList.SetColumnWidth(2, 130)
 }
 
 func (a *App) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
 	c := o.(*foundCell)
-	c.row = id.Row
-	if id.Row < 0 || id.Row >= len(a.results) {
-		c.SetText("")
-		c.Refresh()
+	c.row, c.col = id.Row, id.Col
+	idx := a.foundResult(id.Row)
+	if idx < 0 {
+		c.setText("")
+		c.setColor(a.pal().text)
 		return
 	}
-	r := a.results[id.Row]
-	c.SetText(fmt.Sprintf("0x%012x  %s", r.Addr, r.Value.String()))
-	if a.isFoundSelected(id.Row) {
-		c.Importance = widget.HighImportance
-	} else {
-		c.Importance = widget.MediumImportance
+	c.setText(a.foundCellText(id.Col, idx))
+	switch {
+	case a.isFoundSelected(idx):
+		c.setColor(a.pal().primary)
+	case id.Col == 0 && a.isStatic(a.results[idx].Addr):
+		c.setColor(a.pal().success)
+	default:
+		c.setColor(a.pal().text)
 	}
-	c.Refresh()
 }
 
-// foundCell is a tappable Found-list row that reports clicks with modifiers.
+// foundCellText renders one Found-list cell: Address, live Value or Previous.
+func (a *App) foundCellText(col, idx int) string {
+	r := a.results[idx]
+	switch col {
+	case 0:
+		if name, off, ok := a.staticInfo(r.Addr); ok {
+			return fmt.Sprintf("%s+0x%x", name, off)
+		}
+		return fmt.Sprintf("0x%x", r.Addr)
+	case 1:
+		if v, ok := a.foundLive[idx]; ok {
+			return v.String()
+		}
+		return r.Value.String()
+	case 2:
+		if len(r.Previous.Raw) == 0 {
+			return "-"
+		}
+		return r.Previous.String()
+	default:
+		return ""
+	}
+}
+
+// foundCell is a Found-list cell that paints its own text colour and reports
+// taps, double-clicks and right-clicks.
 type foundCell struct {
-	*widget.Label
-	app *App
-	row int
+	widget.BaseWidget
+	app  *App
+	text *canvas.Text
+	row  int
+	col  int
+}
+
+func (a *App) newFoundCell() *foundCell {
+	c := &foundCell{app: a, text: a.th.monoText("", a.pal().text)}
+	c.ExtendBaseWidget(c)
+	return c
+}
+
+func (c *foundCell) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(c.text)
+}
+
+func (c *foundCell) setText(s string) {
+	c.text.Text = s
+	c.text.Refresh()
+}
+
+func (c *foundCell) setColor(col color.Color) {
+	c.text.Color = col
+	c.text.Refresh()
 }
 
 func (c *foundCell) Tapped(*fyne.PointEvent) { c.app.foundTapped(c.row) }
 
+func (c *foundCell) DoubleTapped(*fyne.PointEvent) { c.app.foundDoubleTapped(c.row) }
+
 func (c *foundCell) MouseDown(e *desktop.MouseEvent) {
 	c.app.clickMod = e.Modifier
-	c.app.selectFoundRow(c.row, e.Modifier)
+	if e.Button == desktop.MouseButtonSecondary {
+		c.app.foundMenu(c.row, e.Position, c)
+		return
+	}
+	c.app.selectFoundRow(c.app.foundResult(c.row), e.Modifier)
 }
 
 // selectFoundRow updates the Found-list selection: plain selects one row, Ctrl
@@ -231,13 +309,161 @@ func (a *App) selectedFoundIndices() []int {
 }
 
 // foundTapped handles a plain click: select and browse the address.
-func (a *App) foundTapped(id int) {
+func (a *App) foundTapped(row int) {
 	mod := a.clickMod
 	a.clickMod = 0
 	if mod != 0 {
 		return
 	}
-	a.selectFound(id)
+	a.selectFound(a.foundResult(row))
+}
+
+// foundDoubleTapped adds the double-clicked result to the cheat table, like
+// Cheat Engine.
+func (a *App) foundDoubleTapped(row int) {
+	idx := a.foundResult(row)
+	if idx < 0 {
+		return
+	}
+	a.addResultToTable(idx)
+}
+
+// foundMenu shows the Found-list context menu for a view row.
+func (a *App) foundMenu(row int, rel fyne.Position, anchor fyne.CanvasObject) {
+	idx := a.foundResult(row)
+	if idx < 0 {
+		return
+	}
+	if !a.isFoundSelected(idx) {
+		a.foundMulti = nil
+		a.foundSel = idx
+	}
+	a.activePanel = panelFound
+	if a.foundList != nil {
+		a.foundList.Refresh()
+	}
+	addr := a.results[idx].Addr
+	menu := fyne.NewMenu("",
+		fyne.NewMenuItem(i18n.T("menu.change_value"), a.changeValueSelected),
+		fyne.NewMenuItem(i18n.T("results.add_to_table"), func() { a.addResultToTable(idx) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.browse"), func() { a.browseFoundAddr(addr) }),
+		fyne.NewMenuItem(i18n.T("menu.disassemble"), func() { a.browseFoundAddr(addr) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.find_writes"), func() { a.findWhatWritesAddr(addr, true) }),
+		fyne.NewMenuItem(i18n.T("menu.find_accesses"), func() { a.findWhatWritesAddr(addr, false) }),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem(i18n.T("menu.delete"), a.deleteFoundResults),
+	)
+	widget.ShowPopUpMenuAtRelativePosition(menu, a.win.Canvas(), rel, anchor)
+}
+
+// browseFoundAddr opens the memory viewer at addr.
+func (a *App) browseFoundAddr(addr uint64) {
+	a.openMemoryViewer()
+	a.loadMemory(addr)
+}
+
+// deleteFoundResults drops every selected scan result from the list and the
+// session, so a later Next Scan does not bring them back.
+func (a *App) deleteFoundResults() {
+	sel := a.selectedFoundIndices()
+	if len(sel) == 0 {
+		return
+	}
+	drop := make(map[uint64]bool, len(sel))
+	for _, i := range sel {
+		drop[a.results[i].Addr] = true
+	}
+	kept := a.results[:0]
+	for _, r := range a.results {
+		if !drop[r.Addr] {
+			kept = append(kept, r)
+		}
+	}
+	for i := len(kept); i < len(a.results); i++ {
+		a.results[i] = scan.Result{}
+	}
+	a.results = kept
+	if a.session != nil {
+		a.session.Delete(func(r scan.Result) bool { return !drop[r.Addr] })
+	}
+	a.foundOrder = identityOrder(len(a.results))
+	a.foundLive = nil
+	a.foundSel = -1
+	a.foundMulti = nil
+	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))
+	if a.foundList != nil {
+		a.foundList.Refresh()
+	}
+	a.updateScanControls()
+}
+
+// foundResult maps a display row to a result index. Sorting can reorder
+// foundOrder without touching a.results or the scan session.
+func (a *App) foundResult(row int) int {
+	if row < 0 || row >= len(a.results) {
+		return -1
+	}
+	if row < len(a.foundOrder) {
+		return a.foundOrder[row]
+	}
+	return row
+}
+
+// identityOrder is the unsorted display order over n results.
+func identityOrder(n int) []int {
+	o := make([]int, n)
+	for i := range o {
+		o[i] = i
+	}
+	return o
+}
+
+// refreshFoundValues re-reads every result's live value and refreshes the
+// module map used to colour static addresses.
+func (a *App) refreshFoundValues() {
+	if a.proc == nil || len(a.results) == 0 {
+		a.foundLive = nil
+		a.foundRegions = nil
+		return
+	}
+	a.foundRegions, _ = mem.Regions(a.proc.PID)
+	live := make(map[int]scan.Value, len(a.results))
+	for i := range a.results {
+		r := a.results[i]
+		w := len(r.Value.Raw)
+		if w == 0 {
+			continue
+		}
+		raw, err := a.proc.Read(r.Addr, w)
+		if err != nil || len(raw) != w {
+			continue
+		}
+		live[i] = scan.NewValue(r.Value.Type, raw)
+	}
+	a.foundLive = live
+}
+
+// staticInfo reports whether addr belongs to a file-backed module and, if so,
+// its module name and offset from the load base.
+func (a *App) staticInfo(addr uint64) (string, uint64, bool) {
+	r, ok := mem.RegionFor(a.foundRegions, addr)
+	if !ok || !r.FileBacked() || addr < r.Offset {
+		return "", 0, false
+	}
+	base := r.Start - r.Offset
+	if addr < base {
+		return "", 0, false
+	}
+	name := filepath.Base(strings.TrimSuffix(r.Path, " (deleted)"))
+	return name, addr - base, true
+}
+
+// isStatic reports whether addr is inside a file-backed module region.
+func (a *App) isStatic(addr uint64) bool {
+	_, _, ok := a.staticInfo(addr)
+	return ok
 }
 
 func (a *App) foundPanel() fyne.CanvasObject {
@@ -266,7 +492,9 @@ func (a *App) setResults(r []scan.Result) {
 	if limit := a.cfg.UI.ResultLimit; limit > 0 && len(r) > limit {
 		r = r[:limit]
 	}
-	a.results = r
+	a.results = append([]scan.Result(nil), r...)
+	a.foundOrder = identityOrder(len(a.results))
+	a.foundLive = nil
 	a.foundSel = -1
 	a.foundMulti = nil
 	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))
@@ -887,6 +1115,9 @@ func (a *App) changeFoundValue(i int) {
 			return
 		}
 		a.results[i].Value = v
+		if a.foundLive != nil {
+			a.foundLive[i] = v
+		}
 		if a.foundList != nil {
 			a.foundList.Refresh()
 		}
@@ -910,6 +1141,9 @@ func (a *App) changeFoundValues(sel []int) {
 				continue
 			}
 			a.results[i].Value = v
+			if a.foundLive != nil {
+				a.foundLive[i] = v
+			}
 			written++
 		}
 		if a.foundList != nil {

@@ -180,6 +180,7 @@
   "header.address": "Address",
   "header.type": "Type",
   "header.value": "Value",
+  "header.previous": "Previous",
   "results.found": "Found",
   "results.add_to_table": "Add to Table",
   "results.cheat_table": "Cheat Table",
