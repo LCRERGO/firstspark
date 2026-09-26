@@ -223,17 +223,27 @@ type App struct {
 	dissectStatus    *widget.Label
 
 	memWin       fyne.Window
-	hexAddr      uint64
-	hexData      []byte
 	disasm       []asm.Instruction
 	disasmList   *widget.List
 	hexList      *widget.List
-	hexLines     []string
 	memAddrEntry *toolTipEntry
 	memType      *ttwidget.Select
 	searchPat    []byte
 	searchMask   []byte
 	searchNext   uint64
+
+	memCur          uint64
+	memRegion       mem.Region
+	memRegionRows   int
+	memPageCache    map[uint64][]byte
+	disasmBase      uint64
+	regionSelect    *ttwidget.Select
+	regionSelecting bool
+	regionsWin      fyne.Window
+	memRegions      []mem.Region
+	regionsView     []mem.Region
+	regionFilter    *toolTipEntry
+	regionsList     *widget.List
 
 	mu              sync.Mutex
 	freezeTargets   map[uint64]scan.Value
