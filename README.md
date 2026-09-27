@@ -62,6 +62,8 @@ make                # runnable GUI -> bin/firstspark (requires the headers above
 make build/gui      # same as `make`
 make build/headless # headless binary, no CGO or graphics libraries
 make run            # build the GUI and run it
+make install        # install the GUI binary + manpage (PREFIX=/usr/local)
+make install/headless # install the no-CGO binary instead
 make test           # unit + integration tests
 make test/race      # the same under the race detector
 make lint           # gofmt + go vet (default and gui tags)
@@ -70,6 +72,12 @@ make fuzz           # fuzz every FuzzXxx target for FUZZTIME (default 15s)
 
 The default build produces the Fyne GUI; the headless CLI is available via
 `make build/headless` (or the `gui` build tag is simply omitted).
+
+`make install` honours `PREFIX` (default `/usr/local`) and `DESTDIR` for
+staged/packaged installs, e.g. `make install PREFIX=$HOME/.local` or
+`sudo make install`. It installs the binary to `$PREFIX/bin` and
+`firstspark.1` (see [`docs/firstspark.1`](docs/firstspark.1)) to
+`$PREFIX/share/man/man1`, so `man firstspark` documents the CLI.
 
 ## Usage
 

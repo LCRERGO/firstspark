@@ -1,0 +1,153 @@
+.TH FIRSTSPARK 1 "2026-09-26" "firstspark 0.2.0" "User Commands"
+.SH NAME
+firstspark \- Cheat Engine style memory scanner, debugger and code patcher
+.SH SYNOPSIS
+.B firstspark
+.RI [ options ]
+.SH DESCRIPTION
+.B firstspark
+attaches to a running process as an unprivileged user, scans its memory for
+values, lets you filter and edit the results, browses and patches machine code,
+and scales time inside the target process. It needs no Python or GDB runtime
+dependency.
+.PP
+With neither
+.B \-list
+nor
+.B \-pid
+it opens the graphical interface. The GUI mirrors the Cheat Engine layout: a
+scan panel and Found list, a cheat table, a separate Memory Viewer and a
+Debugger window, a Lua Engine console, and settings under Edit.
+.PP
+Supplying
+.B \-pid
+runs a headless scan and prints the results to standard output.
+.SH OPTIONS
+.TP
+.BI \-config " FILE"
+Read configuration from
+.IR FILE .
+Defaults to
+.IR $XDG_CONFIG_HOME/firstspark/config.yaml .
+.TP
+.B \-list
+List the visible processes (PID, UID, name, command line) and exit.
+.TP
+.BI \-pid " PID"
+Target process id for a headless scan.
+.TP
+.BI \-type " TYPE"
+Value type to scan for: one of
+.IR byte ", " word ", " dword ", " qword ", " float ", " double ", " string ,
+.IR aob ", " binary ", " all " or " grouped ,
+or the name of a user-defined type.
+.TP
+.BI \-mode " MODE"
+Scan mode:
+.IR exact ", " bigger ", " smaller ", " between ", " unknown ,
+.IR increased ", " increased\ by ", " decreased ", " decreased\ by ,
+.IR changed ", " unchanged " or " same\ as\ first .
+.TP
+.BI \-value " VALUE"
+Value to scan for. Numeric types accept decimal, hexadecimal
+.RB ( 0x
+prefix) or an expression; grouped types use
+.RI type:value
+segments such as
+.RB ` 4:75 " " 4:* " " 4:100 `.
+.TP
+.BI \-value2 " VALUE"
+Upper bound for a
+.B between
+scan.
+.TP
+.BI \-compare " OP"
+Comparison operator for an exact scan:
+.IR == ", " != ", " > ", " >= ", " < " or " <= .
+.TP
+.BI \-next " MODE"
+Run a next scan with this mode before printing results.
+.TP
+.BI \-exec " FILTER"
+Restrict regions by executable permission:
+.IR any ", " only " or " non .
+.TP
+.B \-cow
+Scan only copy-on-write (private) regions.
+.TP
+.BI \-start " ADDR"
+Lower bound of the scan range, in hexadecimal.
+.TP
+.BI \-stop " ADDR"
+Upper bound of the scan range, in hexadecimal.
+.TP
+.BI \-export " FILE"
+Write the results to
+.IR FILE .
+The format follows the extension:
+.IR .ct " (XML), " .json " or " .yaml .
+.TP
+.BI \-log-level " LEVEL"
+Log level:
+.IR debug ", " info ", " warn " or " error .
+.TP
+.B \-version
+Print the version and exit.
+.SH EXAMPLES
+List the target candidates:
+.PP
+.RS 4
+.B firstspark \-list
+.RE
+.PP
+Find a 4-byte value and narrow it after it increases:
+.PP
+.RS 4
+.B firstspark \-pid 1234 \-type dword \-mode unknown \-next increased
+.RE
+.PP
+Scan a grouped structure and export it as YAML:
+.PP
+.RS 4
+.B firstspark \-pid 1234 \-type grouped \-value "4:75 4:* 4:100" \-export run.yaml
+.RE
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/firstspark/config.yaml
+Configuration; see
+.I configs/config.yaml
+in the source tree for the defaults.
+.TP
+.I $XDG_CONFIG_HOME/firstspark/customtypes.yaml
+User-defined value types.
+.TP
+.I $XDG_DATA_HOME/firstspark/
+Saved scan sessions and cheat tables.
+.TP
+.I $XDG_STATE_HOME/firstspark/firstspark.log
+Diagnostic log.
+.SH ENVIRONMENT
+.TP
+.B XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME
+Base directories for configuration, data, state and cache.
+.TP
+.B DISPLAY
+X11 display used by the GUI and by the global-hotkey backend.
+.TP
+.B FYNE_SCALE
+Interface scale factor, read by Fyne at startup.
+.TP
+.B FIRSTSPARK_ORIG_UID, FIRSTSPARK_ORIG_GID, SUDO_UID, SUDO_GID
+Used when running elevated so files stay owned by the invoking user.
+.SH NOTES
+Attaching requires the kernel to permit it:
+.I kernel.yama.ptrace_scope=0
+or
+.BR CAP_SYS_PTRACE .
+Speedhack and the unrandomizer hook libc time and random functions; calls served
+directly by the vDSO bypass the speedhack.
+.SH SEE ALSO
+.BR gdb (1),
+.BR proc (5)
+.SH LICENSE
+MIT License. See the LICENSE file in the source distribution.

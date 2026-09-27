@@ -6,7 +6,14 @@ TEST_DIR := test
 GO ?= go
 GOFLAGS ?=
 
-.PHONY: all build build/gui build/headless gui run test test/race fuzz lint fmt vet fixtures clean tidy
+# Installation prefix and staging directory. Install into a staging tree with
+# `make install DESTDIR=/tmp/stage`; override the prefix with PREFIX=~/.local.
+PREFIX ?= /usr/local
+DESTDIR ?=
+BINDIR ?= $(PREFIX)/bin
+MANDIR ?= $(PREFIX)/share/man/man1
+
+.PHONY: all build build/gui build/headless gui run install install/headless uninstall test test/race fuzz lint fmt vet fixtures clean tidy
 
 # How long each fuzz target runs under `make fuzz`.
 FUZZTIME ?= 15s
@@ -23,8 +30,8 @@ build/gui:
 	mkdir -p $(BIN_DIR)
 	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -tags gui -o $(BIN_DIR)/$(BINARY) $(CMD)
 
-# Headless build: no CGO, no graphics libraries (Auto Assembler custom types
-# are unavailable in this build; Lua types still work).
+# Headless build: no CGO, no graphics libraries. Auto Assembler custom types run
+# through the pure-Go interpreter (pkg/aaexec) instead of the JIT.
 build/headless:
 	mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -o $(BIN_DIR)/$(BINARY) $(CMD)
@@ -34,6 +41,19 @@ gui: build/gui
 
 run: build/gui
 	$(BIN_DIR)/$(BINARY)
+
+# Install the GUI binary and its manual page. Override PREFIX and DESTDIR as
+# needed, e.g. `sudo make install` or `make install PREFIX=$(HOME)/.local`.
+# `make install/headless` installs the no-CGO build instead.
+install: build/gui
+install/headless: build/headless
+install install/headless:
+	install -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(MANDIR)
+	install -m 0755 $(BIN_DIR)/$(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
+	install -m 0644 docs/$(BINARY).1 $(DESTDIR)$(MANDIR)/$(BINARY).1
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(BINARY) $(DESTDIR)$(MANDIR)/$(BINARY).1
 
 test:
 	$(GO) test $(GOFLAGS) ./...
