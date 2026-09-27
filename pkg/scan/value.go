@@ -189,6 +189,22 @@ func encodeInteger(t ValueType, n int64) []byte {
 	}
 }
 
+// checkIntWidth reports an error when n cannot be held in a size-byte integer,
+// as either a signed or an unsigned value. Without it a value outside the type's
+// range would silently wrap to a different value.
+func checkIntWidth(size int, n int64) error {
+	if size <= 0 || size >= 8 {
+		return nil
+	}
+	bits := uint(size * 8)
+	lo := -(int64(1) << (bits - 1))
+	hi := (int64(1) << bits) - 1
+	if n < lo || n > hi {
+		return fmt.Errorf("scan: value %d is out of range for a %d-byte integer", n, size)
+	}
+	return nil
+}
+
 // ParseValue converts user input into a Value of the requested type.
 func ParseValue(t ValueType, input string) (Value, error) {
 	d := TypeByID(t)

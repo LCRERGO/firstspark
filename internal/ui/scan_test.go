@@ -102,3 +102,13 @@ func TestValuePlaceholder(t *testing.T) {
 		}
 	}
 }
+
+func TestScanOptionsRejectsOutOfRangeValue(t *testing.T) {
+	a := newTestApp(t)
+	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
+	a.valueType.SetSelected(ceValueTypeLabel(scan.TypeDword))
+	a.valueEntry.SetText("4 * (10 ^ 12)")
+	if _, err := a.scanOptions(); err == nil {
+		t.Fatal("expected an out-of-range error from scanOptions")
+	}
+}

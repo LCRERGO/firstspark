@@ -203,6 +203,9 @@ func registerBuiltins() {
 				if err != nil {
 					return Value{}, err
 				}
+				if err := checkIntWidth(size, n); err != nil {
+					return Value{}, err
+				}
 				return Value{Type: id, Raw: encodeInteger(id, n)}, nil
 			},
 			Format:  func(v Value) string { return strconv.FormatInt(v.Int64(), 10) },

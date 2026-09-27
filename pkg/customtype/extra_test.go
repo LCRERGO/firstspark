@@ -73,3 +73,16 @@ func TestRegisterRawRejects(t *testing.T) {
 		t.Fatalf("Format = %q", got)
 	}
 }
+
+func TestRegisterRawRejectsOutOfRange(t *testing.T) {
+	typ, err := RegisterRaw("Raw Word", 2)
+	if err != nil {
+		t.Fatalf("RegisterRaw: %v", err)
+	}
+	if _, err := typ.Parse("65536"); err == nil {
+		t.Fatal("expected an out-of-range error")
+	}
+	if _, err := typ.Parse("65535"); err != nil {
+		t.Fatalf("boundary value rejected: %v", err)
+	}
+}

@@ -124,11 +124,29 @@ func RegisterRaw(name string, size int) (*scan.Type, error) {
 		if err != nil {
 			return scan.Value{}, err
 		}
+		if err := checkRawRange(size, n); err != nil {
+			return scan.Value{}, err
+		}
 		return scan.Value{Type: t.ID, Raw: encode(n)}, nil
 	}
 	t.Encode = encode
 	scan.RegisterType(t)
 	return t, nil
+}
+
+// checkRawRange rejects values that do not fit a size-byte integer, so a raw
+// custom type never silently wraps.
+func checkRawRange(size int, n int64) error {
+	if size <= 0 || size >= 8 {
+		return nil
+	}
+	bits := uint(size * 8)
+	lo := -(int64(1) << (bits - 1))
+	hi := (int64(1) << bits) - 1
+	if n < lo || n > hi {
+		return fmt.Errorf("customtype: value %d is out of range for %d bytes", n, size)
+	}
+	return nil
 }
 
 // Register compiles a definition and registers it as a scan type.
