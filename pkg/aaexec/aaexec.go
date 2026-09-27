@@ -244,7 +244,11 @@ func (p *Program) exec(in instruction) error {
 		if err != nil {
 			return err
 		}
-		return p.set(in.args[0], in.args[0].size, addr)
+		if err := p.set(in.args[0], in.args[0].size, addr); err != nil {
+			return err
+		}
+		p.pc++
+		return nil
 	case "push":
 		return p.execPush(in.args[0])
 	case "pop":
