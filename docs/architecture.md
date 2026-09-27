@@ -66,11 +66,17 @@ Theming and window structure are recorded in ADRs 0006-0010.
 
 ## Scanning model
 
-An exact first scan reads each selected region in 4 MiB chunks with an overlap
+An exact first scan reads each selected region in 1 MiB chunks with an overlap
 equal to the value width, so values spanning a chunk boundary are still found.
 Unknown-value scans snapshot every aligned address in the writable regions,
 bounded by `scan.snapshot_limit`. Subsequent scans re-read the live values and
 apply the mode predicate, discarding addresses that no longer match.
+
+Regions larger than 32 MiB are tiled into sub-regions so the worker pool
+parallelises within a single large mapping. A next scan visits its results in
+address order and re-reads them in 64 KiB windows, so one read covers many
+addresses, and exact integer scans use a specialized comparison loop; see
+ADR 0049.
 
 ## Privilege model
 

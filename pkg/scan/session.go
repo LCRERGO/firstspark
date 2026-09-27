@@ -3,10 +3,12 @@ package scan
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
 	"runtime"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,6 +52,13 @@ type Session struct {
 	results []Result
 	history [][]Result
 	started bool
+
+	// Derived scan state, refreshed when the type or target changes, so the
+	// hot per-candidate path avoids the type-registry lock and allocations.
+	typ    *Type
+	width  int
+	aob    *AOBPattern
+	binary *BinaryPattern
 }
 
 // NewSession creates a scan session for proc.
@@ -60,7 +69,31 @@ func NewSession(proc *mem.Process, opts Options) *Session {
 	if opts.Scope != ScopeAllWritable && opts.Scope != ScopeHeapStackExecBSS && opts.Scope != ScopeAllReadable {
 		opts.Scope = ScopeAllWritable
 	}
-	return &Session{proc: proc, opts: opts}
+	s := &Session{proc: proc, opts: opts}
+	s.refresh()
+	return s
+}
+
+// refresh recomputes the derived scan state from the current options.
+func (s *Session) refresh() {
+	s.typ = TypeByID(s.opts.Type)
+	s.width = s.opts.width()
+	s.aob, s.binary = nil, nil
+	switch s.opts.Type {
+	case TypeAOB:
+		s.aob = &AOBPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask}
+	case TypeBinary:
+		s.binary = &BinaryPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask, Bits: s.opts.Value.Bits}
+	}
+}
+
+// typeOf returns the resolved value type, falling back to a registry lookup for
+// sessions built without NewSession (tests).
+func (s *Session) typeOf() *Type {
+	if s.typ != nil {
+		return s.typ
+	}
+	return TypeByID(s.opts.Type)
 }
 
 // Options returns the session options.
@@ -101,7 +134,10 @@ func (s *Session) Delete(keep func(Result) bool) int {
 func (s *Session) SetMode(m ScanMode) { s.opts.Mode = m }
 
 // SetValue changes the target value used by subsequent scans.
-func (s *Session) SetValue(v Value) { s.opts.Value = v }
+func (s *Session) SetValue(v Value) {
+	s.opts.Value = v
+	s.refresh()
+}
 
 // SetValue2 changes the upper bound used by between scans.
 func (s *Session) SetValue2(v Value) { s.opts.Value2 = v }
@@ -253,8 +289,9 @@ func (s *Session) scanRegions(ctx context.Context, regions []mem.Region, onProgr
 	if len(regions) == 0 {
 		return nil, nil
 	}
+	work := splitRegions(regions)
 	var total uint64
-	for _, r := range regions {
+	for _, r := range work {
 		total += r.Size()
 	}
 	var scanned, matches int64
@@ -262,8 +299,8 @@ func (s *Session) scanRegions(ctx context.Context, regions []mem.Region, onProgr
 	defer stop()
 
 	workers := runtime.NumCPU()
-	if workers > len(regions) {
-		workers = len(regions)
+	if workers > len(work) {
+		workers = len(work)
 	}
 	if workers < 1 {
 		workers = 1
@@ -276,12 +313,12 @@ func (s *Session) scanRegions(ctx context.Context, regions []mem.Region, onProgr
 		go func(w int) {
 			defer wg.Done()
 			var local []Result
-			for i := w; i < len(regions); i += workers {
+			for i := w; i < len(work); i += workers {
 				if ctx.Err() != nil {
 					errs[w] = ctx.Err()
 					return
 				}
-				if err := s.scanRegion(ctx, regions[i], &local, &scanned, &matches); err != nil {
+				if err := s.scanRegion(ctx, work[i], &local, &scanned, &matches); err != nil {
 					errs[w] = err
 					return
 				}
@@ -305,25 +342,42 @@ func (s *Session) scanRegions(ctx context.Context, regions []mem.Region, onProgr
 	return out, nil
 }
 
+// filterChunk bounds a batched read while filtering a next scan.
+const filterChunk = 64 * 1024
+
 // filterResults applies the next-scan predicate to the current results in
-// parallel, preserving their order.
+// parallel, preserving their order. Results are visited in address order and
+// read in batches so a next scan issues one read per window instead of one per
+// address.
 func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) ([]Result, error) {
 	n := len(s.results)
 	if n == 0 {
 		return nil, nil
 	}
+	width := func(r Result) int {
+		if w := len(r.Value.Raw); w > 0 {
+			return w
+		}
+		if s.width > 0 {
+			return s.width
+		}
+		return s.opts.width()
+	}
 	var total uint64
 	for _, r := range s.results {
-		w := len(r.Value.Raw)
-		if w == 0 {
-			w = s.opts.width()
-		}
-		total += uint64(w)
+		total += uint64(width(r))
 	}
 	var scanned, matches int64
 	stop := s.startReporter(ctx, onProgress, total, &scanned, &matches)
 	defer stop()
 
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	sort.Slice(order, func(a, b int) bool { return s.results[order[a]].Addr < s.results[order[b]].Addr })
+
+	keep := make([]bool, n)
 	workers := runtime.NumCPU()
 	if workers > n {
 		workers = n
@@ -332,43 +386,18 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 		workers = 1
 	}
 	step := (n + workers - 1) / workers
-	outs := make([][]Result, 0, workers)
 	errs := make([]error, 0, workers)
 	var wg sync.WaitGroup
 	for lo := 0; lo < n; lo += step {
 		hi := min(lo+step, n)
-		outs = append(outs, nil)
 		errs = append(errs, nil)
 		wg.Add(1)
 		go func(idx, lo, hi int) {
 			defer wg.Done()
-			var local []Result
-			for i := lo; i < hi; i++ {
-				if ctx.Err() != nil {
-					errs[idx] = ctx.Err()
-					return
-				}
-				if s.capped(&matches) {
-					return
-				}
-				res := s.results[i]
-				w := len(res.Value.Raw)
-				if w == 0 {
-					w = s.opts.width()
-				}
-				raw, err := s.proc.Read(res.Addr, w)
-				atomic.AddInt64(&scanned, int64(w))
-				if err != nil || len(raw) != w {
-					continue
-				}
-				cur := NewValue(s.opts.Type, raw)
-				if s.keep(cur, res) {
-					local = append(local, Result{Addr: res.Addr, Value: cur, Previous: res.Value, First: res.First})
-					atomic.AddInt64(&matches, 1)
-				}
+			if err := s.filterWindow(ctx, order[lo:hi], width, keep, &scanned, &matches); err != nil {
+				errs[idx] = err
 			}
-			outs[idx] = local
-		}(len(outs)-1, lo, hi)
+		}(len(errs)-1, lo, hi)
 	}
 	wg.Wait()
 	for _, err := range errs {
@@ -377,13 +406,54 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 		}
 	}
 	var out []Result
-	for _, c := range outs {
-		out = append(out, c...)
+	for i := range s.results {
+		if keep[i] {
+			out = append(out, s.results[i])
+		}
 	}
 	if max := s.opts.MaxResults; max > 0 && len(out) > max {
 		out = out[:max]
 	}
 	return out, nil
+}
+
+// filterWindow re-reads and filters a run of result indices sorted by address,
+// reading a shared window per contiguous batch.
+func (s *Session) filterWindow(ctx context.Context, idx []int, width func(Result) int, keep []bool, scanned, matches *int64) error {
+	max := int64(s.opts.MaxResults)
+	var buf []byte
+	var bufStart uint64
+	for _, i := range idx {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if max > 0 && atomic.LoadInt64(matches) >= max {
+			return nil
+		}
+		res := s.results[i]
+		w := width(res)
+		if buf == nil || res.Addr+uint64(w) > bufStart+uint64(len(buf)) {
+			data, _ := s.proc.Read(res.Addr, filterChunk)
+			atomic.AddInt64(scanned, int64(len(data)))
+			if len(data) == 0 {
+				buf = nil
+				continue
+			}
+			buf, bufStart = data, res.Addr
+		}
+		off := res.Addr - bufStart
+		if off+uint64(w) > uint64(len(buf)) {
+			continue
+		}
+		cur := Value{Type: s.opts.Type, Raw: buf[off : off+uint64(w)]}
+		if s.keep(cur, res) {
+			s.results[i].Previous = res.Value
+			s.results[i].Value = NewValue(s.opts.Type, cur.Raw)
+			keep[i] = true
+			atomic.AddInt64(matches, 1)
+		}
+	}
+	return nil
 }
 
 // startReporter periodically reports progress until the returned stop function
@@ -419,8 +489,48 @@ func (s *Session) startReporter(ctx context.Context, onProgress func(Progress), 
 	}
 }
 
+// regionSplit bounds the size of a scan work item so a single huge region is
+// still scanned by several workers. It is a variable so tests can shrink it.
+var regionSplit = 32 << 20
+
+// splitRegions tiles regions larger than regionSplit into sub-regions, so the
+// scheduler can parallelise within them. The sub-regions keep the original
+// permission/path fields.
+func splitRegions(regions []mem.Region) []mem.Region {
+	split := false
+	for _, r := range regions {
+		if r.Size() > uint64(regionSplit) {
+			split = true
+			break
+		}
+	}
+	if !split {
+		return regions
+	}
+	out := make([]mem.Region, 0, len(regions)*2)
+	for _, r := range regions {
+		if r.Size() <= uint64(regionSplit) {
+			out = append(out, r)
+			continue
+		}
+		for start := r.Start; start < r.End; start += uint64(regionSplit) {
+			end := start + uint64(regionSplit)
+			if end > r.End {
+				end = r.End
+			}
+			sub := r
+			sub.Start, sub.End = start, end
+			out = append(out, sub)
+		}
+	}
+	return out
+}
+
 func (s *Session) scanRegion(ctx context.Context, r mem.Region, out *[]Result, scanned, matches *int64) error {
-	w := s.opts.width()
+	w := s.width
+	if w == 0 {
+		w = s.opts.width()
+	}
 	if w <= 0 {
 		return nil
 	}
@@ -433,7 +543,8 @@ func (s *Session) scanRegion(ctx context.Context, r mem.Region, out *[]Result, s
 
 	// Read large chunks while the region is contiguous; fall back to
 	// page-sized reads after the first fault so holes do not hide the pages
-	// that follow them.
+	// that follow them. Each read asks for `overlap` extra bytes so a value
+	// spanning the chunk (or region) boundary is still seen.
 	off := uint64(0)
 	chunked := true
 	for off < size {
@@ -443,20 +554,17 @@ func (s *Session) scanRegion(ctx context.Context, r mem.Region, out *[]Result, s
 		if s.capped(matches) {
 			return nil
 		}
-		want, stride := scanChunk, uint64(scanChunk)
+		chunk := uint64(scanChunk)
 		if !chunked {
-			want, stride = int(page), page
+			chunk = page
 		}
-		want += overlap
-		if uint64(want) > size-off {
-			want = int(size - off)
+		if chunk > size-off {
+			chunk = size - off
 		}
-		limit := min(want, int(stride))
-
-		data, err := s.proc.Read(r.Start+off, want)
+		data, err := s.proc.Read(r.Start+off, int(chunk)+overlap)
 		if len(data) > 0 {
 			atomic.AddInt64(scanned, int64(len(data)))
-			if serr := s.scanBytes(ctx, r.Start+off, data, limit, out, matches); serr != nil {
+			if serr := s.scanBytes(ctx, r.Start+off, data, int(chunk), out, matches); serr != nil {
 				return serr
 			}
 		}
@@ -466,65 +574,168 @@ func (s *Session) scanRegion(ctx context.Context, r mem.Region, out *[]Result, s
 			// would be read and scanned twice.
 			if chunked {
 				chunked = false
-				if len(data) > 0 {
-					off += uint64(len(data))
-				} else {
-					off += page
+				adv := uint64(len(data))
+				if adv == 0 {
+					adv = page
 				}
+				off += adv
 				continue
 			}
 			off += page
 			continue
 		}
-		off += stride
+		off += chunk
 	}
 	return nil
 }
 
-// scanBytes considers every candidate in data whose start is below limit.
+// scanBytes considers every candidate in data whose start is below limit. It
+// batches the match counter per chunk so the hot loop does no atomic work, and
+// uses a specialized loop for exact integer scans.
 func (s *Session) scanBytes(ctx context.Context, addr uint64, data []byte, limit int, out *[]Result, matches *int64) error {
-	w := s.opts.width()
+	if p, ok := s.exactIntProbe(); ok {
+		return s.scanBytesInt(addr, data, limit, out, matches, p)
+	}
+	w := s.width
+	if w == 0 {
+		w = s.opts.width()
+	}
+	if w <= 0 {
+		return nil
+	}
 	step := s.opts.step()
 	if limit > len(data) {
 		limit = len(data)
 	}
+	max := int64(s.opts.MaxResults)
+	var base int64
+	if max > 0 {
+		base = atomic.LoadInt64(matches)
+	}
+	var local int64
 	for i := 0; i < limit && i+w <= len(data); i += step {
-		if s.capped(matches) {
-			return nil
+		if max > 0 && base+local >= max {
+			break
 		}
-		if err := s.consider(addr+uint64(i), data[i:i+w], out, matches); err != nil {
-			return err
-		}
+		local += int64(s.consider(addr+uint64(i), data[i:i+w], out))
+	}
+	if local > 0 {
+		atomic.AddInt64(matches, local)
 	}
 	return nil
 }
 
-func (s *Session) consider(addr uint64, raw []byte, out *[]Result, matches *int64) error {
+// intProbe is a prepared exact/comparison integer scan.
+type intProbe struct {
+	width  int
+	target int64
+	op     CompareOp
+}
+
+// exactIntProbe reports whether the scan is an exact, bigger or smaller scan
+// over a builtin integer type, which the specialized loop can run.
+func (s *Session) exactIntProbe() (intProbe, bool) {
+	switch s.opts.Mode {
+	case ModeExact, ModeBigger, ModeSmaller:
+	default:
+		return intProbe{}, false
+	}
+	switch s.opts.Type {
+	case TypeByte, TypeWord, TypeDword, TypeQword:
+	default:
+		return intProbe{}, false
+	}
+	op := s.opts.Compare
+	switch s.opts.Mode {
+	case ModeBigger:
+		op = OpGreater
+	case ModeSmaller:
+		op = OpLess
+	}
+	w := s.width
+	if w == 0 {
+		w = s.opts.width()
+	}
+	return intProbe{width: w, target: s.opts.Value.Int64(), op: op}, true
+}
+
+// scanBytesInt is the specialized exact-integer loop: it decodes each candidate
+// into a register and compares against a predecoded target, without allocating
+// on non-matches.
+func (s *Session) scanBytesInt(addr uint64, data []byte, limit int, out *[]Result, matches *int64, p intProbe) error {
+	w, step := p.width, s.opts.step()
+	if w <= 0 {
+		return nil
+	}
+	if limit > len(data) {
+		limit = len(data)
+	}
+	max := int64(s.opts.MaxResults)
+	var base int64
+	if max > 0 {
+		base = atomic.LoadInt64(matches)
+	}
+	var local int64
+	for i := 0; i < limit && i+w <= len(data); i += step {
+		if max > 0 && base+local >= max {
+			break
+		}
+		if compareInt(decodeIntRaw(data[i:i+w]), p.target, p.op) {
+			v := NewValue(s.opts.Type, data[i:i+w])
+			*out = append(*out, Result{Addr: addr + uint64(i), Value: v, First: v})
+			local++
+		}
+	}
+	if local > 0 {
+		atomic.AddInt64(matches, local)
+	}
+	return nil
+}
+
+// decodeIntRaw decodes a little-endian signed integer of the given width.
+func decodeIntRaw(raw []byte) int64 {
+	switch len(raw) {
+	case 1:
+		return int64(int8(raw[0]))
+	case 2:
+		return int64(int16(binary.LittleEndian.Uint16(raw)))
+	case 4:
+		return int64(int32(binary.LittleEndian.Uint32(raw)))
+	case 8:
+		return int64(binary.LittleEndian.Uint64(raw))
+	default:
+		return 0
+	}
+}
+
+// consider appends the matches at one candidate and returns how many.
+func (s *Session) consider(addr uint64, raw []byte, out *[]Result) int {
 	switch s.opts.Mode {
 	case ModeUnknown:
 		v := NewValue(s.opts.Type, raw)
-		s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
+		*out = append(*out, Result{Addr: addr, Value: v, First: v})
+		return 1
 	case ModeExact, ModeBigger, ModeSmaller:
 		if s.opts.Mode == ModeExact && s.opts.Type == TypeAll {
-			for _, v := range s.matchAll(raw) {
-				s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
+			vs := s.matchAll(raw)
+			for _, v := range vs {
+				*out = append(*out, Result{Addr: addr, Value: v, First: v})
 			}
-		} else if s.matchExact(raw) {
+			return len(vs)
+		}
+		if s.matchExact(raw) {
 			v := NewValue(s.opts.Type, raw)
-			s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
+			*out = append(*out, Result{Addr: addr, Value: v, First: v})
+			return 1
 		}
 	case ModeBetween:
 		if s.matchBetween(raw) {
 			v := NewValue(s.opts.Type, raw)
-			s.appendResult(out, matches, Result{Addr: addr, Value: v, First: v})
+			*out = append(*out, Result{Addr: addr, Value: v, First: v})
+			return 1
 		}
 	}
-	return nil
-}
-
-func (s *Session) appendResult(out *[]Result, matches *int64, r Result) {
-	*out = append(*out, r)
-	atomic.AddInt64(matches, 1)
+	return 0
 }
 
 // capped reports whether the result cap has been reached.
@@ -536,7 +747,7 @@ func (s *Session) matchExact(raw []byte) bool {
 	if s.opts.Type == TypeGrouped {
 		return s.opts.Grouped != nil && s.opts.Grouped.Match(raw)
 	}
-	t := TypeByID(s.opts.Type)
+	t := s.typeOf()
 	if t == nil {
 		return false
 	}
@@ -549,22 +760,21 @@ func (s *Session) matchExact(raw []byte) bool {
 	}
 	switch t.Kind {
 	case KindString, KindBytes, KindBinary:
-		if s.opts.Type == TypeAOB {
-			p := &AOBPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask}
-			return p.Match(raw)
+		switch {
+		case s.aob != nil:
+			return s.aob.Match(raw)
+		case s.binary != nil:
+			return s.binary.Match(raw)
+		default:
+			return bytes.Equal(raw, s.opts.Value.Raw)
 		}
-		if s.opts.Type == TypeBinary {
-			p := &BinaryPattern{Bytes: s.opts.Value.Raw, Mask: s.opts.Value.Mask, Bits: s.opts.Value.Bits}
-			return p.Match(raw)
-		}
-		return bytes.Equal(raw, s.opts.Value.Raw)
 	default:
-		return t.Compare(NewValue(s.opts.Type, raw), s.opts.Value, op, s.opts.Epsilon)
+		return t.Compare(Value{Type: s.opts.Type, Raw: raw}, s.opts.Value, op, s.opts.Epsilon)
 	}
 }
 
 func (s *Session) keep(cur Value, res Result) bool {
-	t := TypeByID(s.opts.Type)
+	t := s.typeOf()
 	prev := res.Value
 	switch s.opts.Mode {
 	case ModeExact, ModeBigger, ModeSmaller:
@@ -614,7 +824,7 @@ func (s *Session) matchAll(raw []byte) []Value {
 
 // matchBetween reports whether raw falls inside the configured range.
 func (s *Session) matchBetween(raw []byte) bool {
-	t := TypeByID(s.opts.Type)
+	t := s.typeOf()
 	if t == nil {
 		return false
 	}
@@ -622,7 +832,7 @@ func (s *Session) matchBetween(raw []byte) bool {
 	case KindString, KindBytes, KindBinary:
 		return false
 	}
-	cur := NewValue(s.opts.Type, raw)
+	cur := Value{Type: s.opts.Type, Raw: raw}
 	if t.Kind == KindFloat {
 		lo, hi := t.Numeric(s.opts.Value), t.Numeric(s.opts.Value2)
 		if lo > hi {

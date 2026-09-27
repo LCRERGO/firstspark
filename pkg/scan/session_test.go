@@ -123,3 +123,38 @@ func TestSessionDelete(t *testing.T) {
 		t.Fatalf("results = %+v", s.results)
 	}
 }
+
+func TestSplitRegions(t *testing.T) {
+	old := regionSplit
+	regionSplit = 100
+	defer func() { regionSplit = old }()
+
+	regions := []mem.Region{
+		{Start: 0x1000, End: 0x1050, Perms: "rw-p"},                   // fits
+		{Start: 0x2000, End: 0x2000 + 250, Perms: "r-xp", Path: "/x"}, // 100+100+50
+	}
+	got := splitRegions(regions)
+	if len(got) != 4 {
+		t.Fatalf("split into %d regions, want 4", len(got))
+	}
+	if got[0] != regions[0] {
+		t.Fatalf("small region changed: %+v", got[0])
+	}
+	want := []mem.Region{
+		{Start: 0x2000, End: 0x2064, Perms: "r-xp", Path: "/x"},
+		{Start: 0x2064, End: 0x20c8, Perms: "r-xp", Path: "/x"},
+		{Start: 0x20c8, End: 0x20fa, Perms: "r-xp", Path: "/x"},
+	}
+	for i, w := range want {
+		if got[i+1] != w {
+			t.Fatalf("sub-region %d = %+v, want %+v", i, got[i+1], w)
+		}
+	}
+}
+
+func TestSplitRegionsNoSplit(t *testing.T) {
+	regions := []mem.Region{{Start: 0, End: 0x1000}}
+	if got := splitRegions(regions); len(got) != 1 {
+		t.Fatalf("split small region list into %d", len(got))
+	}
+}
