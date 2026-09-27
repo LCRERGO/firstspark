@@ -101,8 +101,8 @@ the top, a **cheat table** below a splitter, and separate **Memory Viewer** and
   find writes/accesses, copy, display format). Double-click adds a result to
   the cheat table.
 - **Cheat table**: pointer records, bitfields, signed/hex/binary display,
-  hotkeys, groups, move/duplicate, clipboard, freeze-on-tick and edit-on-double-
-  click.
+  per-entry colour, hotkeys, groups, move/duplicate, clipboard, freeze-on-tick
+  and edit-on-double-click.
 - **Memory Viewer** (`Ctrl+M`): continuously scrollable hex with inline byte
   editing, a region browser, disassembly, pointer follow, breakpoints and
   `.bin` dump.

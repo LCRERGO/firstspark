@@ -39,6 +39,8 @@ also no YAML form, even though YAML is the project's configuration language.
   JSON, and the format is chosen by extension.
 - Cheat Engine tables round-trip colours, last state, hotkeys and unknown
   elements; imported `LastState` gives values for entries that have no `<Value>`.
+- Imported colours are rendered in the cheat table's Description column, and a
+  frozen Firstspark record exports as an activated Cheat Engine `LastState`.
 - Preserved unknown elements keep only their text content; nested markup is
   flattened because `encoding/xml` cannot re-emit raw markup safely.
 - Custom-type assembly conversions are preserved but not applied yet.

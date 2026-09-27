@@ -728,8 +728,10 @@ func (a *App) cheatPanel() fyne.CanvasObject {
 }
 
 func (a *App) newDataCell() *dataCell {
-	c := &dataCell{Label: widget.NewLabel(""), app: a}
-	c.TextStyle = fyne.TextStyle{Monospace: true}
+	c := &dataCell{app: a, text: canvas.NewText("", a.pal().text)}
+	c.text.TextSize = a.th.size
+	c.text.TextStyle = fyne.TextStyle{Monospace: true}
+	c.ExtendBaseWidget(c)
 	return c
 }
 
@@ -737,22 +739,17 @@ func (a *App) updateDataCell(id widget.TableCellID, o fyne.CanvasObject) {
 	c := o.(*dataCell)
 	c.row, c.col = id.Row, id.Col
 	if id.Row < 0 || id.Row >= len(a.entries) {
-		c.SetText("")
-		c.Refresh()
+		c.setText("")
+		c.setColor(a.pal().text)
 		return
 	}
-	c.SetText(a.cellText(id))
+	c.setText(a.cellText(id))
 	if a.isTableSelected(a.entries[id.Row]) {
-		c.Importance = widget.HighImportance
+		c.setColor(a.pal().primary)
 	} else {
-		c.Importance = widget.MediumImportance
+		c.setColor(a.entryColor(a.entries[id.Row]))
 	}
-	if id.Col == 1 {
-		c.TextStyle = fyne.TextStyle{}
-	} else {
-		c.TextStyle = fyne.TextStyle{Monospace: true}
-	}
-	c.Refresh()
+	c.setMono(id.Col != 1)
 }
 
 func (a *App) cellText(id widget.TableCellID) string {
@@ -2210,11 +2207,32 @@ func parseAddress(s string) (uint64, error) {
 	return strconv.ParseUint(s, 16, 64)
 }
 
-// dataCell is a table cell that reports taps and right-clicks.
+// dataCell is a table cell that paints its own text colour and reports taps and
+// right-clicks.
 type dataCell struct {
-	*widget.Label
+	widget.BaseWidget
 	app      *App
+	text     *canvas.Text
 	row, col int
+}
+
+func (c *dataCell) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(c.text)
+}
+
+func (c *dataCell) setText(s string) {
+	c.text.Text = s
+	c.text.Refresh()
+}
+
+func (c *dataCell) setColor(col color.Color) {
+	c.text.Color = col
+	c.text.Refresh()
+}
+
+func (c *dataCell) setMono(mono bool) {
+	c.text.TextStyle = fyne.TextStyle{Monospace: mono}
+	c.text.Refresh()
 }
 
 func (c *dataCell) Tapped(*fyne.PointEvent) {
@@ -2228,4 +2246,32 @@ func (c *dataCell) MouseDown(e *desktop.MouseEvent) {
 	}
 	c.app.clickMod = e.Modifier
 	c.app.selectTableRow(c.row, e.Modifier)
+}
+
+// entryColor returns the row's Cheat Engine colour, or the default text colour.
+func (a *App) entryColor(e *tableEntry) color.Color {
+	if c := cheatColor(e.color); c != nil {
+		return c
+	}
+	return a.pal().text
+}
+
+// cheatColor parses a Cheat Engine colour (6 hex digits, TColor $00BBGGRR) into
+// an RGBA colour, returning nil for an empty or invalid value.
+func cheatColor(s string) color.Color {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+	n, err := strconv.ParseUint(s, 16, 32)
+	if err != nil {
+		return nil
+	}
+	return color.NRGBA{
+		R: uint8(n & 0xff),
+		G: uint8((n >> 8) & 0xff),
+		B: uint8((n >> 16) & 0xff),
+		A: 0xff,
+	}
 }

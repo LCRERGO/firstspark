@@ -272,6 +272,20 @@ func entryToCE(e *Entry) ceOut {
 			Activated:   e.Activated,
 		}
 	}
+	// Cheat Engine's Active column locks the value, so a frozen Firstspark
+	// record exports as an activated LastState.
+	if e.Frozen && !e.Group {
+		if out.LastState == nil {
+			out.LastState = &ceOutLastState{}
+		}
+		if out.LastState.Value == "" {
+			out.LastState.Value = e.Value
+		}
+		if out.LastState.RealAddress == "" {
+			out.LastState.RealAddress = strings.TrimPrefix(e.Address, "0x")
+		}
+		out.LastState.Activated = true
+	}
 	out.Hotkeys = ceHotkeysFromEntry(e)
 	out.Extras = e.ExtraElements
 	out.Address, out.Offsets = ceAddress(e)
