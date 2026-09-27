@@ -1,6 +1,8 @@
 package scan
 
 import (
+	"context"
+	"encoding/binary"
 	"sync/atomic"
 	"testing"
 
@@ -156,5 +158,59 @@ func TestSplitRegionsNoSplit(t *testing.T) {
 	regions := []mem.Region{{Start: 0, End: 0x1000}}
 	if got := splitRegions(regions); len(got) != 1 {
 		t.Fatalf("split small region list into %d", len(got))
+	}
+}
+
+func TestExactIntProbe(t *testing.T) {
+	s := NewSession(nil, Options{Type: TypeDword, Mode: ModeExact,
+		Value: NewValue(TypeDword, encodeInteger(TypeDword, 5))})
+	if _, ok := s.exactIntProbe(); !ok {
+		t.Fatal("dword exact should use the fast path")
+	}
+	s.SetMode(ModeUnknown)
+	if _, ok := s.exactIntProbe(); ok {
+		t.Fatal("unknown scan should not use the fast path")
+	}
+	f := NewSession(nil, Options{Type: TypeFloat, Mode: ModeExact, Value: NewValue(TypeFloat, []byte{0, 0, 0, 0})})
+	if _, ok := f.exactIntProbe(); ok {
+		t.Fatal("float scan should not use the fast path")
+	}
+}
+
+func TestScanBytesIntMatchesAndCaps(t *testing.T) {
+	s := NewSession(nil, Options{Type: TypeDword, Mode: ModeExact, Alignment: 4,
+		Value: NewValue(TypeDword, encodeInteger(TypeDword, 0x2a)), MaxResults: 2})
+	data := make([]byte, 16)
+	binary.LittleEndian.PutUint32(data[0:], 0x2a)
+	binary.LittleEndian.PutUint32(data[8:], 0x2a)
+	binary.LittleEndian.PutUint32(data[12:], 0x2a)
+	var out []Result
+	var matches int64
+	if err := s.scanBytes(context.Background(), 0x1000, data, len(data), &out, &matches); err != nil {
+		t.Fatalf("scanBytes: %v", err)
+	}
+	if len(out) != 2 || matches != 2 {
+		t.Fatalf("out = %d, matches = %d, want 2/2", len(out), matches)
+	}
+	if out[0].Addr != 0x1000 || out[1].Addr != 0x1008 {
+		t.Fatalf("addresses = %#x, %#x", out[0].Addr, out[1].Addr)
+	}
+}
+
+func TestDecodeIntRaw(t *testing.T) {
+	cases := []struct {
+		raw  []byte
+		want int64
+	}{
+		{[]byte{0xff}, -1},
+		{[]byte{0xff, 0xff}, -1},
+		{[]byte{0, 0, 0, 0x80}, -2147483648},
+		{[]byte{1, 0, 0, 0, 0, 0, 0, 0}, 1},
+		{[]byte{}, 0},
+	}
+	for _, c := range cases {
+		if got := decodeIntRaw(c.raw); got != c.want {
+			t.Errorf("decodeIntRaw(% x) = %d, want %d", c.raw, got, c.want)
+		}
 	}
 }

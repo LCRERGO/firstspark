@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"image/color"
 	"testing"
 
 	"github.com/LCRERGO/firstspark/pkg/mem"
@@ -201,5 +202,70 @@ func TestCloneEntry(t *testing.T) {
 	c.pointer.offsets[0] = 9
 	if e.pointer.offsets[0] != 2 {
 		t.Fatal("clone shares pointer offsets")
+	}
+}
+
+func TestCheatColor(t *testing.T) {
+	// Cheat Engine colours are TColor ($00BBGGRR), so 0000FF is red.
+	got := cheatColor("0000FF")
+	if got == nil {
+		t.Fatal("nil colour")
+	}
+	c := color.NRGBAModel.Convert(got).(color.NRGBA)
+	if c.R != 0xff || c.G != 0 || c.B != 0 || c.A != 0xff {
+		t.Fatalf("red = %+v", c)
+	}
+	if cheatColor("") != nil || cheatColor("zz") != nil {
+		t.Fatal("expected nil for empty/invalid colours")
+	}
+}
+
+func TestEntryColor(t *testing.T) {
+	a := newTestApp(t)
+	if a.entryColor(&tableEntry{color: "00FF00"}) == nil {
+		t.Fatal("nil colour for a painted entry")
+	}
+	if a.entryColor(&tableEntry{}) == nil {
+		t.Fatal("nil default colour")
+	}
+}
+
+func TestDataCell(t *testing.T) {
+	a := newTestApp(t)
+	c := a.newDataCell()
+	c.setText("hello")
+	if c.text.Text != "hello" {
+		t.Fatalf("text = %q", c.text.Text)
+	}
+	c.setColor(cheatColor("0000FF"))
+	c.setMono(false)
+	if c.text.TextStyle.Monospace {
+		t.Fatal("expected a proportional style")
+	}
+	if c.CreateRenderer() == nil {
+		t.Fatal("nil renderer")
+	}
+}
+
+func TestParseHexLoose(t *testing.T) {
+	cases := map[string]uint64{"": 0, "0x10": 0x10, "10": 0x10, "0X2a": 0x2a, "zz": 0}
+	for in, want := range cases {
+		if got := parseHexLoose(in); got != want {
+			t.Errorf("parseHexLoose(%q) = %#x, want %#x", in, got, want)
+		}
+	}
+}
+
+func TestFoundSortByValue(t *testing.T) {
+	a := newTestApp(t)
+	a.results = []scan.Result{
+		{Addr: 1, Value: scan.NewValue(scan.TypeDword, []byte{30, 0, 0, 0})},
+		{Addr: 2, Value: scan.NewValue(scan.TypeDword, []byte{10, 0, 0, 0})},
+		{Addr: 3, Value: scan.NewValue(scan.TypeDword, []byte{20, 0, 0, 0})},
+	}
+	a.applyFoundSort()
+	a.sortFound(1)
+	if a.foundOrder[0] != 1 || a.foundOrder[1] != 2 || a.foundOrder[2] != 0 {
+		t.Fatalf("by-value order = %v", a.foundOrder)
 	}
 }

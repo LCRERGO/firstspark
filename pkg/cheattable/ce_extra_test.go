@@ -133,3 +133,75 @@ func TestFirstsparkHotkeyExportsAsCEHotkey(t *testing.T) {
 		t.Fatalf("F5 should export as VK 116:\n%s", data)
 	}
 }
+
+func TestFrozenExportsAsActivated(t *testing.T) {
+	tbl := &Table{Version: SchemaVersion, Entries: []Entry{
+		{ID: 1, Description: "hp", Address: "0x1000", Type: "dword", Value: "42", Frozen: true},
+	}}
+	data, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	if !strings.Contains(string(data), "Activated") {
+		t.Fatalf("frozen state not exported:\n%s", data)
+	}
+	back, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	e := back.Entries[0]
+	if !e.Activated || e.LastValue != "42" || e.LastAddress != "1000" {
+		t.Fatalf("LastState = %+v", e)
+	}
+}
+
+func TestCEGroupNestingRoundTrip(t *testing.T) {
+	tbl := &Table{Version: SchemaVersion, Entries: []Entry{
+		{ID: 1, Description: "top", Group: true, Children: []Entry{
+			{ID: 2, Description: "sub", Group: true, Children: []Entry{
+				{ID: 3, Description: "leaf", Address: "0x2000", Type: "dword", Value: "7"},
+			}},
+		}},
+	}}
+	data, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	back, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(back.Entries) != 1 || len(back.Entries[0].Children) != 1 || len(back.Entries[0].Children[0].Children) != 1 {
+		t.Fatalf("nesting lost: %+v", back.Entries)
+	}
+	if back.Entries[0].Children[0].Children[0].Description != "leaf" {
+		t.Fatalf("leaf lost: %+v", back.Entries[0].Children[0].Children[0])
+	}
+}
+
+func TestFirstsparkExtrasXMLRoundTrip(t *testing.T) {
+	tbl := &Table{Version: SchemaVersion, Entries: []Entry{{
+		ID: 1, Description: "x", Address: "0x10", Type: "dword",
+		Color: "00FF00", LastValue: "5", LastAddress: "10", Activated: true,
+		CEHotkeys:     []CEHotkey{{Action: "Toggle Activation", Keys: "112"}},
+		ExtraElements: []RawElement{{Name: "Foo", Text: "bar"}},
+	}}}
+	data, err := tbl.Marshal()
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	back, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	e := back.Entries[0]
+	if e.Color != "00FF00" || e.LastValue != "5" || !e.Activated {
+		t.Fatalf("extras lost: %+v", e)
+	}
+	if len(e.CEHotkeys) != 1 || e.CEHotkeys[0].Keys != "112" {
+		t.Fatalf("hotkeys lost: %+v", e.CEHotkeys)
+	}
+	if len(e.ExtraElements) != 1 || e.ExtraElements[0].Name != "Foo" || e.ExtraElements[0].Text != "bar" {
+		t.Fatalf("elements lost: %+v", e.ExtraElements)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -177,5 +178,41 @@ func TestGDBMIAttach(t *testing.T) {
 	}
 	if _, err := be.Read(regs.RSP, 16); err != nil {
 		t.Fatalf("Read: %v", err)
+	}
+}
+
+func TestParseMITokensAndClasses(t *testing.T) {
+	rec, ok := parseMILine(`5^done,value="0x1"`)
+	if !ok || rec.token != "5" || rec.class != "done" || miString(rec.results, "value") != "0x1" {
+		t.Fatalf("record = %+v ok=%v", rec, ok)
+	}
+	if rec, ok := parseMILine(`=thread-group-added,id="i1"`); !ok || rec.kind != '=' {
+		t.Fatalf("notify = %+v ok=%v", rec, ok)
+	}
+	if rec, ok := parseMILine(`+download`); !ok || rec.kind != '+' || rec.class != "download" {
+		t.Fatalf("status = %+v ok=%v", rec, ok)
+	}
+}
+
+func TestMiSignal(t *testing.T) {
+	if miSignal("SIGSEGV") != syscall.SIGSEGV || miSignal("sigint") != syscall.SIGINT {
+		t.Fatal("known signal not mapped")
+	}
+	if miSignal("SIGWHATEVER") != syscall.SIGTRAP || miSignal("") != syscall.SIGTRAP {
+		t.Fatal("unknown signal should map to SIGTRAP")
+	}
+}
+
+func TestRegisterPairs(t *testing.T) {
+	pairs := registerPairs(Registers{RIP: 1, RSP: 2, RAX: 3, RFLAGS: 4})
+	if len(pairs) != 18 {
+		t.Fatalf("pairs = %d, want 18", len(pairs))
+	}
+	got := map[string]uint64{}
+	for _, p := range pairs {
+		got[p.name] = p.value
+	}
+	if got["rip"] != 1 || got["rsp"] != 2 || got["rax"] != 3 || got["eflags"] != 4 {
+		t.Fatalf("pairs = %+v", got)
 	}
 }

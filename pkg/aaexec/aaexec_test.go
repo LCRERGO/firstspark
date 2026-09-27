@@ -130,3 +130,127 @@ func TestCompileRejectsUnsupported(t *testing.T) {
 		}
 	}
 }
+
+func TestInterpMovExtend(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  movzx eax, byte [rdi]
+  ret
+`, 1)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	p.SetData([]byte{0xff})
+	if got := p.Call(entry, p.DataPtr()); got != 0xff {
+		t.Fatalf("movzx = %#x, want 0xff", got)
+	}
+
+	q := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  movsx eax, byte [rdi]
+  ret
+`, 1)
+	defer q.Close()
+	e2, _ := q.Entry("ConvertRoutine")
+	q.SetData([]byte{0xff})
+	if got := uint32(q.Call(e2, q.DataPtr())); got != 0xffffffff {
+		t.Fatalf("movsx = %#x, want 0xffffffff", got)
+	}
+}
+
+func TestInterpLogicAndBranch(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  movzx eax, byte [rdi]
+  cmp eax, 0x2a
+  jne no
+  mov eax, 1
+  ret
+no:
+  xor eax, eax
+  ret
+`, 1)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	p.SetData([]byte{0x2a})
+	if got := p.Call(entry, p.DataPtr()); got != 1 {
+		t.Fatalf("equal branch = %d, want 1", got)
+	}
+	p.SetData([]byte{0x2b})
+	if got := p.Call(entry, p.DataPtr()); got != 0 {
+		t.Fatalf("not-equal branch = %d, want 0", got)
+	}
+}
+
+func TestInterpLea(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  lea rax, [rdi+4]
+  ret
+`, 4)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	want := uint64(p.DataPtr()) + 4
+	if got := uint64(p.Call(entry, p.DataPtr())); got != want {
+		t.Fatalf("lea = %#x, want %#x", got, want)
+	}
+}
+
+func TestInterpArithmeticShift(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  mov eax, [rdi]
+  sar eax, 1
+  ret
+`, 4)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	p.SetData([]byte{0xf8, 0xff, 0xff, 0xff}) // -8
+	if got := uint32(p.Call(entry, p.DataPtr())); got != 0xfffffffc {
+		t.Fatalf("sar = %#x, want 0xfffffffc", got)
+	}
+}
+
+func TestInterpUnsignedDivide(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  mov eax, [rdi]
+  xor edx, edx
+  mov ecx, 4
+  div ecx
+  ret
+`, 4)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	p.SetData([]byte{40, 0, 0, 0})
+	if got := p.Call(entry, p.DataPtr()); got != 10 {
+		t.Fatalf("div = %d, want 10", got)
+	}
+}
+
+func TestInterpOutOfBuffer(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  mov eax, [rdi+0x100000]
+  ret
+`, 4)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	p.SetData([]byte{1, 2, 3, 4})
+	p.Call(entry, p.DataPtr())
+	if p.Err() == nil {
+		t.Fatal("expected an out-of-buffer error")
+	}
+}
+
+func TestInterpStepLimit(t *testing.T) {
+	p := compileScript(t, `[ENABLE]
+ConvertRoutine:
+  jmp ConvertRoutine
+`, 4)
+	defer p.Close()
+	entry, _ := p.Entry("ConvertRoutine")
+	p.Call(entry, p.DataPtr())
+	if p.Err() == nil {
+		t.Fatal("expected a step-limit error")
+	}
+}
