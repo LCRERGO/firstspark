@@ -7,9 +7,9 @@ Accepted.
 ## Context
 
 The cheat table could add, freeze, edit, bite and group records, but several
-Cheat Engine address-list operations were missing:
+address-list operations were missing:
 
-- Integer values were always formatted signed, and CE's `<ShowAsSigned>` was
+- Integer values were always formatted signed, and the reference tool's `<ShowAsSigned>` was
   parsed then dropped, so a 4-byte `0xFFFFFFFF` showed as `-1` even for a table
   written as unsigned.
 - A record's type was fixed once added; there was no *Change record type*.
@@ -44,10 +44,10 @@ Cheat Engine address-list operations were missing:
 
 ## Consequences
 
-- Address-list editing now covers CE's common record operations without a
+- Address-list editing now covers the reference tool's common record operations without a
   redesign of the table widget.
 - `ShowAsSigned` written by firstspark is relative to its own default (signed);
-  a CE table without the attribute imports as unsigned, matching CE's default.
+  a reference-tool table without the attribute imports as unsigned, matching the reference tool's default.
 - Move and duplicate operate on sibling lists and the entry tree, so they reuse
   `rebuildVisible`; no drag state is introduced.
 - Group-from-selection wraps only top-level ancestors of the selection, which

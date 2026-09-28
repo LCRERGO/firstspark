@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Firstspark targets the same feature surface as Cheat Engine: scanning, a
+Firstspark targets the same feature surface as the reference tool: scanning, a
 debugger, an assembler, code injection and time scaling. We want to publish it
 as open source and allow a GUI to evolve without rewriting the engine.
 

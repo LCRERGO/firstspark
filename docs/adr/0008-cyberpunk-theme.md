@@ -7,7 +7,7 @@ Accepted.
 ## Context
 
 The GUI should look intentional rather than like a default toolkit demo, while
-keeping text readable. Cheat Engine's classic grey palette is dated; a flat,
+keeping text readable. The reference tool's classic grey palette is dated; a flat,
 modern look was preferred, with a cyberpunk flavour (cyan/magenta neon on
 near-black). A light scheme is also required, and the existing `ui.theme`
 config field was declared but never read.
@@ -42,6 +42,6 @@ config field was declared but never read.
   so restyling stays contained.
 - Fyne does not expose a per-widget font for native menus, so the display font
   is applied to in-window headings and titles, not the OS menu bar.
-- Adding a View menu is a deliberate deviation from Cheat Engine (which has
+- Adding a View menu is a deliberate deviation from the reference tool (which has
   none) to make the theme control discoverable; ADR 0007's menu list is
   superseded on this point.

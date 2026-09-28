@@ -1,4 +1,4 @@
-# ADR 0007: Cheat Engine-faithful window and panel layout
+# ADR 0007: Reference-faithful window and panel layout
 
 ## Status
 
@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Firstspark deliberately mirrors Cheat Engine (CE). Users coming from CE expect
+Firstspark deliberately mirrors the reference tool. Users coming from it expect
 its window structure: a separate Process List window, a separate Memory Viewer
 window, a "Found" results list next to the scan controls, and a cheat table
 below them. An earlier design considered docking the process list and merging
@@ -14,7 +14,7 @@ the result lists, which would have been simpler but less familiar.
 
 ## Decision
 
-Reproduce CE's layout:
+Reproduce the reference tool's layout:
 
 - **Main window** — top region (~74% height) holds the process label on the
   left, the Found list (columns Address / Value / Previous, ~46% of the width)
@@ -39,7 +39,7 @@ Reproduce CE's layout:
 
 ## Consequences
 
-- The layout is familiar to CE users and keeps the two result views distinct.
+- The layout is familiar to reference-tool users and keeps the two result views distinct.
 - More windows to manage than a single-window design, and more code than a
   merged table.
 - Split proportions are user-adjustable through the Fyne splitters.

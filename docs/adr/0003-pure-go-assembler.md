@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Cheat Engine lets users type Intel-syntax assembly and patch it into the target.
+The reference tool lets users type Intel-syntax assembly and patch it into the target.
 The usual implementations bind to Capstone and Keystone through cgo, which adds
 a C toolchain and system library requirement to every build and complicates
 `go install`.

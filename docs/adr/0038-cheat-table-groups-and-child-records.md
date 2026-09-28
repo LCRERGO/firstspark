@@ -6,7 +6,7 @@ Accepted and implemented. Pulled ahead of the deferred value-changer phases.
 
 ## Context
 
-Cheat Engine's address list is a tree: group headers contain child records, and
+The reference tool's address list is a tree: group headers contain child records, and
 a child's address is often expressed **relative to its parent** (`+18`,
 `+4*$1`). Firstspark's cheat table is a flat `[]tableEntry` rendered by a
 `widget.Table`, so it cannot represent a real `.CT` (ADR 0037). Recursive
@@ -21,10 +21,10 @@ the Active / Description / Address / Type / Value columns.
   group header (no address/type) with children; child address expressions are
   resolved against the parent (ADR 0037's expression engine).
 - Keep `widget.Table` and render the tree by **projecting the visible nodes into
-  a flat row list** with indentation and expand/collapse state (the CE
+  a flat row list** with indentation and expand/collapse state (the reference tool
   approach). Column layout, sorting and cell editing are unchanged.
 - Recursive operations (freeze, change value, delete) walk the subtree; a
-  changed value applies to children when CE's recursive option is set.
+  changed value applies to children when the reference tool's recursive option is set.
 - Extend the `.CT`/JSON schema and `cheattable.Table` to carry the hierarchy.
 
 ## Consequences

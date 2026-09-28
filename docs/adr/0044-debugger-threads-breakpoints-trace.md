@@ -39,12 +39,12 @@ single TID.
 
 ## Consequences
 
-- The debugger now matches CE's common inspection workflow without a
+- The debugger now matches the reference tool's common inspection workflow without a
   multi-thread tracer.
 - Selecting a thread loses breakpoints installed in the previous session's
   target memory; enabled breakpoints are reinstalled when the new session
   attaches, and the map is cleared on switch.
-- Conditions are intentionally a bounded grammar, not CE's full Lua; memory
+- Conditions are intentionally a bounded grammar, not the reference tool's full Lua; memory
   operands and expressions can come later.
 - The stack walk and trace are debug-time operations, not hot paths, so their
   per-step reads are acceptable.

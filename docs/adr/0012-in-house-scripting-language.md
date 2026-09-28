@@ -7,11 +7,11 @@ Accepted.
 ## Context
 
 User-defined value types need per-type conversion logic (bytes to a comparable
-value and back). Cheat Engine implements these as Lua scripts executed by an
+value and back). The reference tool implements these as Lua scripts executed by an
 embedded Lua. We want the same capability without depending on a third-party
-Lua VM, and we want scripts that are portable with Cheat Engine's custom types.
+Lua VM, and we want scripts that are portable with the reference tool's custom types.
 
-Cheat Engine 7.5 embeds **patched Lua 5.1.4** (`LUA_VERSION_NUM 501`) with the
+The reference tool 7.5 embeds **patched Lua 5.1.4** (`LUA_VERSION_NUM 501`) with the
 "lnum" number-model patch (`LNUM_INT64`): numbers are C doubles plus a separate
 signed 64-bit integer subtype, and `math.hugeint` is
 `0x7fffffffffffffff`. It has no 5.2/5.3 features (no bitwise operators, no
@@ -38,12 +38,12 @@ Excluded for safety (sandboxed): bitwise operators, `//`, `goto`, coroutines,
 metatables, `pcall`/`error`, `require`/modules, `io`/`os`/`debug`,
 `string.pack`, `utf8`, `string.dump`.
 
-## Gap versus Cheat Engine
+## Gap versus the reference tool
 
-- CE opens the full 5.1 stdlib, including metatables, `pcall`, `require`,
-  `io` and `os`; we sandbox those out, so a CE script using `class()`,
+- The reference tool opens the full 5.1 stdlib, including metatables, `pcall`, `require`,
+  `io` and `os`; we sandbox those out, so a reference-tool script using `class()`,
   metatables, `pcall`, `require`, `io`/`os` or coroutines will not run here.
-- CE's lnum integer/float promotion rules are approximated (integer `+ - *`
+- the reference tool's lnum integer/float promotion rules are approximated (integer `+ - *`
   stay integer unless they overflow, `/` and `^` produce floats); exact parity
   is refined as cases are found.
 - Typical custom-type scripts (`%`, `math.floor`, `string.format`, plain

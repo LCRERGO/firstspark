@@ -8,7 +8,7 @@ Accepted.
 
 `pkg/scan` modelled value types as a fixed `ValueType` enum, switched on in 25
 places in `value.go` and referenced across 12 files. That cannot express a type
-defined by the user at runtime, which Cheat Engine supports (a named, fixed-size
+defined by the user at runtime, which the reference tool supports (a named, fixed-size
 type with a bytes<->value conversion).
 
 ## Decision
@@ -23,7 +23,7 @@ Replace the enum with a `scan.Type` descriptor and a registry:
   `value_to_bytes(value[, address])` (optional). Types without the write-back
   function are read-only.
 - Comparisons run on the converted value. The type declares a result `kind`
-  of `int`, `float` or `string`, mirroring Cheat Engine's float/string
+  of `int`, `float` or `string`, mirroring the reference tool's float/string
   handling.
 - User types are persisted in `customtypes.yaml` (name, size, kind, script,
   alignment, description) under the config directory, and are selectable in

@@ -1,4 +1,4 @@
-# ADR 0036: PINCE-style auto-attach to the target process
+# ADR 0036: Auto-attach to the target process
 
 ## Status
 
@@ -11,21 +11,21 @@ Process List (`Ctrl+P`) or the "attach to the foreground process" hotkey. When
 the target crashes or is relaunched, `processGone` (ADR 0032) clears the
 selection and the user has to choose the new instance manually, then start over.
 
-PINCE solves this differently. It has no "restart" command; instead a poller
+The reference tool solves this differently. It has no "restart" command; instead a poller
 (`auto_attach_loop`) runs while nothing is attached and attaches to the first
 process whose name matches a configured pattern (a regex, or `;`-separated
 substrings with earlier entries taking priority). A relaunched target is picked
-up automatically on the next tick. PINCE calls `ptrace` here, but its *effect*
+up automatically on the next tick. The reference tool calls `ptrace` here, but its *effect*
 for the user is "the target comes back on its own".
 
 ## Decision
 
-Add an opt-in auto-attach poller that mirrors PINCE's matching semantics:
+Add an opt-in auto-attach poller that mirrors the reference tool's matching semantics:
 
 - `process.auto_attach` is a semicolon-separated list of process-name
   substrings, matched in order (earlier entries win, lowest PID within an
   entry), or a single regular expression when `process.auto_attach_regex` is
-  set. Matching is case-sensitive, as in PINCE. An empty pattern disables the
+  set. Matching is case-sensitive, as in the reference tool. An empty pattern disables the
   feature; there is no separate enable flag.
 - The poller runs every second, and only while no target is selected. It calls
   `mem.List()` and reuses the normal process-selection path, so the scan
@@ -45,7 +45,7 @@ Add an opt-in auto-attach poller that mirrors PINCE's matching semantics:
 ## Consequences
 
 - A crashed-or-relaunched target is re-selected without user action, which is
-  the behavior users expect from PINCE.
+  the behavior users expect from the reference tool.
 - Because the poller only acts while no target is selected, it never overrides a
   manual choice; the user must let the target exit (or use a future "detach"
   action) before it fires again.

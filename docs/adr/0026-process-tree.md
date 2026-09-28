@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Cheat Engine's process list is flat, which makes it hard to tell which process
+The reference tool's process list is flat, which makes it hard to tell which process
 spawned which and to focus on a subtree (a game and its helpers, a shell and its
 children). Other tools (htop, pstree) show a parent/child tree with collapsible
 nodes.

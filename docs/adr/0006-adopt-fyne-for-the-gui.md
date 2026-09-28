@@ -7,7 +7,7 @@ Accepted. Supersedes the Gio choice in ADR 0001.
 ## Context
 
 The original GUI was built on Gio (`gioui.org`), an immediate-mode toolkit.
-Recreating a Cheat Engine-style interface — a native menu bar, a data-grid
+Recreating a interface — a native menu bar, a data-grid
 table with headers, resizable split panes, modal dialogs and a system theme
 preference — required hand-rolling each of those widgets. Gio also renders
 through Vulkan, which is an unusual runtime dependency for a desktop utility.

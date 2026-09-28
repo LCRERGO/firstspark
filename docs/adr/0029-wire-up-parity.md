@@ -10,7 +10,7 @@ Several engines were implemented and tested but unreachable from the UI:
 `speedhack` (the checkbox only flipped a flag), `debugger.RemoteCaller`, the
 pointermap (built in memory only, never cached or loaded), and parts of the
 ptrace backend (`SetRegisters` unused, no step-over, no breakpoint list). The
-result was a visible feature gap against PINCE even though the hard parts
+result was a visible feature gap against the reference tool even though the hard parts
 existed.
 
 ## Decision

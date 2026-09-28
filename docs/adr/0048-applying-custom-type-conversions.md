@@ -1,4 +1,4 @@
-# ADR 0048: Applying Cheat Engine custom-type conversions
+# ADR 0048: Applying reference-tool custom-type conversions
 
 ## Status
 
@@ -6,7 +6,7 @@ Accepted. P0–P4 are implemented.
 
 ## Context
 
-A Cheat Engine `.CT` can define custom value types with
+A reference-tool `.CT` can define custom value types with
 `registerCustomTypeAutoAssembler(script)`. The script allocates a set of
 symbols and defines two conversion routines in x86-64 assembly:
 
@@ -21,7 +21,7 @@ symbols and defines two conversion routines in x86-64 assembly:
 | `USESSTRING`, `MAXSTRINGSIZE` | string conversion via an output buffer |
 | `CALLMETHOD` | the routines take an extra `address` argument (cdecl) |
 
-CE calls the routines with the Windows x64 convention; the routine shapes it
+The reference tool calls the routines with the Windows x64 convention; the routine shapes it
 uses are (`CustomTypeHandler.pas`):
 
 ```
@@ -41,19 +41,19 @@ Firstspark already has an almost identical mechanism: `pkg/customtype.RegisterAA
 - write: `RDI = value`, `RSI = output pointer`.
 
 Today, `pkg/cheattable` extracts `TypeName`/`ByteSize` (and now the routine
-bodies) into `CustomTypeDef`, and `internal/ui/files.go` registers every CE
-custom type with `customtype.RegisterRaw` — the name and width survive but the
-conversion does not run.
+bodies) into `CustomTypeDef`, and `internal/ui/files.go` registers every
+reference-tool custom type with `customtype.RegisterRaw` — the name and width
+survive but the conversion does not run.
 
 ## Proposed decision
 
 Bridge the two ABIs and reuse the existing JIT path, in phases. A new
 `customtype.RegisterCE(def)` reconstructs a Firstspark Auto Assembler
-definition from the CE script:
+definition from the reference-tool script:
 
 1. synthesise a `[ENABLE]` section containing `TypeName`, `ByteSize`, alignment
    and feature flags, the extracted routine bodies, and a SysV shim in front of
-   each CE routine that moves the arguments from `RDI`/`RSI` to `RCX`/`RDX`/`R8`
+   each reference-tool routine that moves the arguments from `RDI`/`RSI` to `RCX`/`RDX`/`R8`
    (and, for `CALLMETHOD`, supplies `address = 0`), keeping the stack 16-byte
    aligned;
 2. hand it to `RegisterAA` on CGO builds;
@@ -91,7 +91,7 @@ Routine ABIs to support, in order:
 
 ## Risks
 
-- **Assembler coverage.** A CE routine may use instructions `pkg/asm` does not
+- **Assembler coverage.** A reference-tool routine may use instructions `pkg/asm` does not
   encode; P1 rejects and falls back per type rather than failing the import.
 - **ABI subtleties.** Windows x64 reserves 32 bytes of shadow space and keeps
   16-byte stack alignment; the shim realigns the stack but cannot guarantee that
@@ -106,7 +106,7 @@ Routine ABIs to support, in order:
 
 ## Consequences
 
-- Imported CE custom types format and parse values like CE does for the common
+- Imported the reference-tool custom type format and parse values like the reference tool does for the common
   integer case, instead of showing raw bytes.
 - Conversions run on both builds: the CGO build uses `pkg/jit`, and the headless
   build falls back to the `pkg/aaexec` interpreter, which covers the common
@@ -118,9 +118,9 @@ Routine ABIs to support, in order:
 
 ## Test strategy
 
-- Extraction unit tests for every feature flag over a realistic CE script.
-- A synthetic integer CE script is registered and `customtype.AATest` asserts the
+- Extraction unit tests for every feature flag over a realistic reference-tool script.
+- A synthetic integer reference-tool script is registered and `customtype.AATest` asserts the
   bytes↔value round trip (skipped without CGO).
 - A routine using an unsupported mnemonic registers raw and reports a reason.
-- Golden conversion values copied from a real CE table for the integer and float
+- Golden conversion values copied from a real reference-tool table for the integer and float
   phases.

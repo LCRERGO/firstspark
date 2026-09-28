@@ -10,21 +10,21 @@ The engine already provides a full debugger (`pkg/debugger`: attach, register
 access, breakpoints, step/continue/wait) and a speedhack, but no UI. Building a
 debugger front-end (register panes, breakpoint list, disassembly stepping,
 thread list) is a project in itself. The GUI rework also risks scope creep into
-Lua, auto-assembly, structure dissection and plugins — all Cheat Engine
+Lua, auto-assembly, structure dissection and plugins — all the reference tool
 features Firstspark does not have.
 
 ## Decision
 
 The GUI implements this feature set:
 
-- Process List, memory scanning with CE-style controls, the Found list and the
+- Process List, memory scanning with controls, the Found list and the
   cheat table, freezing, value editing, Add Address Manually, Memory Viewer
   (hex + disassembler), Settings, Speedhack toggle, and cheat-table
   load/save/export (`.CT` XML and `.json`).
 
 Explicitly **out of scope** for this work: the debugger UI, Lua engine,
 auto-assemble, structure dissection, plugins, languages, D3D, scan tabs,
-pointer scan, unrandomizer, undo scan, and CE's Table Extras / Advanced Options.
+pointer scan, unrandomizer, undo scan, and the reference tool's Table Extras / Advanced Options.
 
 ## Consequences
 

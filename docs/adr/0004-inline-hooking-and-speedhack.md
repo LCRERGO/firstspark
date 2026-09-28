@@ -23,7 +23,7 @@ The speedhack builds a handler that calls the trampoline, scales the returned
 
 ## Consequences
 
-- Works on already-running processes, like Cheat Engine.
+- Works on already-running processes, like the reference tool.
 - The relocation restriction means some prologues cannot be hooked; the caller
   receives `ErrUnrelocatable`.
 - `clock_gettime`/`gettimeofday` served directly through the vDSO bypass the

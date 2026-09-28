@@ -9,7 +9,7 @@ Accepted.
 The cheat table showed the value last written and froze a snapshot captured at
 freeze time. Editing a frozen row was therefore silently reverted by the 50 ms
 freeze loop, values changed by the target were never shown, and deleting a row
-or re-resolving a pointer left stale freeze entries behind. Cheat Engine instead
+or re-resolving a pointer left stale freeze entries behind. The reference tool instead
 shows the live memory value and keeps a per-record frozen value that a manual
 change updates.
 
@@ -18,7 +18,7 @@ change updates.
 - Every cheat-table row re-reads its value on the existing 500 ms UI tick, so
   the Value column shows the *live value*.
 - Frozen state moves onto `tableEntry` (`frozen`, `frozenValue`), mirroring
-  Cheat Engine's per-record `Active`/`FrozenValue`. The 50 ms writer goroutine
+  the reference tool's per-record `Active`/`FrozenValue`. The 50 ms writer goroutine
   writes a mutex-protected snapshot rebuilt when freeze state, frozen value or
   address changes, so delete, reorder and pointer re-resolution stay correct by
   construction.
@@ -40,7 +40,7 @@ change updates.
 
 ## Consequences
 
-- Editing a frozen row now behaves like Cheat Engine: the edit becomes the value
+- Editing a frozen row now behaves like the reference tool: the edit becomes the value
   that is held.
 - The Value column reflects the target process, so a failed or overridden freeze
   is visible instead of hidden.

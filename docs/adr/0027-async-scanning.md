@@ -29,7 +29,7 @@ Rework the scan engine and its UI driver:
 - A **result cap** (`Options.MaxResults`, wired to `ui.result_limit`, default
   1000) stops the scan once reached; the cap applies to unknown scans too.
 - A **region scope** (`Options.Scope`) chooses *All writable* (default,
-  Cheat Engine-compatible), *Heap + stack + exec + BSS* (scanmem-style, much
+  reference-tool-compatible), *Heap + stack + exec + BSS* (scanmem-style, much
   faster), or *All readable*.
 - The GUI runs the scan on a background goroutine, shows a **determinate
   progress bar and a status line**, disables the scan buttons, and offers a

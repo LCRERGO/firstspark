@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-The scan panel diverged from Cheat Engine in several user-facing ways:
+The scan panel diverged from the reference tool in several user-facing ways:
 
 - It offered one scan-type list for both scan phases, so choosing a change-based
   filter (for example *Increased value*) and pressing First Scan produced an
@@ -15,7 +15,7 @@ The scan panel diverged from Cheat Engine in several user-facing ways:
   `>`/`<` was the free-text Compare field, which was enabled only for Exact.
 - There was no *Same as first scan* mode because the first-scan value was not
   retained (`Result` held only `Value`/`Previous`).
-- Region filtering was limited to a writable default and a coarse scope; CE's
+- Region filtering was limited to a writable default and a coarse scope; the reference tool's
   Executable tri-state, Copy-on-write and Start/Stop range were absent, even
   though `mem.Region.Executable()`/`Private()` existed.
 - Grouped scans (`4:75 4:* 4:100`) were unsupported.
@@ -47,7 +47,7 @@ The scan panel diverged from Cheat Engine in several user-facing ways:
 
 ## Consequences
 
-- The scan panel now mirrors CE's two-phase behaviour and no longer reaches the
+- The scan panel now mirrors the reference tool's two-phase behaviour and no longer reaches the
   engine's invalid-mode error path.
 - `Result` is one `Value` larger; history and undo copy it unchanged.
 - Grouped results display as spaced hex bytes, because a stored `Value` cannot

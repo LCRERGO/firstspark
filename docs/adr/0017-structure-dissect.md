@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Cheat Engine's "Dissect data/structures" compares a memory layout across several
+The reference tool's "Dissect data/structures" compares a memory layout across several
 addresses, guesses field types and lets the user follow pointers. It needs only
 memory access.
 

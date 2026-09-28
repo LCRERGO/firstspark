@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Cheat Engine's Auto Assembler (AA) turns a script into assembled code, allocates
+The reference tool's Auto Assembler (AA) turns a script into assembled code, allocates
 memory, writes the code and optionally hooks a target function. Firstspark
 already has an assembler (`pkg/asm`) and trampoline hooking (`pkg/inject`); the
 AA language is what is missing.
@@ -20,7 +20,7 @@ and `[enable]`/`[disable]` sections.
 
 Deferred: `createthread`, structure definitions, and the broader AA command set.
 `{$lua}` blocks are segmented and dispatched to a runner (ADR 0039); the core
-Cheat Engine Lua API lives in `pkg/celua`.
+table scripting API lives in `pkg/celua`.
 
 ## Consequences
 

@@ -7,7 +7,7 @@ Accepted. Supersedes ADR 0010.
 ## Context
 
 ADR 0010 deferred the debugger GUI: `pkg/debugger` already provides attach,
-registers, breakpoints and stepping, but nothing exposed it. Cheat Engine's
+registers, breakpoints and stepping, but nothing exposed it. The reference tool's
 "find out what accesses/writes this address" is a core workflow and requires
 the debugger.
 

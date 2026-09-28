@@ -1,6 +1,6 @@
 # Firstspark
 
-A Cheat Engine style memory scanner, debugger and code patcher for Linux,
+A memory scanner, debugger and code patcher for Linux,
 written in Go.
 
 Firstspark attaches to a running process as an unprivileged user, scans its
@@ -37,10 +37,10 @@ or GDB runtime dependency.
 | Lua Engine console (`pkg/celua`) | implemented |
 | Remote function calls (int/float/double arguments) | implemented |
 | Internationalization (go-i18n catalogs, `ui.language`) | implemented |
-| PINCE-style auto-attach to a process by name | implemented |
+| Auto-attach to a process by name | implemented |
 | Fyne desktop GUI | implemented (build tag `gui`) |
 | Firstspark `.CT`/JSON/YAML sessions import/export | implemented |
-| Cheat Engine `.CT` import/export | partial (tree, expressions, scripts, colour, last state, hotkeys, core Lua; ADR 0037/0046) |
+| `.CT` import/export | partial (tree, expressions, scripts, colour, last state, hotkeys, core Lua; ADR 0037/0046) |
 
 ## Requirements
 
@@ -87,10 +87,15 @@ staged/packaged installs, e.g. `make install PREFIX=$HOME/.local` or
 bin/firstspark
 ```
 
-The window follows the Cheat Engine layout: a scan panel and **Found** list at
-the top, a **cheat table** below a splitter, and separate **Memory Viewer** and
+The window follows the reference-tool layout: browser-style **scan tabs** at the
+top, a **cheat table** below a splitter, and separate **Memory Viewer** and
 **Debugger** windows. Open a process (`Ctrl+P`).
 
+- **Scan tabs** (`Ctrl+T` / `Ctrl+W` / `Ctrl+Tab`): each tab is an independent
+  scan with its own options, Found list and undo history, so health, ammo and
+  money can be scanned alongside one another; the cheat table and the shared
+  speedhack/unrandomizer strip stay common to every tab. *Scan ▸ Compare Tabs…*
+  intersects or differences two tabs' results into a new tab.
 - **Scan panel**: phase-aware scan types (exact, bigger/smaller, value-between
   and unknown first; then increased/decreased (+by), changed, unchanged and
   same-as-first) with region filters (writable, executable, copy-on-write,
@@ -155,7 +160,7 @@ pkg/pointerscan       N-level pointer scanner and pointermap
 pkg/dissect           structure dissection
 pkg/autoasm           Auto Assembler subset
 pkg/script            Lua 5.1.4-compatible subset
-pkg/celua             Cheat Engine Lua table-object runtime
+pkg/celua             table scripting table-object runtime
 pkg/customtype        user-defined value types
 pkg/cheattable        .CT / JSON import and export
 pkg/config            YAML configuration
@@ -196,7 +201,7 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
 - **GDB/MI backend**: needs `gdb` on `PATH`; it supports attach, memory,
   registers, breakpoints and stepping, but not remote calls or hardware
   watchpoints (ADR 0047).
-- **Cheat Engine tables**: import/export covers the tree, expressions, scripts,
+- **.CT tables**: import/export covers the tree, expressions, scripts,
   colour, last state, hotkeys, the core Lua API and preserved unknown elements
   (ADR 0037, ADR 0046); GUI/VCL-script tables are out of scope (ADR 0039).
   Integer, float and string custom-type `ConvertRoutine` conversions are applied

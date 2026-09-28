@@ -1,4 +1,4 @@
-# ADR 0019: Phased delivery for the Cheat Engine parity work
+# ADR 0019: Phased delivery for the feature parity work
 
 ## Status
 

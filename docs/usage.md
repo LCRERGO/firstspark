@@ -38,7 +38,7 @@ firstspark --pid "$(pgrep -n target)" --type dword --mode exact --value 1000
 # Unknown-value scan followed by an "increased" filter
 firstspark --pid 1234 --type dword --mode unknown --next increased
 
-# Export the results as a Cheat Engine table
+# Export the results as a .CT table
 firstspark --pid 1234 --type dword --mode exact --value 42 --export run.CT
 ```
 

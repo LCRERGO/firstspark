@@ -6,11 +6,11 @@ Accepted.
 
 ## Context
 
-Cheat Engine lets a custom type be defined by an Auto Assembler script whose
+The reference tool lets a custom type be defined by an Auto Assembler script whose
 conversion routines are native code, so the scan loop runs at native speed.
 Reproducing that by calling the routines *in the target* is not viable: a scan
 converts every candidate address, and each remote call is a stop-resume cycle
-(ADR 0022). Cheat Engine's routines run in its own process.
+(ADR 0022). The reference tool's routines run in its own process.
 
 ## Decision
 
@@ -36,6 +36,6 @@ types and need no target process.
 
 - AA-defined types convert at native speed inside scans.
 - A malformed script runs arbitrary native code in the Firstspark process and
-  can crash it; this is the same trust model as Cheat Engine's Auto Assembler.
+  can crash it; this is the same trust model as the reference tool's Auto Assembler.
 - The JIT needs CGO, so the headless (CGO-free) build returns "not supported"
   for AA types; Lua types work everywhere.

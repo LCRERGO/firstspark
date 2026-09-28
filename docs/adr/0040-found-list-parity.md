@@ -1,4 +1,4 @@
-# ADR 0040: Found-list Cheat Engine parity
+# ADR 0040: Found-list feature parity
 
 ## Status
 
@@ -14,7 +14,7 @@ context menu, no sorting). The backing model, `scan.Result`, had a single value
 field `Prev` that actually held the value of the latest scan (the comparison
 baseline for the next scan), so there was no place to store a previous pass.
 
-Cheat Engine's scan results update their displayed value as the target's value
+The reference tool's scan results update their displayed value as the target's value
 changes, distinguish static (module-relative) from dynamic addresses, and let
 the user add a result to the address list by double-clicking or through a
 right-click menu.
@@ -50,7 +50,7 @@ right-click menu.
 
 ## Consequences
 
-- The Found list matches the columns ADR 0007 always claimed, and gains CE's
+- The Found list matches the columns ADR 0007 always claimed, and gains the reference tool's
   live value, static colouring and row actions.
 - Sorting is not wired yet; `foundOrder` is the seam for it.
 - If live-refreshing many results stutters the UI, the reads can move to a

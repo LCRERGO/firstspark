@@ -6,10 +6,10 @@ Accepted. Extends ADR 0009.
 
 ## Context
 
-Cheat Engine's Settings ▸ Hotkeys lets the user bind system-wide key
+The reference tool's Settings ▸ Hotkeys lets the user bind system-wide key
 combinations to scan, speedhack, type-change and process actions. The hotkeys
 fire while the target application has focus, which is the point: you can drive
-a scan without alt-tabbing into Cheat Engine. Firstspark only had window-scoped
+a scan without alt-tabbing into the reference tool. Firstspark only had window-scoped
 Fyne shortcuts (ADR 0009), which require Firstspark itself to be focused.
 
 Fyne has no global-hotkey API. On X11, `XGrabKey` on the root window provides
@@ -33,13 +33,13 @@ using `XGrabKey` through the already-vendored `jezek/xgb`/`xgbutil`:
   released and the connection closed on quit.
 
 Bindings live in the `hotkeys` map of `config.yaml` (action id → combo) and
-default to **all unassigned**, matching Cheat Engine. `speedhack.delta`
+default to **all unassigned**, matching the reference tool. `speedhack.delta`
 (default 0.5) sets the step for the Speedhack speed +/− actions. A dedicated
 **Hotkeys** window (Tools ▸ Hotkeys) lists every action with a press-to-capture
 field, a Clear button and a per-action status (`bound`, `duplicate`, or the
 grab error).
 
-The actions mirror Cheat Engine's list, restricted to what Firstspark
+The actions mirror the reference tool's list, restricted to what Firstspark
 implements: toggle speedhack, speedhack +/−, change value type to each type,
 new scan / new scan exact / new scan unknown, the next-scan filters, undo and
 cancel scan, Debug → Run, pause process (`SIGSTOP`/`SIGCONT`, blocked while the
@@ -48,12 +48,12 @@ debugger is attached) and attach to the foreground process
 
 ## Consequences
 
-- Hotkeys work while the target is focused, as in Cheat Engine.
-- Unlike Cheat Engine's non-consuming poll, `XGrabKey` is exclusive: the
+- Hotkeys work while the target is focused, as in the reference tool.
+- Unlike the reference tool's non-consuming poll, `XGrabKey` is exclusive: the
   focused application does not receive the key. This is documented and is the
   reason a combo can collide with a game's own bindings.
 - Global hotkeys are X11-only for now. Under Wayland the feature degrades to
   "unavailable"; a future ADR can add the GlobalShortcuts portal.
 - The built-in window shortcuts of ADR 0009 remain and are separate from the
-  configurable global hotkeys, exactly as Cheat Engine separates its menu
+  configurable global hotkeys, exactly as the reference tool separates its menu
   shortcuts from Settings ▸ Hotkeys.

@@ -8,7 +8,7 @@ Accepted. Extends ADR 0014.
 
 The first `TextGrid` editor (ADR 0014) had syntax highlighting, a gutter and
 undo/redo, but no selection, no clipboard, no scrolling, no find/replace and no
-error feedback — below Cheat Engine's Auto Assembler editor, which offers line
+error feedback — below the reference tool's Auto Assembler editor, which offers line
 numbers, bracket matching, auto-indent, block indent, find/replace, bookmarks
 and a current-line highlight.
 

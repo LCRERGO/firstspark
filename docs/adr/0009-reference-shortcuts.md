@@ -1,4 +1,4 @@
-# ADR 0009: Cheat Engine keyboard shortcut parity
+# ADR 0009: Reference-tool keyboard shortcut parity
 
 ## Status
 
@@ -6,18 +6,19 @@ Accepted.
 
 ## Context
 
-Users switching from Cheat Engine expect its keyboard shortcuts. Firstspark
-does not implement every CE feature, so binding all of CE's shortcuts would
+Users switching from the reference tool expect its keyboard shortcuts. Firstspark
+does not implement every reference-tool feature, so binding all of the reference tool's shortcuts would
 create dead keys.
 
 ## Decision
 
-Bind **Cheat Engine's exact shortcuts for the actions Firstspark implements**,
+Bind **the reference tool's exact shortcuts for the actions Firstspark implements**,
 and leave shortcuts for unimplemented features unbound:
 
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+P` | Open Process List |
+| `Ctrl+T` | New scan tab |
 | `Ctrl+M` | Open Memory Viewer |
 | `Ctrl+O` | Load cheat table |
 | `Ctrl+S` | Save cheat table |
@@ -46,16 +47,16 @@ Enter, Space, F-keys) are handled by the focused table/list widgets.
 
 `Ctrl+C` / `Ctrl+V` / `Ctrl+X` / `Ctrl+A` are not bound globally: Fyne already
 handles them inside text fields, and binding them application-wide would break
-editing. They remain available as Cheat Engine's context-menu entries.
+editing. They remain available as the reference tool's context-menu entries.
 
-`Ctrl+T` (add scan tab) and the Lua shortcuts are intentionally not bound
-because the features do not exist.
+`Ctrl+T` (new scan tab) is bound now that scan tabs exist (ADR 0050); the Lua
+shortcuts remain intentionally unbound because the feature does not exist.
 
-Global, user-configurable hotkeys (Cheat Engine's Settings ▸ Hotkeys) are a
+Global, user-configurable hotkeys (the reference tool's Settings ▸ Hotkeys) are a
 separate mechanism, described in ADR 0033.
 
 ## Consequences
 
-- Muscle memory carries over from Cheat Engine.
+- Muscle memory carries over from the reference tool.
 - The shortcut set grows with the feature set; adding a feature means adding
-  its CE binding.
+  its reference-tool binding.

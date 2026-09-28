@@ -4,7 +4,7 @@ Guidance for agents working in this repository.
 
 ## What this is
 
-Firstspark is a Cheat Engine style memory scanner, debugger and code patcher
+Firstspark is a memory scanner, debugger and code patcher
 for Linux x86-64, written in Go. The engine lives in `pkg/...` and is
 UI-agnostic; front-ends live in `internal/...`.
 
@@ -46,11 +46,13 @@ GUI compile errors. `gofmt -l internal pkg cmd` must be empty.
 - `cmd/firstspark` — entrypoint.
 - `internal/app` — CLI flags and wiring.
 - `internal/ui` — Fyne GUI, gated behind `//go:build gui` (the `!gui` stub is
-  `ui_stub.go`). Files: `app.go` (state, window, menus, shortcuts), `theme.go`
+  `ui_stub.go`). Files: `app.go` (shared state, window, menus, shortcuts),
+  `scan_tab.go` (per-tab scan workspace and tab lifecycle), `theme.go`
   (colours/fonts), `processes.go`, `scan.go`, `results.go`, `memory.go`,
   `settings.go`, `files.go`, `format.go`, `icons.go`, `x11.go`,
   `customtypes.go`, `editor.go`, `pointerscan.go`, `debugger.go`,
-  `dissect.go`, `autoasm.go`.
+  `dissect.go`, `autoasm.go`. Each scan tab owns its Found list, scan
+  controls and session; the cheat table and process controls are shared.
 - `pkg/...` — the engine: `mem`, `scan`, `asm`, `debugger`, `inject`,
   `speedhack`, `cheattable`, `config`, `combinator`, `script`, `customtype`,
   `pointerscan`, `dissect`, `autoasm`, `jit`. Never import `internal/ui` from

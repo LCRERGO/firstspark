@@ -164,28 +164,28 @@ Conventions:
   output bytes in **RSI**; it writes `size` bytes.
 - `kind: int` and `kind: float` are supported. A float type's routine returns the
   IEEE-754 single bit pattern as an integer, and the value is interpreted as a
-  32-bit float (Cheat Engine's `USESFLOAT` convention).
+  32-bit float (the reference tool's `USESFLOAT` convention).
 - `kind: string` takes three arguments instead: the value pointer in **RDI**,
   the address (always 0 here) in **RSI**, and the output pointer in **RDX**.
   `ConvertRoutine` writes a NUL-terminated string to the output buffer;
   `ConvertBackRoutine` writes `size` bytes to the output pointer. Set
   `max_string_size` to bound the conversion buffer (default 64). This matches
-  Cheat Engine's `USESSTRING` convention.
+  the reference tool's `USESSTRING` convention.
 - The script must be self-contained (no external symbols); `alloc` directives
   are ignored.
 
 Because the routine runs in Firstspark's process, a faulty script can crash the
-application — the same trust model as Cheat Engine's Auto Assembler. The CGO
+application — the same trust model as the reference tool's Auto Assembler. The CGO
 build (`make`) executes the routine natively through `pkg/jit`; the headless
 build interprets the same common instruction subset in pure Go (`pkg/aaexec`)
 and rejects routines outside it, so a headless build still supports Auto
 Assembler types without CGO.
 
-## Differences from Cheat Engine
+## Differences from the reference tool
 
 - The script dialect is Lua 5.1.4 with a 64-bit integer extension, matching
-  Cheat Engine, but the sandbox omits `io`/`os`/`require`/metatables/`pcall`
+  the reference tool, but the sandbox omits `io`/`os`/`require`/metatables/`pcall`
   (ADR 0012).
 - Auto-Assembler-defined types are not supported; only Lua scripts (ADR 0020).
-- Cheat Engine keeps types in the Windows registry; Firstspark keeps them in
+- The reference tool keeps types in the Windows registry; Firstspark keeps them in
   `customtypes.yaml`.

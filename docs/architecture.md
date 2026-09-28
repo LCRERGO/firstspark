@@ -35,8 +35,8 @@ Firstspark is split into a UI-agnostic engine (`pkg/...`) and thin front-ends
 - `pkg/speedhack` — resolves libc symbols from the target's ELF files, builds a
   scaling handler with the assembler, and installs it through `pkg/inject`.
 - `pkg/config` — YAML configuration under the XDG directories.
-- `pkg/cheattable` — Cheat Engine `.CT` (XML) and JSON session import/export.
-- `pkg/autoasm` — a subset of Cheat Engine's Auto Assembler (`alloc`, `label`,
+- `pkg/cheattable` — the `.CT` (XML) and JSON session import/export.
+- `pkg/autoasm` — a subset of the reference tool's Auto Assembler (`alloc`, `label`,
   `define`, `db`/`dd`, `aobscan`, `registersymbol`, `[enable]`/`[disable]`),
   parsed with `pkg/combinator` and assembled with `pkg/asm` (ADR 0018).
 - `pkg/dissect` — compares a region across several instances and guesses a
@@ -54,7 +54,7 @@ Firstspark is split into a UI-agnostic engine (`pkg/...`) and thin front-ends
 ## GUI
 
 `internal/ui` is a Fyne front-end, gated behind the `gui` build tag so the
-default build stays headless and free of CGO. It mirrors Cheat Engine's window
+default build stays headless and free of CGO. It mirrors the reference tool's window
 layout: a separate Process List window, a scan panel and Found list above a
 splitter, a cheat table below it, and a separate Memory Viewer with the
 disassembler over the hex dump. See ADR 0007.

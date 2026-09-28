@@ -6,10 +6,10 @@ Accepted.
 
 ## Context
 
-The A–F roadmap left a few Cheat Engine tools and settings surfaces unimplemented:
+The A–F roadmap left a few reference-tool tools and settings surfaces unimplemented:
 there was no Lua console (although `pkg/celua` already backed table scripts),
 no "New table", the refresh cadence was hardcoded, several config keys had no
-UI, and there was no Unrandomizer. ADR 0010 had declared CE "Table Extras /
+UI, and there was no Unrandomizer. ADR 0010 had declared reference-tool "Table Extras /
 Advanced Options" out of scope.
 
 ## Decision
@@ -33,7 +33,7 @@ Advanced Options" out of scope.
   `rand_r` with the speedhack symbol resolver and installs a `mov rax, value;
   ret` handler through `pkg/inject`, returning a constant. It is toggled from
   the scan panel with a value field, mirroring the speedhack.
-- **Out of scope.** CE's Table Extras / Advanced Options remain out of scope
+- **Out of scope.** The reference tool's Table Extras / Advanced Options remain out of scope
   (ADR 0010), as does the gdbmi backend (still a stub).
 
 ## Consequences

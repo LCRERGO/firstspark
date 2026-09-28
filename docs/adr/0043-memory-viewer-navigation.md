@@ -41,7 +41,7 @@ window layout.
 
 ## Consequences
 
-- The viewer behaves like Cheat Engine's: continuous scrolling, a region browser,
+- The viewer behaves like the reference tool's: continuous scrolling, a region browser,
   inline byte edits, pointer following and a dump.
 - `readCached` reads whole 4 KiB pages and caps the cache at 256 pages; the
   per-row reads during scrolling hit the cache after the first page.

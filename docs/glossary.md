@@ -2,7 +2,7 @@
 
 Terms used across the codebase, ADRs and UI.
 
-- **Address expression** — a Cheat Engine address written as text (`+18`,
+- **Address expression** — a address written as text (`+18`,
   `module+0x10`, `pSelectedCharacter`) and resolved live against the parent
   record, module map and symbol table, rather than stored as an absolute number
   (ADR 0037).
@@ -23,14 +23,14 @@ Terms used across the codebase, ADRs and UI.
   writes it and Shift-click extends a selection (ADR 0043).
 - **Call stack** — the best-effort frame-pointer unwind shown in the debugger,
   with each return address disassembled (ADR 0044).
-- **CE core Lua API** — the bounded subset of Cheat Engine's Lua table-object
+- **Reference-tool core Lua API** — the bounded subset of the reference tool's Lua table-object
   model Firstspark implements for scripts (`AddressList`, `MemoryRecord`,
   `Memscan`, `Process`, memory helpers, timers); GUI and OS-integration units
   are non-goals (ADR 0039).
-- **CE custom type conversion** — the assembly `ConvertRoutine` /
-  `ConvertBackRoutine` a Cheat Engine custom type defines; Firstspark can run
+- **Reference-tool custom type conversion** — the assembly `ConvertRoutine` /
+  `ConvertBackRoutine` a custom type defines; Firstspark can run
   the integer case through the JIT behind a SysV shim (ADR 0048).
-- **Cheat Engine table (`.CT`)** — Cheat Engine's XML format: an element-based
+- **.CT table** — the reference tool's XML format: an element-based
   schema with a nested entry tree, per-type metadata and embedded Auto
   Assembler/Lua scripts. Distinct from firstspark's own attribute-based schema
   (ADR 0037).
@@ -105,6 +105,12 @@ Terms used across the codebase, ADRs and UI.
   regions (ADR 0041).
 - **Scan session** — the state of a scan: options, selected regions, results and
   undo history (`pkg/scan/session.go`).
+- **Scan tab** — a named, independent scanner workspace in the main window; it
+  owns its Found list, scan controls and one *scan session*, while the cheat
+  table is shared across tabs. Created and closed browser-style (ADR 0050).
+- **Scan-tab compare** — an address-based set operation between two *scan tabs*
+  (only in one, only in the other, in both, in exactly one) that produces a new
+  scan tab; requires both tabs to share a value type (ADR 0050).
 - **Signed/unsigned display** — whether an integer cheat-table entry is
   formatted as signed; toggled per record and persisted in `.CT`/JSON
   (ADR 0042).
