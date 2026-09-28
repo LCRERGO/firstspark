@@ -13,7 +13,7 @@ type GroupSegment struct {
 }
 
 // GroupedPattern is a contiguous sequence of typed values matched against a
-// scanned address, Cheat Engine's "grouped" value type (4:75 4:* 4:100).
+// scanned address, the reference tool's "grouped" value type (4:75 4:* 4:100).
 type GroupedPattern struct {
 	Segments []GroupSegment
 }

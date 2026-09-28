@@ -1,4 +1,4 @@
-// Package autoasm implements a subset of Cheat Engine's Auto Assembler on top
+// Package autoasm implements a subset of the reference tool's Auto Assembler on top
 // of pkg/combinator and pkg/asm (ADR 0018). It parses [ENABLE]/[DISABLE]
 // sections containing directives, labels and instructions, and assembles them
 // into code that can be written into a target process.

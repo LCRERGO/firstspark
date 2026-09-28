@@ -1,4 +1,4 @@
-// Package address evaluates Cheat Engine address expressions. The syntax is
+// Package address evaluates address expressions. The syntax is
 // hexadecimal: bare tokens (148, A0, 7FF6ABCD) and $- or 0x-prefixed numbers
 // are hex, names resolve as symbols or modules first, and the operators
 // + - * / and parentheses are supported. A leading + or - makes the expression

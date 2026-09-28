@@ -1,4 +1,4 @@
-// Package cheattable imports and exports Cheat Engine .CT files. The .CT
+// Package cheattable imports and exports .CT files. The .CT
 // format is XML; this package implements the subset needed to round-trip a
 // flat list of addresses and values. Sessions are also saved as JSON.
 package cheattable
@@ -42,32 +42,32 @@ type Entry struct {
 	// Group marks a group header: it has no address or value and only parents
 	// children in the tree.
 	Group bool `xml:"Group,attr,omitempty" json:"group,omitempty" yaml:"group,omitempty"`
-	// Expr is an unresolved Cheat Engine address expression (symbolic or
+	// Expr is an unresolved address expression (symbolic or
 	// parent-relative); Address is left empty when Expr is set.
 	Expr string `xml:"Expr,attr,omitempty" json:"expr,omitempty" yaml:"expr,omitempty"`
-	// Offsets is the raw Cheat Engine offset list (comma-separated) that
+	// Offsets is the raw offset list (comma-separated) that
 	// applies after Expr resolves.
 	Offsets string `xml:"Offsets,attr,omitempty" json:"offsets,omitempty" yaml:"offsets,omitempty"`
 	// Script is the Auto Assembler source of a script record. It is written as
 	// a child element and is not executed on import (ADR 0039).
 	Script string `xml:"Script" json:"script,omitempty" yaml:"script,omitempty"`
-	// Color is the Cheat Engine row colour (opaque 6-hex, BGR order).
+	// Color is the .CT row colour (opaque 6-hex, BGR order).
 	Color string `xml:"Color,attr,omitempty" json:"color,omitempty" yaml:"color,omitempty"`
-	// LastValue, LastAddress and Activated mirror Cheat Engine's <LastState>.
+	// LastValue, LastAddress and Activated mirror the reference tool's <LastState>.
 	LastValue   string `xml:"LastValue,attr,omitempty" json:"last_value,omitempty" yaml:"last_value,omitempty"`
 	LastAddress string `xml:"LastAddress,attr,omitempty" json:"last_address,omitempty" yaml:"last_address,omitempty"`
 	Activated   bool   `xml:"Activated,attr,omitempty" json:"activated,omitempty" yaml:"activated,omitempty"`
-	// CEHotkeys preserves Cheat Engine hotkeys that have no Firstspark
+	// CEHotkeys preserves hotkeys that have no Firstspark
 	// equivalent, for faithful re-export.
 	CEHotkeys []CEHotkey `xml:"CEHotkeys>CEHotkey,omitempty" json:"ce_hotkeys,omitempty" yaml:"ce_hotkeys,omitempty"`
-	// ExtraElements preserves unmodelled Cheat Engine child elements (name and
+	// ExtraElements preserves unmodelled child elements (name and
 	// text), so a re-export keeps them.
 	ExtraElements []RawElement `xml:"ExtraElements>RawElement,omitempty" json:"extra_elements,omitempty" yaml:"extra_elements,omitempty"`
 	// Children are the nested records of a group or script.
 	Children []Entry `xml:"CheatEntries>CheatEntry,omitempty" json:"children,omitempty" yaml:"children,omitempty"`
 }
 
-// CEHotkey mirrors one Cheat Engine <Hotkey> child.
+// CEHotkey mirrors one <Hotkey> child.
 type CEHotkey struct {
 	Action        string `xml:"Action,attr,omitempty" json:"action,omitempty" yaml:"action,omitempty"`
 	Keys          string `xml:"Keys,attr,omitempty" json:"keys,omitempty" yaml:"keys,omitempty"`
@@ -78,7 +78,7 @@ type CEHotkey struct {
 	OnlyWhileDown bool   `xml:"OnlyWhileDown,attr,omitempty" json:"only_while_down,omitempty" yaml:"only_while_down,omitempty"`
 }
 
-// RawElement is a Cheat Engine child element Firstspark does not model.
+// RawElement is a child element Firstspark does not model.
 type RawElement struct {
 	Name string `xml:"Name,attr,omitempty" json:"name,omitempty" yaml:"name,omitempty"`
 	Text string `xml:"Text,attr,omitempty" json:"text,omitempty" yaml:"text,omitempty"`
@@ -195,14 +195,14 @@ type Table struct {
 	XMLName xml.Name `xml:"CheatTable" json:"-" yaml:"-"`
 	Version string   `xml:"Version,attr,omitempty" json:"version,omitempty" yaml:"version,omitempty"`
 	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries" yaml:"entries"`
-	// Stats summarises a Cheat Engine conversion. It is not serialized.
+	// Stats summarises a conversion. It is not serialized.
 	Stats ImportStats `xml:"-" json:"-" yaml:"-"`
-	// CustomTypes lists Cheat Engine custom type definitions found in the
+	// CustomTypes lists custom type definitions found in the
 	// table's scripts. It is not serialized.
 	CustomTypes []CustomTypeDef `xml:"-" json:"-" yaml:"-"`
 }
 
-// ImportStats reports the outcome of converting a Cheat Engine .CT file into
+// ImportStats reports the outcome of converting a .CT file into
 // Firstspark's flat table. Reasons counts skipped entries by cause ("group",
 // "script", "address", "type").
 type ImportStats struct {
@@ -211,9 +211,9 @@ type ImportStats struct {
 	Reasons  map[string]int
 }
 
-// CustomTypeDef is a Cheat Engine custom type definition extracted from a
+// CustomTypeDef is a custom type definition extracted from a
 // table's scripts (ADR 0037 S5). ConvertRoutine and ConvertBackRoutine hold the
-// Auto Assembler bodies; the flags select the Cheat Engine calling convention
+// Auto Assembler bodies; the flags select the Windows x64 calling convention
 // and result kind (ADR 0048).
 type CustomTypeDef struct {
 	Name               string
@@ -329,7 +329,7 @@ func Load(path string) (*Table, error) {
 	return Parse(data)
 }
 
-// Parse parses .CT XML. Cheat Engine files (detected by their
+// Parse parses .CT XML. .CT files (detected by their
 // CheatEngineTableVersion attribute) are converted to Firstspark's flat model;
 // the conversion is best-effort and its outcome is reported in Table.Stats.
 func Parse(data []byte) (*Table, error) {

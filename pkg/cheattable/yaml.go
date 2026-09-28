@@ -13,7 +13,7 @@ import (
 type Format int
 
 const (
-	// FormatCT is Firstspark's XML/Cheat Engine document.
+	// FormatCT is Firstspark's XML/.CT document.
 	FormatCT Format = iota
 	// FormatJSON is the JSON session form.
 	FormatJSON

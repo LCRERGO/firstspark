@@ -1,4 +1,4 @@
-// Package scan implements a Cheat Engine style memory scanner on top of the
+// Package scan implements a memory scanner on top of the
 // mem package. It supports the standard value types, exact and unknown-value
 // initial scans, and the usual change based next-scan filters.
 package scan

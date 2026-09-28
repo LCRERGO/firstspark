@@ -149,7 +149,7 @@ func (a *App) installMemoryShortcuts() {
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyPageUp}, func(fyne.Shortcut) { a.memPage(-1) })
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyPageDown}, func(fyne.Shortcut) { a.memPage(1) })
 	c.AddShortcut(ctrl(fyne.KeyC), func(fyne.Shortcut) { a.copyMemorySelection() })
-	// Cheat Engine selects the display width with Ctrl+1..0.
+	// the reference tool selects the display width with Ctrl+1..0.
 	keys := []fyne.KeyName{fyne.Key1, fyne.Key2, fyne.Key3, fyne.Key4, fyne.Key5, fyne.Key6}
 	for i, k := range keys {
 		if i >= len(memTypeOptions) {
@@ -1007,7 +1007,7 @@ func (a *App) readMemoryValue(addr uint64, typ scan.ValueType) (scan.Value, erro
 	return scan.NewValue(typ, raw), nil
 }
 
-// changeMemoryValue opens Cheat Engine's Memory Viewer change-value form: a
+// changeMemoryValue opens the reference tool's Memory Viewer change-value form: a
 // value field, a type selector and a Hexadecimal/Unicode checkbox that depends
 // on the type. It reads the address fresh when the type changes and writes on
 // OK (ADR 0037 value-changer phase 2).

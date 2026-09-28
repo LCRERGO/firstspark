@@ -1,4 +1,4 @@
-// Command firstspark is a Cheat Engine style memory scanner and debugger for
+// Command firstspark is a memory scanner and debugger for
 // Linux.
 package main
 

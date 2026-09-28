@@ -8,19 +8,19 @@ import (
 	"strings"
 )
 
-// CE schema version written by MarshalCE.
+// .CT schema version written by MarshalCE.
 const ceSchemaVersion = 45
 
-// ceOutTable is the Cheat Engine document written by MarshalCE.
+// ceOutTable is the .CT document written by MarshalCE.
 type ceOutTable struct {
 	XMLName                 xml.Name `xml:"CheatTable"`
 	CheatEngineTableVersion int      `xml:"CheatEngineTableVersion,attr"`
 	CheatEntries            []ceOut  `xml:"CheatEntries>CheatEntry"`
 }
 
-// ceOut is one Cheat Engine record written by MarshalCE. It marshals itself so
+// ceOut is one record written by MarshalCE. It marshals itself so
 // the optional LastState/Color/Hotkeys elements and preserved unknown elements
-// can be emitted in Cheat Engine's order.
+// can be emitted in the reference tool's order.
 type ceOut struct {
 	ID              int
 	Description     string
@@ -272,7 +272,7 @@ func entryToCE(e *Entry) ceOut {
 			Activated:   e.Activated,
 		}
 	}
-	// Cheat Engine's Active column locks the value, so a frozen Firstspark
+	// the reference tool's Active column locks the value, so a frozen Firstspark
 	// record exports as an activated LastState.
 	if e.Frozen && !e.Group {
 		if out.LastState == nil {
@@ -297,7 +297,7 @@ func entryToCE(e *Entry) ceOut {
 	return out
 }
 
-// ceHotkeysFromEntry returns the CE hotkeys to emit: the preserved ones, or a
+// ceHotkeysFromEntry returns the hotkeys to emit: the preserved ones, or a
 // single Toggle Activation binding for a Firstspark hotkey.
 func ceHotkeysFromEntry(e *Entry) []ceOutHotkey {
 	var out []ceOutHotkey
@@ -330,7 +330,7 @@ func parseKeyList(s string) []int {
 	return out
 }
 
-// MarshalCE renders the table as a Cheat Engine .CT document.
+// MarshalCE renders the table as a .CT document.
 func (t *Table) MarshalCE() ([]byte, error) {
 	doc := ceOutTable{CheatEngineTableVersion: ceSchemaVersion}
 	for i := range t.Entries {
@@ -343,7 +343,7 @@ func (t *Table) MarshalCE() ([]byte, error) {
 	return append([]byte(xml.Header), data...), nil
 }
 
-// ExportCE writes the table as a Cheat Engine .CT file.
+// ExportCE writes the table as a .CT file.
 func (t *Table) ExportCE(path string) error {
 	data, err := t.MarshalCE()
 	if err != nil {
@@ -355,7 +355,7 @@ func (t *Table) ExportCE(path string) error {
 	return nil
 }
 
-// ceVariableType maps a firstspark Entry to CE's VariableType (and CustomType).
+// ceVariableType maps a firstspark Entry to the VariableType (and CustomType).
 func ceVariableType(e *Entry) (string, string) {
 	typ := e.Type
 	if strings.EqualFold(typ, "bitfield") {
@@ -388,7 +388,7 @@ func ceVariableType(e *Entry) (string, string) {
 	}
 }
 
-// ceAddress renders an entry's address and offset chain in CE form.
+// ceAddress renders an entry's address and offset chain in format.
 func ceAddress(e *Entry) (string, []string) {
 	if e.Expr != "" {
 		return e.Expr, splitOffsets(e.Offsets)

@@ -1,5 +1,5 @@
-// Package celua implements the core subset of Cheat Engine's Lua API used by
-// Cheat Engine tables (ADR 0039): the AddressList/MemoryRecord object model,
+// Package celua implements the core subset of the reference tool's Lua API used by
+// .CT tables (ADR 0039): the AddressList/MemoryRecord object model,
 // the scalar memory/process helpers and the globals scripts reference. It is
 // UI-agnostic and bridges to the table through the Table and Record interfaces.
 package celua
@@ -61,8 +61,8 @@ type Config struct {
 	Clipboard func(string)
 }
 
-// Runtime evaluates Cheat Engine Lua chunks against a process and table. Its
-// global scope persists across Eval calls, matching Cheat Engine's shared Lua
+// Runtime evaluates table scripting chunks against a process and table. Its
+// global scope persists across Eval calls, matching the reference tool's shared Lua
 // environment.
 type Runtime struct {
 	cfg    Config
@@ -92,7 +92,7 @@ func (r *Runtime) Proc() *mem.Process { return r.proc }
 // SetProc rebinds the runtime to a process.
 func (r *Runtime) SetProc(p *mem.Process) { r.proc = p }
 
-// Eval compiles and runs a Lua chunk with the CE globals installed, then keeps
+// Eval compiles and runs a Lua chunk with the scripting globals installed, then keeps
 // any globals it defined for the next chunk.
 func (r *Runtime) Eval(chunk string) error {
 	api := r.apiGlobals()
@@ -116,7 +116,7 @@ func (r *Runtime) Eval(chunk string) error {
 	return nil
 }
 
-// apiGlobals builds the built-in Cheat Engine globals.
+// apiGlobals builds the built-in scripting globals.
 func (r *Runtime) apiGlobals() map[string]script.Value {
 	return map[string]script.Value{
 		"process":           r.processValue(),
@@ -320,7 +320,7 @@ func (r *Runtime) readMem(args []script.Value) ([]script.Value, error) {
 	return []script.Value{script.ObjectVal(&byteTable{data: data})}, nil
 }
 
-// byteTable is Cheat Engine's readmem result: a 0-based byte array with
+// byteTable is the reference tool's readmem result: a 0-based byte array with
 // getSize/getByte.
 type byteTable struct{ data []byte }
 
@@ -356,7 +356,7 @@ func (b *byteTable) Index(key script.Value) (script.Value, bool) {
 
 func (b *byteTable) SetIndex(script.Value, script.Value) error { return nil }
 
-// timer is a Cheat Engine timer object.
+// timer is a timer object.
 type timer struct {
 	interval  time.Duration
 	next      time.Time
@@ -411,7 +411,7 @@ func (r *Runtime) delayedExecute(args []script.Value) ([]script.Value, error) {
 	return []script.Value{script.ObjectVal(t)}, nil
 }
 
-// timerArgs accepts CE's (owner, interval, callback) and the shorter
+// timerArgs accepts the (owner, interval, callback) and the shorter
 // (interval, callback) forms.
 func (r *Runtime) timerArgs(args []script.Value) (time.Duration, script.Value) {
 	if len(args) >= 3 {

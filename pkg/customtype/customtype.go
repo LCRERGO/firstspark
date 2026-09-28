@@ -70,7 +70,7 @@ func Save(path string, defs []Definition) error {
 }
 
 // RegisterRaw registers a passthrough integer type of the given size without a
-// conversion script. It is used for Cheat Engine custom types whose Auto
+// conversion script. It is used for custom types whose Auto
 // Assembler conversion routine cannot be translated yet (ADR 0037 S5): the
 // width and name are preserved, the value is shown and edited raw.
 func RegisterRaw(name string, size int) (*scan.Type, error) {

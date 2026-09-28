@@ -42,7 +42,7 @@ func NewExecutor(proc *mem.Process, be debugger.Backend, s *Script) *Executor {
 	}
 }
 
-// parseAASize parses an alloc size, accepting decimal, 0x hex and CE's $
+// parseAASize parses an alloc size, accepting decimal, 0x hex and the $
 // hex form.
 func parseAASize(s string) (uint64, bool) {
 	s = strings.TrimSpace(s)

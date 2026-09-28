@@ -55,7 +55,7 @@ type SpeedhackConfig struct {
 	Delta float64 `yaml:"delta"`
 }
 
-// ProcessConfig controls automatic target selection. Auto-attach mirrors PINCE:
+// ProcessConfig controls automatic target selection. Auto-attach:
 // while no target is selected, a poller attaches to the first process whose
 // name matches the pattern.
 type ProcessConfig struct {

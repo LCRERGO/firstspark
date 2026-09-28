@@ -31,7 +31,7 @@ const (
 // Type describes how a value type is parsed, formatted, encoded and compared.
 // Built-ins are registered at startup; user-defined types are registered from
 // pkg/customtype. The ValueType enum remains as the stable identifier used by
-// Cheat Engine tables.
+// .CT tables.
 type Type struct {
 	ID        ValueType
 	Name      string

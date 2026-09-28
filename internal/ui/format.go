@@ -26,7 +26,7 @@ var scanTypeKeys = map[scan.ScanMode]string{
 	scan.ModeSameAsFirst: "scan.type.same_as_first",
 }
 
-// firstScanModes and nextScanModes are Cheat Engine's phase-specific scan
+// firstScanModes and nextScanModes are the reference tool's phase-specific scan
 // types: change-based filters only make sense after an initial scan.
 var firstScanModes = []scan.ScanMode{
 	scan.ModeExact, scan.ModeBigger, scan.ModeSmaller, scan.ModeBetween, scan.ModeUnknown,

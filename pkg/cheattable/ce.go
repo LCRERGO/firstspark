@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// ceTable mirrors the element-based schema of a Cheat Engine .CT file.
+// ceTable mirrors the element-based schema of a .CT file.
 type ceTable struct {
 	XMLName xml.Name  `xml:"CheatTable"`
 	Entries []ceEntry `xml:"CheatEntries>CheatEntry"`
 }
 
-// ceEntry is one Cheat Engine record. CE nests children under parents and
+// ceEntry is one record. the format nests children under parents and
 // stores values as child elements rather than attributes.
 type ceEntry struct {
 	ID            int          `xml:"ID"`
@@ -38,14 +38,14 @@ type ceEntry struct {
 	Entries       []ceEntry    `xml:"CheatEntries>CheatEntry"`
 }
 
-// ceLastState is Cheat Engine's cached value/address for a record.
+// ceLastState is the reference tool's cached value/address for a record.
 type ceLastState struct {
 	RealAddress string `xml:"RealAddress,attr"`
 	Value       string `xml:"Value,attr"`
 	Activated   string `xml:"Activated,attr"`
 }
 
-// ceHotkey is one Cheat Engine hotkey binding.
+// ceHotkey is one hotkey binding.
 type ceHotkey struct {
 	Action        string `xml:"Action"`
 	Active        string `xml:"Active,attr"`
@@ -56,13 +56,13 @@ type ceHotkey struct {
 	ID            string `xml:"ID"`
 }
 
-// ceExtra captures an unmodelled Cheat Engine child element.
+// ceExtra captures an unmodelled child element.
 type ceExtra struct {
 	XMLName xml.Name
 	Text    string `xml:",chardata"`
 }
 
-// parseCE converts a Cheat Engine document into Firstspark's model, preserving
+// parseCE converts a .CT document into Firstspark's model, preserving
 // the group tree. Entries whose type or address cannot be represented are
 // skipped and counted in Table.Stats; symbolic and parent-relative addresses are
 // kept as Expr for the resolver.
@@ -77,7 +77,7 @@ func parseCE(data []byte) (*Table, error) {
 	return t, nil
 }
 
-// extractCustomTypes walks the CE entries' scripts for
+// extractCustomTypes walks the the entries' scripts for
 // registerCustomTypeAutoAssembler definitions.
 func extractCustomTypes(entries []ceEntry) []CustomTypeDef {
 	var out []CustomTypeDef
@@ -159,7 +159,7 @@ func customTypeFromAA(s string) (CustomTypeDef, bool) {
 	}, true
 }
 
-// symbolValue finds a Cheat Engine custom-type flag symbol and reads the db/dd
+// symbolValue finds a reference-tool custom-type flag symbol and reads the db/dd
 // value that follows it (a label or an alloc). It returns 0 when absent.
 func symbolValue(lines []string, symbol string) int {
 	for i, l := range lines {
@@ -244,7 +244,7 @@ func (s *ImportStats) skip(reason string) {
 	s.Reasons[reason]++
 }
 
-// addressResult classifies how a CE address was converted.
+// addressResult classifies how a address was converted.
 type addressResult int
 
 const (
@@ -302,7 +302,7 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 	return out
 }
 
-// applyCEExtras copies the Cheat Engine fields Firstspark models loosely: row
+// applyCEExtras copies the fields Firstspark models loosely: row
 // colour, cached last state, hotkeys and unmodelled elements.
 func applyCEExtras(entry *Entry, e *ceEntry) {
 	entry.Color = strings.TrimSpace(e.Color)
@@ -425,7 +425,7 @@ func applyCEAddress(entry *Entry, e *ceEntry) addressResult {
 	return addrExpr
 }
 
-// ceTypeName maps a Cheat Engine VariableType to a Firstspark type name.
+// ceTypeName maps a VariableType to a Firstspark type name.
 func ceTypeName(e *ceEntry) (string, bool) {
 	switch strings.TrimSpace(e.VariableType) {
 	case "Byte":
@@ -460,7 +460,7 @@ func ceTypeName(e *ceEntry) (string, bool) {
 	}
 }
 
-// ceDescription strips the quotes Cheat Engine wraps descriptions in.
+// ceDescription strips the quotes the reference tool wraps descriptions in.
 func ceDescription(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 && strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
@@ -499,7 +499,7 @@ func splitCEAddress(addr string) (module string, value uint64, ok bool) {
 	return "", v, true
 }
 
-// parseCEOffsets parses CE's offset list, which may be signed hex or, when it
+// parseCEOffsets parses the offset list, which may be signed hex or, when it
 // uses arithmetic such as "+4*$1", an expression that is not supported yet.
 func parseCEOffsets(raw []string) ([]int64, bool) {
 	var out []int64

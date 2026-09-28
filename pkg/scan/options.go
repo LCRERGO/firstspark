@@ -180,7 +180,7 @@ func ParseExecutableMode(s string) (ExecutableMode, error) {
 type RegionScope int
 
 const (
-	// ScopeAllWritable scans every readable writable region (Cheat Engine's
+	// ScopeAllWritable scans every readable writable region (the reference tool's
 	// default).
 	ScopeAllWritable RegionScope = iota
 	// ScopeHeapStackExecBSS scans the heap, the stack, anonymous mappings and

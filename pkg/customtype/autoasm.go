@@ -150,7 +150,7 @@ func (p *aaProgram) writeInt(n int64) []byte {
 	return p.run.DataCopy(p.size)
 }
 
-// readString runs the CE-style three-argument string routine into the text
+// readString runs the three-argument string routine into the text
 // buffer and decodes it as a NUL-terminated string.
 func (p *aaProgram) readString(raw []byte) string {
 	p.mu.Lock()

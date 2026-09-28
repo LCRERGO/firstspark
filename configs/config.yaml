@@ -28,7 +28,7 @@ speedhack:
   # Step used by the "Speedhack speed +/-" hotkeys.
   delta: 0.5
 
-# Automatic target selection (PINCE-style auto-attach). While no process is
+# Automatic target selection (auto-attach). While no process is
 # selected, Firstspark polls for a process whose name matches the pattern and
 # selects it, so it re-attaches after the target restarts. Empty disables it.
 process:

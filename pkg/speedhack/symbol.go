@@ -1,4 +1,4 @@
-// Package speedhack implements Cheat Engine style time scaling by inline
+// Package speedhack implements time scaling by inline
 // hooking the libc time functions and scaling the values they return.
 package speedhack
 

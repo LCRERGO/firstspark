@@ -64,7 +64,7 @@ func (t luaTable) Add(desc string, addr uint64, typeName, value string) (celua.R
 	return luaRecord{t.app, e}, nil
 }
 
-// luaRecord exposes a table entry as a Cheat Engine MemoryRecord.
+// luaRecord exposes a table entry as a MemoryRecord.
 type luaRecord struct {
 	app *App
 	e   *tableEntry
@@ -117,7 +117,7 @@ func (r luaRecord) SetValueString(s string) error {
 }
 
 // luaRuntime returns the session Lua runtime, creating it lazily. Its globals
-// persist across scripts, matching Cheat Engine.
+// persist across scripts, matching the reference tool.
 func (a *App) luaRuntime() *celua.Runtime {
 	if a.luaRT == nil {
 		a.luaRT = a.newLuaRuntime()

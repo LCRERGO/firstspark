@@ -244,7 +244,7 @@ type Options struct {
 	MaxResults int
 }
 
-// DefaultOptions returns Cheat Engine's pointer scan defaults.
+// DefaultOptions returns the reference tool's pointer scan defaults.
 func DefaultOptions() Options {
 	return Options{MaxLevel: 5, MaxOffset: 2048, Aligned: true, NoLoop: true, MaxResults: 100000}
 }

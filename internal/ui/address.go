@@ -9,7 +9,7 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
 
-// symbolResolver resolves Cheat Engine address names: script symbols first,
+// symbolResolver resolves address names: script symbols first,
 // then module load bases.
 type symbolResolver struct {
 	symbols map[string]uint64
@@ -28,7 +28,7 @@ func (r symbolResolver) ResolveName(name string) (uint64, bool) {
 	return 0, false
 }
 
-// resolveExpression resolves an entry's stored Cheat Engine expression against
+// resolveExpression resolves an entry's stored address expression against
 // its parent and the symbol/module tables, then applies the offset chain.
 func (a *App) resolveExpression(e *tableEntry, r symbolResolver) (uint64, error) {
 	parent, hasParent := uint64(0), false

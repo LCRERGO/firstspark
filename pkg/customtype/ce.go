@@ -8,12 +8,12 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/scan"
 )
 
-// ErrConversionUnsupported reports a Cheat Engine custom type that needs a
+// ErrConversionUnsupported reports a custom type that needs a
 // conversion phase Firstspark does not implement yet (ADR 0048); the caller
 // should fall back to RegisterRaw.
 var ErrConversionUnsupported = errors.New("customtype: conversion not supported")
 
-// CEConversion describes a Cheat Engine custom type's Auto Assembler
+// CEConversion describes a custom type's Auto Assembler
 // conversion routines.
 type CEConversion struct {
 	Name               string
@@ -27,7 +27,7 @@ type CEConversion struct {
 	ConvertBackRoutine string
 }
 
-// RegisterCE registers a Cheat Engine custom type, applying its conversion
+// RegisterCE registers a custom type, applying its conversion
 // through the Auto Assembler/JIT path (ADR 0048): the integer, single-precision
 // float and string cases are supported. Empty definitions and float sizes other
 // than 4 are reported as ErrConversionUnsupported so the caller can register
@@ -64,8 +64,8 @@ func RegisterCE(c CEConversion) (*scan.Type, error) {
 	return RegisterAA(def)
 }
 
-// synthesizeCEScript wraps the Cheat Engine Windows-x64 routines in a SysV shim
-// so RegisterAA (RDI/RSI arguments) can call them. The Cheat Engine address
+// synthesizeCEScript wraps the Windows-x64 routines in a SysV shim
+// so RegisterAA (RDI/RSI arguments) can call them. The address
 // argument is passed as 0. The routines precede the shims so the shim's `call`
 // is a resolved backward reference.
 func synthesizeCEScript(c CEConversion) string {
@@ -87,7 +87,7 @@ func synthesizeCEScript(c CEConversion) string {
 	return b.String()
 }
 
-// writeCEShim emits a SysV entry point that maps RDI/RSI/RDX to the Cheat Engine
+// writeCEShim emits a SysV entry point that maps RDI/RSI/RDX to the reference tool
 // Windows-x64 registers and calls the routine, keeping the stack 16-byte
 // aligned. String routines take (value, address, output); the address is 0.
 func writeCEShim(b *strings.Builder, entry, target string, cdecl, write, stringCall bool) {
