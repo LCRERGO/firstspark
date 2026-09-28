@@ -96,6 +96,15 @@ func (s *Session) typeOf() *Type {
 	return TypeByID(s.opts.Type)
 }
 
+// NewSessionFromResults builds a started session seeded with results, so a
+// combined or compared result set can be refined by further next scans.
+func NewSessionFromResults(proc *mem.Process, opts Options, results []Result) *Session {
+	s := NewSession(proc, opts)
+	s.results = append([]Result(nil), results...)
+	s.started = true
+	return s
+}
+
 // Options returns the session options.
 func (s *Session) Options() Options { return s.opts }
 
