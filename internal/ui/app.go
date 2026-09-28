@@ -110,20 +110,12 @@ type App struct {
 	themeChoices    []themeChoice
 	themeSystemItem *fyne.MenuItem
 
-	session      *scan.Session
-	regionSel    []mem.Region
-	results      []scan.Result
-	foundList    *widget.Table
-	foundOrder   []int
-	foundLive    map[int]scan.Value
-	foundRegions []mem.Region
-	foundSel     int
-	foundMulti   map[int]bool
-	foundCount   *widget.Label
-	foundDisplay displayFormat
-	foundSortCol int
-	foundSortAsc bool
-	status       *widget.Label
+	status *widget.Label
+
+	tabs       []*scanTab
+	activeTab  int
+	tabSeq     int
+	tabsWidget *container.DocTabs
 
 	entries         []*tableEntry
 	entryRoots      []*tableEntry
@@ -137,37 +129,14 @@ type App struct {
 	activePanel     activePanel
 	hotkeyShortcuts map[uint64]fyne.Shortcut
 
-	scanType      *ttwidget.Select
-	valueType     *ttwidget.Select
-	hexBox        *ttwidget.Check
-	valueEntry    *toolTipEntry
-	value2Entry   *toolTipEntry
-	compareSelect *ttwidget.Select
-	execSelect    *ttwidget.Select
-	cowCheck      *ttwidget.Check
-	startEntry    *toolTipEntry
-	stopEntry     *toolTipEntry
-	writable      *ttwidget.Check
-	speedhack     *ttwidget.Check
-	speedScale    *toolTipEntry
-	speedHooks    []*inject.Hook
-	speedApplied  bool
-	unrandom      *ttwidget.Check
-	unrandomVal   *toolTipEntry
-	unrandomHook  []*inject.Hook
-	unrandomOn    bool
-	alignEntry    *toolTipEntry
-	scanBtn       *ttwidget.Button
-	nextBtn       *ttwidget.Button
-	undoBtn       *ttwidget.Button
-	stopBtn       *ttwidget.Button
-	andLabel      *widget.Label
-	valuePair     *fyne.Container
-	scanProgress  *progressLine
-	scanStatus    *widget.Label
-	scopeSelect   *ttwidget.Select
-	scanCancel    context.CancelFunc
-	scanning      bool
+	speedhack    *ttwidget.Check
+	speedScale   *toolTipEntry
+	speedHooks   []*inject.Hook
+	speedApplied bool
+	unrandom     *ttwidget.Check
+	unrandomVal  *toolTipEntry
+	unrandomHook []*inject.Hook
+	unrandomOn   bool
 
 	openProcAction *widget.ToolbarAction
 	loadAction     *widget.ToolbarAction
@@ -307,8 +276,6 @@ func Run(cfg config.Config) error {
 		cfg:           cfg,
 		freezeTargets: map[uint64]scan.Value{},
 		stop:          make(chan struct{}),
-		foundSel:      -1,
-		foundSortCol:  -1,
 		tableSel:      -1,
 		procSortCol:   0,
 		procSortAsc:   true,
@@ -354,39 +321,8 @@ func (a *App) build() {
 
 func (a *App) buildWidgets() {
 	a.processLabel = newTapLabel(i18n.T("app.no_process"), a.openProcessList)
-	a.foundCount = widget.NewLabel(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.status = widget.NewLabel("")
 
-	a.valueEntry = newToolTipEntry()
-	a.valueEntry.SetPlaceHolder(i18n.T("app.value_placeholder"))
-	a.valueEntry.OnSubmitted = func(string) { a.scanAction() }
-
-	a.value2Entry = newToolTipEntry()
-	a.value2Entry.SetPlaceHolder(i18n.T("app.upper_bound_placeholder"))
-	a.value2Entry.OnSubmitted = func(string) { a.scanAction() }
-
-	a.compareSelect = newHintSelect(compareLabels(), "scan.hint.compare", nil)
-	a.compareSelect.SetSelected(scan.OpEqual.String())
-
-	a.execSelect = newHintSelect(execLabels(), "scan.hint.executable", nil)
-	a.execSelect.SetSelected(execLabel(scan.ExecAny))
-	a.cowCheck = newHintCheck(i18n.T("scan.copy_on_write"), "scan.hint.copy_on_write", nil)
-	a.startEntry = newHintEntry("scan.hint.range")
-	a.stopEntry = newHintEntry("scan.hint.range")
-
-	a.scanType = ttwidget.NewSelect(scanTypeLabelsFor(false), func(string) { a.updateScanControls() })
-	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
-	a.valueType = ttwidget.NewSelect(valueTypeOptions(), func(label string) {
-		if n := customTypeAlignment(label); n > 0 {
-			a.alignEntry.SetText(strconv.Itoa(n))
-		}
-		a.updateValueHint()
-	})
-	a.valueType.SetSelected(ceValueTypeLabel(a.defaultValueType()))
-
-	a.hexBox = newHintCheck(i18n.T("app.hex"), "scan.hint.hex", func(bool) {})
-	a.writable = newHintCheck(i18n.T("app.writable"), "scan.hint.writable", func(bool) {})
-	a.writable.SetChecked(a.cfg.Scan.WritableOnly)
 	a.speedhack = newHintCheck(i18n.T("app.enable_speedhack"), "scan.hint.speedhack", func(on bool) { a.setSpeedhack(on) })
 	a.speedhack.SetChecked(a.cfg.Speedhack.Enabled)
 	a.speedScale = newHintEntry("scan.hint.speedhack_scale")
@@ -395,12 +331,28 @@ func (a *App) buildWidgets() {
 	a.unrandomVal = newHintEntry("scan.hint.unrandomizer_value")
 	a.unrandomVal.SetText("0")
 
-	a.alignEntry = newHintEntry("scan.hint.alignment")
-	a.alignEntry.SetText(strconv.Itoa(a.cfg.Scan.Alignment))
-
-	a.buildFoundList()
 	a.buildCheatTable()
-	a.applyHints()
+	a.buildTabs()
+}
+
+// buildTabs creates the document-tab container and its first scan tab.
+func (a *App) buildTabs() {
+	a.tabsWidget = container.NewDocTabs()
+	a.tabsWidget.CreateTab = func() *container.TabItem { return a.createTab() }
+	a.tabsWidget.CloseIntercept = func(item *container.TabItem) { a.closeScanTab(item) }
+	a.tabsWidget.OnSelected = func(item *container.TabItem) { a.onTabSelected(item) }
+	a.tabSeq = 1
+	first := a.createTab()
+	a.tabsWidget.Append(first)
+	a.tabsWidget.SelectIndex(0)
+}
+
+// tab returns the active scan tab, or nil before the UI is built.
+func (a *App) tab() *scanTab {
+	if a.activeTab < 0 || a.activeTab >= len(a.tabs) {
+		return nil
+	}
+	return a.tabs[a.activeTab]
 }
 
 func (a *App) defaultValueType() scan.ValueType {
@@ -411,12 +363,40 @@ func (a *App) defaultValueType() scan.ValueType {
 }
 
 func (a *App) content() fyne.CanvasObject {
-	top := container.NewHSplit(a.foundPanel(), a.scanPanel())
-	top.SetOffset(0.46)
-	body := container.NewVSplit(top, a.cheatPanel())
+	workspace := container.NewBorder(a.processStrip(), nil, nil, nil, a.tabsWidget)
+	body := container.NewVSplit(workspace, a.cheatPanel())
 	body.SetOffset(0.74)
-	bar := container.NewBorder(nil, nil, a.processLabel, container.NewHBox(a.status, a.foundCount))
+	bar := container.NewBorder(nil, nil, a.processLabel, a.status)
 	return container.NewBorder(a.toolbar(), bar, nil, nil, body)
+}
+
+// processStrip holds the process-wide toggles shared by every scan tab.
+func (a *App) processStrip() fyne.CanvasObject {
+	return container.NewHBox(
+		a.speedhack,
+		widget.NewLabel(i18n.T("scan.speedhack_scale")),
+		container.NewGridWrap(fyne.NewSize(70, 34), a.speedScale),
+		widget.NewSeparator(),
+		a.unrandom,
+		widget.NewLabel(i18n.T("scan.unrandomizer_value")),
+		container.NewGridWrap(fyne.NewSize(90, 34), a.unrandomVal),
+	)
+}
+
+// updateScanControls refreshes the active tab's scan controls.
+func (a *App) updateScanControls() {
+	if t := a.tab(); t != nil {
+		t.updateScanControls()
+		return
+	}
+	a.updateTableActions()
+}
+
+// updateScanTypeOptions swaps the active tab's scan-type list.
+func (a *App) updateScanTypeOptions() {
+	if t := a.tab(); t != nil {
+		t.updateScanTypeOptions()
+	}
 }
 
 func (a *App) toolbar() *widget.Toolbar {
@@ -441,8 +421,8 @@ func (a *App) toolbar() *widget.Toolbar {
 }
 
 // updateScanControls enables only the controls that apply in the current
-// state, mirroring Cheat Engine's blocked buttons.
-func (a *App) updateScanControls() {
+// state, mirroring the reference tool's blocked buttons.
+func (a *scanTab) updateScanControls() {
 	mode := parseCEScanType(a.scanType.Selected)
 	if a.scanning {
 		a.setScanButtons(false, false, false, true)
@@ -454,7 +434,7 @@ func (a *App) updateScanControls() {
 }
 
 // setScanButtons enables the scan button set.
-func (a *App) setScanButtons(canScan, canNext, canUndo, canStop bool) {
+func (a *scanTab) setScanButtons(canScan, canNext, canUndo, canStop bool) {
 	if a.scanBtn != nil {
 		setEnabled(a.scanBtn, canScan)
 	}
@@ -470,7 +450,7 @@ func (a *App) setScanButtons(canScan, canNext, canUndo, canStop bool) {
 }
 
 // updateValueControls enables and shows the value controls for a scan mode.
-func (a *App) updateValueControls(mode scan.ScanMode) {
+func (a *scanTab) updateValueControls(mode scan.ScanMode) {
 	if a.valueEntry != nil {
 		setEnabled(a.valueEntry, modeNeedsValue(mode))
 		a.valueEntry.SetPlaceHolder(valuePlaceholder(mode))
@@ -512,7 +492,7 @@ func setVisible(o fyne.CanvasObject, visible bool) {
 
 // updateScanTypeOptions swaps the Scan Type list between the first-scan and
 // next-scan sets, keeping the current choice when it is still available.
-func (a *App) updateScanTypeOptions() {
+func (a *scanTab) updateScanTypeOptions() {
 	if a.scanType == nil {
 		return
 	}
@@ -627,7 +607,29 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	about := fyne.NewMenuItem(i18n.T("menu.help.about"), a.showAbout)
 	help := fyne.NewMenu(i18n.T("menu.help"), about)
 
-	return fyne.NewMainMenu(file, edit, a.viewMenu, table, tools, help)
+	newTab := fyne.NewMenuItem(i18n.T("menu.scan.new_tab"), a.addScanTab)
+	newTab.Shortcut = ctrl(fyne.KeyT)
+	closeTab := fyne.NewMenuItem(i18n.T("menu.scan.close_tab"), func() {
+		if o := a.tabsWidget.Selected(); o != nil {
+			a.closeScanTab(o)
+		}
+	})
+	closeTab.Shortcut = ctrl(fyne.KeyW)
+	renameTab := fyne.NewMenuItem(i18n.T("menu.scan.rename_tab"), a.renameScanTab)
+	nextTab := fyne.NewMenuItem(i18n.T("menu.scan.next_tab"), func() { a.cycleTab(1) })
+	nextTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyTab, Modifier: fyne.KeyModifierControl}
+	prevTab := fyne.NewMenuItem(i18n.T("menu.scan.previous_tab"), func() { a.cycleTab(-1) })
+	prevTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyTab, Modifier: fyne.KeyModifierControl | fyne.KeyModifierShift}
+	compare := fyne.NewMenuItem(i18n.T("menu.scan.compare_tabs"), a.compareTabs)
+	scanMenu := fyne.NewMenu(i18n.T("menu.scan"),
+		newTab, closeTab, renameTab,
+		fyne.NewMenuItemSeparator(),
+		nextTab, prevTab,
+		fyne.NewMenuItemSeparator(),
+		compare,
+	)
+
+	return fyne.NewMainMenu(file, edit, a.viewMenu, scanMenu, table, tools, help)
 }
 
 // themeChoice ties a View menu item to a family and variant.
@@ -793,17 +795,18 @@ func (a *App) writeFrozen(lastWriteErr *time.Time) {
 	}
 }
 
-// refreshUI re-reads the cheat table and Found values on the UI goroutine.
+// refreshUI re-reads the cheat table and the active tab's Found values on the
+// UI goroutine.
 func (a *App) refreshUI() {
 	changed := a.refreshEntries()
-	a.refreshFoundValues()
+	if t := a.tab(); t != nil {
+		t.refreshFoundValues()
+		t.refreshFound()
+	}
 	a.syncFreezeTargets()
 	a.runLuaTimers()
 	if changed && a.table != nil {
 		a.table.Refresh()
-	}
-	if a.foundList != nil {
-		a.foundList.Refresh()
 	}
 }
 

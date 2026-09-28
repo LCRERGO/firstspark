@@ -139,7 +139,7 @@ func foundHeaders() []string {
 	}
 }
 
-func (a *App) buildFoundList() {
+func (a *scanTab) buildFoundList() {
 	headers := foundHeaders()
 	a.foundList = widget.NewTable(
 		func() (int, int) { return len(a.results), len(headers) },
@@ -164,7 +164,7 @@ func (a *App) buildFoundList() {
 	a.foundList.SetColumnWidth(2, 130)
 }
 
-func (a *App) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
+func (a *scanTab) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
 	c := o.(*foundCell)
 	c.row, c.col = id.Row, id.Col
 	idx := a.foundResult(id.Row)
@@ -185,7 +185,7 @@ func (a *App) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
 }
 
 // foundCellText renders one Found-list cell: Address, live Value or Previous.
-func (a *App) foundCellText(col, idx int) string {
+func (a *scanTab) foundCellText(col, idx int) string {
 	r := a.results[idx]
 	switch col {
 	case 0:
@@ -209,7 +209,7 @@ func (a *App) foundCellText(col, idx int) string {
 }
 
 // displayFoundValue renders a Found value using the list-wide display format.
-func (a *App) displayFoundValue(v scan.Value) string {
+func (a *scanTab) displayFoundValue(v scan.Value) string {
 	switch a.foundDisplay {
 	case displayHex:
 		return hexOf(v)
@@ -224,14 +224,14 @@ func (a *App) displayFoundValue(v scan.Value) string {
 // taps, double-clicks and right-clicks.
 type foundCell struct {
 	widget.BaseWidget
-	app  *App
+	tab  *scanTab
 	text *canvas.Text
 	row  int
 	col  int
 }
 
-func (a *App) newFoundCell() *foundCell {
-	c := &foundCell{app: a, text: a.th.monoText("", a.pal().text)}
+func (a *scanTab) newFoundCell() *foundCell {
+	c := &foundCell{tab: a, text: a.th.monoText("", a.pal().text)}
 	c.ExtendBaseWidget(c)
 	return c
 }
@@ -250,29 +250,29 @@ func (c *foundCell) setColor(col color.Color) {
 	c.text.Refresh()
 }
 
-func (c *foundCell) Tapped(*fyne.PointEvent) { c.app.foundTapped(c.row) }
+func (c *foundCell) Tapped(*fyne.PointEvent) { c.tab.foundTapped(c.row) }
 
-func (c *foundCell) DoubleTapped(*fyne.PointEvent) { c.app.foundDoubleTapped(c.row) }
+func (c *foundCell) DoubleTapped(*fyne.PointEvent) { c.tab.foundDoubleTapped(c.row) }
 
 func (c *foundCell) MouseDown(e *desktop.MouseEvent) {
-	c.app.clickMod = e.Modifier
+	c.tab.clickMod = e.Modifier
 	if e.Button == desktop.MouseButtonSecondary {
-		c.app.foundMenu(c.row, e.Position, c)
+		c.tab.foundMenu(c.row, e.Position, c)
 		return
 	}
-	c.app.selectFoundRow(c.app.foundResult(c.row), e.Modifier)
+	c.tab.selectFoundRow(c.tab.foundResult(c.row), e.Modifier)
 }
 
 // foundHeader is a clickable column header that sorts the Found list.
 type foundHeader struct {
 	widget.BaseWidget
-	app  *App
+	tab  *scanTab
 	text *canvas.Text
 	col  int
 }
 
-func (a *App) newFoundHeader() *foundHeader {
-	h := &foundHeader{app: a, text: a.th.monoText("", a.pal().primary)}
+func (a *scanTab) newFoundHeader() *foundHeader {
+	h := &foundHeader{tab: a, text: a.th.monoText("", a.pal().primary)}
 	h.ExtendBaseWidget(h)
 	return h
 }
@@ -291,11 +291,11 @@ func (h *foundHeader) setColor(c color.Color) {
 	h.text.Refresh()
 }
 
-func (h *foundHeader) Tapped(*fyne.PointEvent) { h.app.sortFound(h.col) }
+func (h *foundHeader) Tapped(*fyne.PointEvent) { h.tab.sortFound(h.col) }
 
 // sortFound cycles a column through ascending, descending and unsorted scan
 // order, reordering only the foundOrder view.
-func (a *App) sortFound(col int) {
+func (a *scanTab) sortFound(col int) {
 	if col < 0 || col > 2 {
 		return
 	}
@@ -313,7 +313,7 @@ func (a *App) sortFound(col int) {
 }
 
 // applyFoundSort rebuilds foundOrder from the active sort column.
-func (a *App) applyFoundSort() {
+func (a *scanTab) applyFoundSort() {
 	if a.foundSortCol < 0 {
 		a.foundOrder = identityOrder(len(a.results))
 		return
@@ -330,7 +330,7 @@ func (a *App) applyFoundSort() {
 }
 
 // foundLess orders two results by column: address, live value or previous.
-func (a *App) foundLess(i, j, col int) bool {
+func (a *scanTab) foundLess(i, j, col int) bool {
 	switch col {
 	case 0:
 		return a.results[i].Addr < a.results[j].Addr
@@ -370,7 +370,7 @@ func numericValue(t *scan.Type, v scan.Value) float64 {
 }
 
 // refreshFound repaints the found list.
-func (a *App) refreshFound() {
+func (a *scanTab) refreshFound() {
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}
@@ -378,7 +378,7 @@ func (a *App) refreshFound() {
 
 // selectFoundRow updates the Found-list selection: plain selects one row, Ctrl
 // toggles and Shift selects a contiguous range.
-func (a *App) selectFoundRow(id int, mod fyne.KeyModifier) {
+func (a *scanTab) selectFoundRow(id int, mod fyne.KeyModifier) {
 	if id < 0 || id >= len(a.results) {
 		return
 	}
@@ -417,7 +417,7 @@ func (a *App) selectFoundRow(id int, mod fyne.KeyModifier) {
 }
 
 // isFoundSelected reports whether result id is selected.
-func (a *App) isFoundSelected(id int) bool {
+func (a *scanTab) isFoundSelected(id int) bool {
 	if a.foundMulti != nil && a.foundMulti[id] {
 		return true
 	}
@@ -425,7 +425,7 @@ func (a *App) isFoundSelected(id int) bool {
 }
 
 // selectedFoundIndices returns the selected result indices in order.
-func (a *App) selectedFoundIndices() []int {
+func (a *scanTab) selectedFoundIndices() []int {
 	var out []int
 	if a.foundMulti != nil {
 		for i := range a.results {
@@ -441,7 +441,7 @@ func (a *App) selectedFoundIndices() []int {
 }
 
 // foundTapped handles a plain click: select and browse the address.
-func (a *App) foundTapped(row int) {
+func (a *scanTab) foundTapped(row int) {
 	mod := a.clickMod
 	a.clickMod = 0
 	if mod != 0 {
@@ -451,8 +451,8 @@ func (a *App) foundTapped(row int) {
 }
 
 // foundDoubleTapped adds the double-clicked result to the cheat table, like
-// Cheat Engine.
-func (a *App) foundDoubleTapped(row int) {
+// the reference tool.
+func (a *scanTab) foundDoubleTapped(row int) {
 	idx := a.foundResult(row)
 	if idx < 0 {
 		return
@@ -461,7 +461,7 @@ func (a *App) foundDoubleTapped(row int) {
 }
 
 // foundMenu shows the Found-list context menu for a view row.
-func (a *App) foundMenu(row int, rel fyne.Position, anchor fyne.CanvasObject) {
+func (a *scanTab) foundMenu(row int, rel fyne.Position, anchor fyne.CanvasObject) {
 	idx := a.foundResult(row)
 	if idx < 0 {
 		return
@@ -497,7 +497,7 @@ func (a *App) foundMenu(row int, rel fyne.Position, anchor fyne.CanvasObject) {
 }
 
 // copyFoundAddr puts a result's address on the clipboard.
-func (a *App) copyFoundAddr(idx int) {
+func (a *scanTab) copyFoundAddr(idx int) {
 	if idx < 0 || idx >= len(a.results) {
 		return
 	}
@@ -505,7 +505,7 @@ func (a *App) copyFoundAddr(idx int) {
 }
 
 // copyFoundValue puts a result's current value on the clipboard.
-func (a *App) copyFoundValue(idx int) {
+func (a *scanTab) copyFoundValue(idx int) {
 	if idx < 0 || idx >= len(a.results) {
 		return
 	}
@@ -517,7 +517,7 @@ func (a *App) copyFoundValue(idx int) {
 }
 
 // setFoundDisplay switches the Found list value format.
-func (a *App) setFoundDisplay(d displayFormat) {
+func (a *scanTab) setFoundDisplay(d displayFormat) {
 	a.foundDisplay = d
 	a.refreshFound()
 }
@@ -530,10 +530,11 @@ func (a *App) copySelection() {
 		a.copyTableSelection()
 		return
 	}
-	if a.foundSel < 0 || a.foundSel >= len(a.results) {
+	t := a.tab()
+	if t == nil || t.foundSel < 0 || t.foundSel >= len(t.results) {
 		return
 	}
-	a.copyFoundAddr(a.foundSel)
+	t.copyFoundAddr(t.foundSel)
 }
 
 // pasteSelection handles Ctrl+V: it pastes clipboard addresses into the cheat
@@ -550,7 +551,7 @@ func (a *App) browseFoundAddr(addr uint64) {
 
 // deleteFoundResults drops every selected scan result from the list and the
 // session, so a later Next Scan does not bring them back.
-func (a *App) deleteFoundResults() {
+func (a *scanTab) deleteFoundResults() {
 	sel := a.selectedFoundIndices()
 	if len(sel) == 0 {
 		return
@@ -585,7 +586,7 @@ func (a *App) deleteFoundResults() {
 
 // foundResult maps a display row to a result index. Sorting can reorder
 // foundOrder without touching a.results or the scan session.
-func (a *App) foundResult(row int) int {
+func (a *scanTab) foundResult(row int) int {
 	if row < 0 || row >= len(a.results) {
 		return -1
 	}
@@ -606,7 +607,7 @@ func identityOrder(n int) []int {
 
 // refreshFoundValues re-reads every result's live value and refreshes the
 // module map used to colour static addresses.
-func (a *App) refreshFoundValues() {
+func (a *scanTab) refreshFoundValues() {
 	if a.proc == nil || len(a.results) == 0 {
 		a.foundLive = nil
 		a.foundRegions = nil
@@ -631,7 +632,7 @@ func (a *App) refreshFoundValues() {
 
 // staticInfo reports whether addr belongs to a file-backed module and, if so,
 // its module name and offset from the load base.
-func (a *App) staticInfo(addr uint64) (string, uint64, bool) {
+func (a *scanTab) staticInfo(addr uint64) (string, uint64, bool) {
 	r, ok := mem.RegionFor(a.foundRegions, addr)
 	if !ok || !r.FileBacked() || addr < r.Offset {
 		return "", 0, false
@@ -645,21 +646,22 @@ func (a *App) staticInfo(addr uint64) (string, uint64, bool) {
 }
 
 // isStatic reports whether addr is inside a file-backed module region.
-func (a *App) isStatic(addr uint64) bool {
+func (a *scanTab) isStatic(addr uint64) bool {
 	_, _, ok := a.staticInfo(addr)
 	return ok
 }
 
-func (a *App) foundPanel() fyne.CanvasObject {
+func (a *scanTab) foundPanel() fyne.CanvasObject {
 	head := container.NewHBox(
 		a.th.heading(i18n.T("results.found"), a.th.size+2, a.pal().primary),
+		a.foundCount,
 		layout.NewSpacer(),
 		newHintButton(i18n.T("results.add_to_table"), "results.hint.add_to_table", func() { a.addResultToTable(a.foundSel) }),
 	)
 	return container.NewBorder(head, nil, nil, nil, a.foundList)
 }
 
-func (a *App) selectFound(id int) {
+func (a *scanTab) selectFound(id int) {
 	if id < 0 || id >= len(a.results) {
 		return
 	}
@@ -672,7 +674,7 @@ func (a *App) selectFound(id int) {
 	a.loadMemory(a.results[id].Addr)
 }
 
-func (a *App) setResults(r []scan.Result) {
+func (a *scanTab) setResults(r []scan.Result) {
 	if limit := a.cfg.UI.ResultLimit; limit > 0 && len(r) > limit {
 		r = r[:limit]
 	}
@@ -833,7 +835,7 @@ func (a *App) tableTapped(row, col int) {
 // doubleTapWindow is how close two clicks must be to count as a double-click.
 const doubleTapWindow = 350 * time.Millisecond
 
-// tableDoubleTapped implements Cheat Engine's cell editing: double-clicking the
+// tableDoubleTapped implements the reference tool's cell editing: double-clicking the
 // Description renames the record, and double-clicking the Value opens the
 // change-value form.
 func (a *App) tableDoubleTapped(row, col int) {
@@ -1418,7 +1420,7 @@ func (a *App) refreshEntries() bool {
 }
 
 // resolveEntryAddr recomputes an entry's address from its pointer chain or its
-// stored Cheat Engine expression.
+// stored address expression.
 func (a *App) resolveEntryAddr(e *tableEntry, r symbolResolver, changed *bool) {
 	if e.expr != "" {
 		if addr, err := a.resolveExpression(e, r); err == nil && addr != e.addr {
@@ -1562,7 +1564,7 @@ func parseOffsets(base uint64, s string) (*pointerChain, error) {
 	return &pointerChain{base: base, offsets: offsets}, nil
 }
 
-func (a *App) addResultToTable(i int) {
+func (a *scanTab) addResultToTable(i int) {
 	sel := a.selectedFoundIndices()
 	if len(sel) > 1 {
 		typ := a.foundValueType()
@@ -1608,7 +1610,9 @@ func (a *App) disassembleRow(row int) {
 // changeValueSelected routes Ctrl+E to the selection in the active panel.
 func (a *App) changeValueSelected() {
 	if a.activePanel == panelFound {
-		a.changeFoundValue(a.foundSel)
+		if t := a.tab(); t != nil {
+			t.changeFoundValue(t.foundSel)
+		}
 		return
 	}
 	a.changeSelectedTableValues()
@@ -1653,7 +1657,7 @@ func (a *App) changeSelectedTableValues() {
 	})
 }
 
-// promptValue shows Cheat Engine's single-field Change value dialog.
+// promptValue shows the reference tool's single-field Change value dialog.
 func (a *App) promptValue(current string, onOK func(string)) {
 	entry := widget.NewEntry()
 	entry.SetText(current)
@@ -1672,7 +1676,7 @@ func (a *App) promptValue(current string, onOK func(string)) {
 // changeFoundValue edits a Found scan-result value in place, mirroring Cheat
 // Engine's Ctrl+E on the results list. It writes memory once and updates the
 // row; it does not touch a cheat-table entry for the same address.
-func (a *App) changeFoundValue(i int) {
+func (a *scanTab) changeFoundValue(i int) {
 	sel := a.selectedFoundIndices()
 	if len(sel) > 1 {
 		a.changeFoundValues(sel)
@@ -1711,7 +1715,7 @@ func (a *App) changeFoundValue(i int) {
 }
 
 // changeFoundValues applies one input to every selected Found result.
-func (a *App) changeFoundValues(sel []int) {
+func (a *scanTab) changeFoundValues(sel []int) {
 	typ := a.foundValueType()
 	a.promptValue("", func(input string) {
 		written := 0
@@ -1742,7 +1746,7 @@ func (a *App) changeFoundValues(sel []int) {
 // foundValueType is the type used to parse a Found-list edit: the type
 // selected in the scan panel, falling back to the session's scan type and then
 // the configured default.
-func (a *App) foundValueType() scan.ValueType {
+func (a *scanTab) foundValueType() scan.ValueType {
 	if a.valueType != nil {
 		if t, ok := scan.LookupType(a.valueType.Selected); ok {
 			return t.ID
@@ -1754,7 +1758,7 @@ func (a *App) foundValueType() scan.ValueType {
 	return a.defaultValueType()
 }
 
-// expandValueInput rewrites a Cheat Engine-style change-value input for a cheat
+// expandValueInput rewrites a change-value input for a cheat
 // table row: it substitutes (description) references and the value/oldvalue
 // identifiers, and turns a bare hex entry into 0x form when the row is shown as
 // hexadecimal.
@@ -1776,7 +1780,7 @@ func (a *App) expandValueInput(input string, cur *tableEntry) string {
 
 // expandFoundInput is the Found-list equivalent; its hex handling follows the
 // scan panel's Hex toggle.
-func (a *App) expandFoundInput(input string, i int) string {
+func (a *scanTab) expandFoundInput(input string, i int) string {
 	input = a.substituteDescriptions(input)
 	if d := scan.TypeByID(a.foundValueType()); d != nil && (d.Kind == scan.KindInt || d.Kind == scan.KindFloat) {
 		curText := a.results[i].Value.String()
@@ -1859,7 +1863,7 @@ func valueIdentByte(c byte) bool {
 }
 
 // setChildrenValueDialog prompts once and writes the value to every leaf under
-// a group, matching Cheat Engine's recursive set option.
+// a group, matching the reference tool's recursive set option.
 func (a *App) setChildrenValueDialog(row int) {
 	if row < 0 || row >= len(a.entries) || !a.entries[row].group {
 		return
@@ -2177,24 +2181,13 @@ func (a *App) newTable() {
 	}, a.win)
 }
 
-// resetScanState clears the cheat table, scan session and symbols.
+// resetScanState clears the cheat table, every scan session and the symbols.
 func (a *App) resetScanState() {
 	a.clearTable()
-	a.session = nil
-	a.results = nil
-	a.foundOrder = nil
-	a.foundLive = nil
-	a.foundSel = -1
-	a.foundMulti = nil
 	a.symbols = nil
 	a.dbgBreakpoints = map[uint64]*dbgBreakpoint{}
 	a.refreshBreakpointList()
-	if a.foundList != nil {
-		a.foundList.Refresh()
-	}
-	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
-	a.updateScanTypeOptions()
-	a.updateScanControls()
+	a.resetTabs()
 	a.setStatusText(i18n.T("status.new_table"))
 }
 
@@ -2248,7 +2241,7 @@ func (c *dataCell) MouseDown(e *desktop.MouseEvent) {
 	c.app.selectTableRow(c.row, e.Modifier)
 }
 
-// entryColor returns the row's Cheat Engine colour, or the default text colour.
+// entryColor returns the row's row colour, or the default text colour.
 func (a *App) entryColor(e *tableEntry) color.Color {
 	if c := cheatColor(e.color); c != nil {
 		return c
@@ -2256,7 +2249,7 @@ func (a *App) entryColor(e *tableEntry) color.Color {
 	return a.pal().text
 }
 
-// cheatColor parses a Cheat Engine colour (6 hex digits, TColor $00BBGGRR) into
+// cheatColor parses a row colour (6 hex digits, TColor $00BBGGRR) into
 // an RGBA colour, returning nil for an empty or invalid value.
 func cheatColor(s string) color.Color {
 	s = strings.TrimSpace(s)

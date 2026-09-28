@@ -62,7 +62,7 @@ func (a *App) loadTable() {
 	d.Show()
 }
 
-// reportCEImport surfaces entries that a Cheat Engine conversion could not
+// reportCEImport surfaces entries that a conversion could not
 // represent, so an unsupported table is never imported silently.
 func (a *App) reportCEImport(stats cheattable.ImportStats) {
 	if stats.Skipped == 0 {
@@ -123,7 +123,7 @@ func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 	return node
 }
 
-// splitOffsets parses the comma-separated Cheat Engine offset list.
+// splitOffsets parses the comma-separated offset list.
 func splitOffsets(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -208,7 +208,7 @@ func parseHexLoose(s string) uint64 {
 
 func (a *App) saveTable() { a.saveTableAs() }
 
-// saveTableAsCE exports the cheat table as a Cheat Engine .CT document.
+// saveTableAsCE exports the cheat table as a .CT document.
 func (a *App) saveTableAsCE() {
 	if len(a.entryRoots) == 0 {
 		a.setStatusText(i18n.T("status.nothing_to_save"))
@@ -245,7 +245,8 @@ func (a *App) saveTableAs() {
 }
 
 func (a *App) saveScanResults() {
-	if len(a.results) == 0 {
+	tab := a.tab()
+	if tab == nil || len(tab.results) == 0 {
 		a.setStatusText(i18n.T("status.no_scan_results"))
 		return
 	}
@@ -335,11 +336,14 @@ func entryToStored(e *tableEntry) *cheattable.Entry {
 func (a *App) resultsTable() *cheattable.Table {
 	t := &cheattable.Table{}
 	typ := a.defaultValueType()
-	if a.session != nil {
-		typ = a.session.Options().Type
+	tab := a.tab()
+	if tab != nil && tab.session != nil {
+		typ = tab.session.Options().Type
 	}
-	for _, r := range a.results {
-		t.Add("", fmt.Sprintf("0x%x", r.Addr), typ.String(), r.Value.String())
+	if tab != nil {
+		for _, r := range tab.results {
+			t.Add("", fmt.Sprintf("0x%x", r.Addr), typ.String(), r.Value.String())
+		}
 	}
 	return t
 }

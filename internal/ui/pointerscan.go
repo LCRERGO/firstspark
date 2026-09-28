@@ -32,8 +32,8 @@ func (a *App) showPointerScan() {
 	case a.tableSel >= 0 && a.tableSel < len(a.entries) &&
 		!a.entries[a.tableSel].group && a.entries[a.tableSel].expr == "":
 		target.SetText(fmt.Sprintf("0x%x", a.entries[a.tableSel].addr))
-	case len(a.results) > 0:
-		target.SetText(fmt.Sprintf("0x%x", a.results[0].Addr))
+	case a.tab() != nil && len(a.tab().results) > 0:
+		target.SetText(fmt.Sprintf("0x%x", a.tab().results[0].Addr))
 	}
 	target.SetPlaceHolder(i18n.T("debugger.address_placeholder"))
 	level := widget.NewEntry()

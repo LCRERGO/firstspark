@@ -16,7 +16,7 @@ import (
 
 // showRegionManager lets the user pick the exact regions a scan covers. The
 // selection is kept in memory for the session and cleared on process change.
-func (a *App) showRegionManager() {
+func (a *scanTab) showRegionManager() {
 	if a.proc == nil {
 		a.fail(fmt.Errorf("%s", i18n.T("error.no_process")))
 		return

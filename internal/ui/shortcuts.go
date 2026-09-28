@@ -28,11 +28,19 @@ func matchesShortcut(sc fyne.Shortcut, key fyne.KeyName, mod fyne.KeyModifier) b
 	return ok && cs.KeyName == key && cs.Modifier == mod
 }
 
-// appShortcuts returns the built-in Cheat Engine parity shortcuts. Bare keys
+// appShortcuts returns the built-in feature parity shortcuts. Bare keys
 // (Delete, Enter, Space, F5/F6) cannot be registered here and are handled by
 // the focused widget instead (see cheatTable.TypedKey).
 func (a *App) appShortcuts() []shortcutBinding {
 	return []shortcutBinding{
+		{fyne.KeyT, fyne.KeyModifierControl, a.addScanTab},
+		{fyne.KeyW, fyne.KeyModifierControl, func() {
+			if o := a.tabsWidget.Selected(); o != nil {
+				a.closeScanTab(o)
+			}
+		}},
+		{fyne.KeyTab, fyne.KeyModifierControl, func() { a.cycleTab(1) }},
+		{fyne.KeyTab, fyne.KeyModifierControl | fyne.KeyModifierShift, func() { a.cycleTab(-1) }},
 		{fyne.KeyM, fyne.KeyModifierControl, a.openMemoryViewer},
 		{fyne.KeyB, fyne.KeyModifierControl, func() { a.browseRow(a.tableSel) }},
 		{fyne.KeyD, fyne.KeyModifierControl, func() { a.disassembleRow(a.tableSel) }},
@@ -74,7 +82,7 @@ func (a *App) installShortcuts() {
 		func(fyne.Shortcut) { a.pasteSelection() })
 }
 
-// cheatTable adds the Cheat Engine table key bindings. Fyne delivers bare keys
+// cheatTable adds the .CT table key bindings. Fyne delivers bare keys
 // to the focused widget rather than the shortcut system, so Delete, Enter,
 // Space and the F-keys are handled here.
 type cheatTable struct {

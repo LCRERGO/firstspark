@@ -521,24 +521,12 @@ func (a *App) selectProcessObj(p mem.Process) {
 		a.unrandomOn = false
 	}
 	a.processLabel.SetText(i18n.Tf("process.label", map[string]any{"Name": p.Name, "PID": p.PID}))
-	a.session = nil
-	a.regionSel = nil
-	a.results = nil
-	a.foundOrder = nil
-	a.foundLive = nil
-	a.foundSel = -1
-	a.foundMulti = nil
-	if a.foundList != nil {
-		a.foundList.Refresh()
-	}
-	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": 0}))
 	a.setStatusText(i18n.Tf("status.selected_process", map[string]any{"Name": p.Name, "PID": p.PID}))
-	a.updateScanTypeOptions()
-	a.updateScanControls()
+	a.clearTabSessions()
 }
 
 // autoAttachInterval is how often the auto-attach poller scans /proc. It
-// mirrors PINCE's poller but trades 100 ms for a lower idle cost.
+// polls less often than the UI tick to keep idle cost low.
 const autoAttachInterval = time.Second
 
 // matchAutoAttach returns the first process matching the auto-attach spec.

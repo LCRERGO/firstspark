@@ -384,13 +384,16 @@ func replaceDefinition(defs []customtype.Definition, def customtype.Definition) 
 	return append(defs, def)
 }
 
-// refreshValueTypes rebuilds the Value Type dropdown after a type changes.
+// refreshValueTypes rebuilds every tab's Value Type dropdown after a type
+// changes.
 func (a *App) refreshValueTypes() {
-	if a.valueType == nil {
-		return
+	for _, t := range a.tabs {
+		if t.valueType == nil {
+			continue
+		}
+		t.valueType.Options = valueTypeOptions()
+		t.valueType.Refresh()
 	}
-	a.valueType.Options = valueTypeOptions()
-	a.valueType.Refresh()
 }
 
 // customTypeAlignment returns a custom type's preferred alignment, or 0.

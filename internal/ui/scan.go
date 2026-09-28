@@ -163,10 +163,10 @@ func scanRow(label string, w fyne.CanvasObject) *fyne.Container {
 	return container.NewBorder(nil, nil, scanLabel(label), nil, w)
 }
 
-// scanPanel mirrors Cheat Engine's scan region: the scan buttons at the top,
+// scanPanel mirrors the reference tool's scan region: the scan buttons at the top,
 // the progress bar and status, then the scan value with a Hex checkbox beside
 // it and the scan and value type dropdowns.
-func (a *App) scanPanel() fyne.CanvasObject {
+func (a *scanTab) scanPanel() fyne.CanvasObject {
 	a.scanBtn = newHintButton(i18n.T("scan.first"), "scan.hint.first", a.firstScan)
 	a.nextBtn = newHintButton(i18n.T("scan.next"), "scan.hint.next", a.nextScan)
 	a.undoBtn = newHintButton(i18n.T("scan.undo"), "scan.hint.undo", a.undoScan)
@@ -176,7 +176,7 @@ func (a *App) scanPanel() fyne.CanvasObject {
 	a.scanProgress = newProgressLine()
 	a.scanStatus = widget.NewLabel("")
 
-	// Cheat Engine keeps both value boxes on one row for "Value between".
+	// the reference tool keeps both value boxes on one row for "Value between".
 	a.andLabel = widget.NewLabel(i18n.T("scan.and"))
 	a.valuePair = container.New(flexRow{weights: []float32{1, 0, 1}},
 		a.valueEntry, a.andLabel, a.value2Entry)
@@ -204,11 +204,6 @@ func (a *App) scanPanel() fyne.CanvasObject {
 		a.cowCheck,
 		scanRow(i18n.T("scan.range_label"),
 			container.New(flexRow{weights: []float32{1, 0, 1}}, a.startEntry, widget.NewLabel(i18n.T("scan.range_to")), a.stopEntry)),
-		widget.NewSeparator(),
-		a.speedhack,
-		scanRow(i18n.T("scan.speedhack_scale"), a.speedScale),
-		a.unrandom,
-		scanRow(i18n.T("scan.unrandomizer_value"), a.unrandomVal),
 	)
 	return container.NewVScroll(container.NewPadded(body))
 }
@@ -266,7 +261,7 @@ func parseScope(label string) scan.RegionScope {
 }
 
 // scanAction runs a first scan when no session exists, otherwise a next scan.
-func (a *App) scanAction() {
+func (a *scanTab) scanAction() {
 	if a.session == nil {
 		a.firstScan()
 		return
@@ -274,7 +269,7 @@ func (a *App) scanAction() {
 	a.nextScan()
 }
 
-func (a *App) firstScan() {
+func (a *scanTab) firstScan() {
 	if a.scanning {
 		return
 	}
@@ -291,7 +286,7 @@ func (a *App) firstScan() {
 	a.runScan(scan.NewSession(a.proc, opts), true)
 }
 
-func (a *App) nextScan() {
+func (a *scanTab) nextScan() {
 	if a.scanning {
 		return
 	}
@@ -318,7 +313,7 @@ func (a *App) nextScan() {
 
 // runScan executes a scan on a background goroutine, reporting progress and
 // allowing cancellation.
-func (a *App) runScan(s *scan.Session, first bool) {
+func (a *scanTab) runScan(s *scan.Session, first bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.scanCancel = cancel
 	a.scanning = true
@@ -342,7 +337,7 @@ func (a *App) runScan(s *scan.Session, first bool) {
 	}()
 }
 
-func (a *App) updateScanProgress(p scan.Progress) {
+func (a *scanTab) updateScanProgress(p scan.Progress) {
 	if a.scanProgress != nil {
 		if p.TotalBytes > 0 {
 			a.scanProgress.SetValue(float32(float64(p.ScannedBytes) / float64(p.TotalBytes)))
@@ -359,7 +354,7 @@ func (a *App) updateScanProgress(p scan.Progress) {
 	}
 }
 
-func (a *App) finishScan(s *scan.Session, first bool, err error) {
+func (a *scanTab) finishScan(s *scan.Session, first bool, err error) {
 	a.scanning = false
 	a.scanCancel = nil
 	switch {
@@ -389,7 +384,7 @@ func (a *App) finishScan(s *scan.Session, first bool, err error) {
 	a.updateScanControls()
 }
 
-func (a *App) stopScan() {
+func (a *scanTab) stopScan() {
 	if a.scanCancel != nil {
 		log.Info("scan cancel requested")
 		a.scanCancel()
@@ -409,7 +404,7 @@ func humanBytes(n uint64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-func (a *App) scanOptions() (scan.Options, error) {
+func (a *scanTab) scanOptions() (scan.Options, error) {
 	opts := scan.DefaultOptions()
 	opts.Type = parseCEValueType(a.valueType.Selected)
 	opts.Mode = parseCEScanType(a.scanType.Selected)
@@ -468,17 +463,17 @@ func optionalAddr(s string) (uint64, error) {
 }
 
 // upperText returns the upper bound for a Value-between scan.
-func (a *App) upperText() string {
+func (a *scanTab) upperText() string {
 	return a.hexValue(a.value2Entry.Text)
 }
 
 // valueText returns the scan value, converting a bare hex string to 0x form
 // when the Hex box is checked.
-func (a *App) valueText() string {
+func (a *scanTab) valueText() string {
 	return a.hexValue(a.valueEntry.Text)
 }
 
-func (a *App) hexValue(raw string) string {
+func (a *scanTab) hexValue(raw string) string {
 	s := strings.TrimSpace(raw)
 	if !a.hexBox.Checked {
 		return s
@@ -523,7 +518,7 @@ func isBareHexLiteral(s string) bool {
 	return true
 }
 
-func (a *App) undoScan() {
+func (a *scanTab) undoScan() {
 	if a.scanning {
 		return
 	}

@@ -40,8 +40,8 @@ func (a *App) buildDissect() {
 	case a.tableSel >= 0 && a.tableSel < len(a.entries) &&
 		!a.entries[a.tableSel].group && a.entries[a.tableSel].expr == "":
 		a.dissectBaseEntry.SetText(fmt.Sprintf("0x%x", a.entries[a.tableSel].addr))
-	case len(a.results) > 0:
-		a.dissectBaseEntry.SetText(fmt.Sprintf("0x%x", a.results[0].Addr))
+	case a.tab() != nil && len(a.tab().results) > 0:
+		a.dissectBaseEntry.SetText(fmt.Sprintf("0x%x", a.tab().results[0].Addr))
 	}
 	a.dissectSizeEntry = newHintEntry("dissect.hint.size")
 	a.dissectSizeEntry.SetText("128")

@@ -63,79 +63,83 @@ func TestParseHotkey(t *testing.T) {
 
 func TestFoundCellText(t *testing.T) {
 	a := newTestApp(t)
+	tab := a.tab()
 	cur := scan.NewValue(scan.TypeDword, []byte{42, 0, 0, 0})
 	prev := scan.NewValue(scan.TypeDword, []byte{1, 0, 0, 0})
-	a.results = []scan.Result{
+	tab.results = []scan.Result{
 		{Addr: 0x1000, Value: cur, Previous: prev},
 		{Addr: 0x2000, Value: cur},
 	}
-	a.foundOrder = identityOrder(len(a.results))
+	tab.foundOrder = identityOrder(len(tab.results))
 
-	if got := a.foundCellText(0, 0); got != "0x1000" {
+	if got := tab.foundCellText(0, 0); got != "0x1000" {
 		t.Fatalf("address = %q", got)
 	}
-	if got := a.foundCellText(1, 0); got != cur.String() {
+	if got := tab.foundCellText(1, 0); got != cur.String() {
 		t.Fatalf("value = %q, want %q", got, cur.String())
 	}
-	if got := a.foundCellText(2, 0); got != prev.String() {
+	if got := tab.foundCellText(2, 0); got != prev.String() {
 		t.Fatalf("previous = %q, want %q", got, prev.String())
 	}
-	if got := a.foundCellText(2, 1); got != "-" {
+	if got := tab.foundCellText(2, 1); got != "-" {
 		t.Fatalf("missing previous = %q, want -", got)
 	}
 
 	live := scan.NewValue(scan.TypeDword, []byte{9, 0, 0, 0})
-	a.foundLive = map[int]scan.Value{0: live}
-	if got := a.foundCellText(1, 0); got != live.String() {
+	tab.foundLive = map[int]scan.Value{0: live}
+	if got := tab.foundCellText(1, 0); got != live.String() {
 		t.Fatalf("live value = %q, want %q", got, live.String())
 	}
 }
 
 func TestStaticInfo(t *testing.T) {
 	a := newTestApp(t)
-	a.foundRegions = []mem.Region{
+	tab := a.tab()
+	tab.foundRegions = []mem.Region{
 		{Start: 0x400000, End: 0x500000, Perms: "r-xp", Offset: 0, Path: "/usr/bin/game"},
 		{Start: 0x7f0000000000, End: 0x7f0000001000, Perms: "rw-p", Offset: 0},
 	}
-	name, off, ok := a.staticInfo(0x401234)
+	name, off, ok := tab.staticInfo(0x401234)
 	if !ok || name != "game" || off != 0x1234 {
 		t.Fatalf("staticInfo = %q, %#x, %v", name, off, ok)
 	}
-	if _, _, ok := a.staticInfo(0x7f0000000000); ok {
+	if _, _, ok := tab.staticInfo(0x7f0000000000); ok {
 		t.Fatal("anonymous region should not be static")
 	}
-	if _, _, ok := a.staticInfo(0x999999); ok {
+	if _, _, ok := tab.staticInfo(0x999999); ok {
 		t.Fatal("unmapped address should not be static")
 	}
 }
 
 func TestFoundSort(t *testing.T) {
 	a := newTestApp(t)
-	a.results = []scan.Result{{Addr: 0x30}, {Addr: 0x10}, {Addr: 0x20}}
-	a.applyFoundSort()
+	tab := a.tab()
+	tab.results = []scan.Result{{Addr: 0x30}, {Addr: 0x10}, {Addr: 0x20}}
+	tab.applyFoundSort()
 
-	a.sortFound(0)
-	if a.foundOrder[0] != 1 || a.foundOrder[1] != 2 || a.foundOrder[2] != 0 {
-		t.Fatalf("ascending order = %v", a.foundOrder)
+	tab.sortFound(0)
+	if tab.foundOrder[0] != 1 || tab.foundOrder[1] != 2 || tab.foundOrder[2] != 0 {
+		t.Fatalf("ascending order = %v", tab.foundOrder)
 	}
-	a.sortFound(0)
-	if a.foundOrder[0] != 0 || a.foundOrder[2] != 1 {
-		t.Fatalf("descending order = %v", a.foundOrder)
+	tab.sortFound(0)
+	if tab.foundOrder[0] != 0 || tab.foundOrder[2] != 1 {
+		t.Fatalf("descending order = %v", tab.foundOrder)
 	}
-	a.sortFound(0)
-	if a.foundOrder[0] != 0 || a.foundOrder[1] != 1 || a.foundOrder[2] != 2 {
-		t.Fatalf("cleared order = %v", a.foundOrder)
+	tab.sortFound(0)
+	if tab.foundOrder[0] != 0 || tab.foundOrder[1] != 1 || tab.foundOrder[2] != 2 {
+		t.Fatalf("cleared order = %v", tab.foundOrder)
 	}
 }
 
 func TestFoundDisplayFormat(t *testing.T) {
 	a := newTestApp(t)
+	tab := a.tab()
 	v := scan.NewValue(scan.TypeDword, []byte{0x2A, 0, 0, 0})
-	if got := a.displayFoundValue(v); got != v.String() {
+	if got := tab.displayFoundValue(v); got != v.String() {
 		t.Fatalf("decimal = %q", got)
 	}
-	a.setFoundDisplay(displayHex)
-	if got := a.displayFoundValue(v); got != hexOf(v) {
+	tab.setFoundDisplay(displayHex)
+	if got := tab.displayFoundValue(v); got != hexOf(v) {
 		t.Fatalf("hex = %q, want %q", got, hexOf(v))
 	}
 }
@@ -206,7 +210,7 @@ func TestCloneEntry(t *testing.T) {
 }
 
 func TestCheatColor(t *testing.T) {
-	// Cheat Engine colours are TColor ($00BBGGRR), so 0000FF is red.
+	// row colours are TColor ($00BBGGRR), so 0000FF is red.
 	got := cheatColor("0000FF")
 	if got == nil {
 		t.Fatal("nil colour")
@@ -258,14 +262,15 @@ func TestParseHexLoose(t *testing.T) {
 
 func TestFoundSortByValue(t *testing.T) {
 	a := newTestApp(t)
-	a.results = []scan.Result{
+	tab := a.tab()
+	tab.results = []scan.Result{
 		{Addr: 1, Value: scan.NewValue(scan.TypeDword, []byte{30, 0, 0, 0})},
 		{Addr: 2, Value: scan.NewValue(scan.TypeDword, []byte{10, 0, 0, 0})},
 		{Addr: 3, Value: scan.NewValue(scan.TypeDword, []byte{20, 0, 0, 0})},
 	}
-	a.applyFoundSort()
-	a.sortFound(1)
-	if a.foundOrder[0] != 1 || a.foundOrder[1] != 2 || a.foundOrder[2] != 0 {
-		t.Fatalf("by-value order = %v", a.foundOrder)
+	tab.applyFoundSort()
+	tab.sortFound(1)
+	if tab.foundOrder[0] != 1 || tab.foundOrder[1] != 2 || tab.foundOrder[2] != 0 {
+		t.Fatalf("by-value order = %v", tab.foundOrder)
 	}
 }

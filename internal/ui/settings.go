@@ -193,8 +193,10 @@ func parseSettingFloat(text string, min float64) (float64, bool) {
 func (a *App) applyTheme() {
 	a.th = newTheme(parseFamily(a.cfg.UI.Theme), parseVariant(a.cfg.UI.ThemeVariant), a.cfg.UI.FontSize)
 	a.fapp.Settings().SetTheme(a.th)
-	if a.foundList != nil {
-		a.foundList.Refresh()
+	for _, t := range a.tabs {
+		if t.foundList != nil {
+			t.foundList.Refresh()
+		}
 	}
 	if a.table != nil {
 		a.table.Refresh()

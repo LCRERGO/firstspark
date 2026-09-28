@@ -28,7 +28,7 @@ type hotkeyAction struct {
 	action func()
 }
 
-// hotkeyActions returns the configurable actions, mirroring Cheat Engine's
+// hotkeyActions returns the configurable actions, mirroring the reference tool's
 // Settings ▸ Hotkeys list restricted to what Firstspark implements.
 func (a *App) hotkeyActions() []hotkeyAction {
 	return []hotkeyAction{
@@ -110,18 +110,20 @@ func (a *App) hotkeyCallback(action func()) func() {
 }
 
 func (a *App) setValueType(t scan.ValueType) {
-	if a.valueType == nil {
+	tab := a.tab()
+	if tab == nil || tab.valueType == nil {
 		return
 	}
-	a.valueType.SetSelected(ceValueTypeLabel(t))
+	tab.valueType.SetSelected(ceValueTypeLabel(t))
 }
 
 func (a *App) setScanType(m scan.ScanMode) {
-	if a.scanType == nil {
+	tab := a.tab()
+	if tab == nil || tab.scanType == nil {
 		return
 	}
-	a.scanType.SetSelected(scanTypeLabel(m))
-	a.updateScanControls()
+	tab.scanType.SetSelected(scanTypeLabel(m))
+	tab.updateScanControls()
 }
 
 // adjustSpeedhack changes the scale by ±one delta and re-installs the hooks

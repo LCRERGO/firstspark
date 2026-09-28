@@ -103,7 +103,7 @@ func valueHintKey(t scan.ValueType) string {
 }
 
 // applyHints attaches the static hover hints to the scan controls.
-func (a *App) applyHints() {
+func (a *scanTab) applyHints() {
 	if a.scanType != nil {
 		setHint(a.scanType, i18n.T("scan.hint.scan_type"))
 	}
@@ -118,7 +118,7 @@ func (a *App) applyHints() {
 
 // updateValueHint refreshes the dynamic hint on the scan value boxes to match
 // the selected value type.
-func (a *App) updateValueHint() {
+func (a *scanTab) updateValueHint() {
 	text := i18n.T(valueHintKey(parseCEValueType(a.valueType.Selected)))
 	if a.valueEntry != nil {
 		setHint(a.valueEntry, text)

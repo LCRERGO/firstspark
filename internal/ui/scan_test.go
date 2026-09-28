@@ -9,47 +9,47 @@ import (
 )
 
 func TestScanControlsFollowState(t *testing.T) {
-	a := newTestApp(t)
+	tab := newTestApp(t).tab()
 
-	if !a.scanBtn.Disabled() {
+	if !tab.scanBtn.Disabled() {
 		t.Fatal("First Scan should be disabled without a process")
 	}
-	if !a.nextBtn.Disabled() {
+	if !tab.nextBtn.Disabled() {
 		t.Fatal("Next Scan should be disabled without a session")
 	}
-	if !a.undoBtn.Disabled() {
+	if !tab.undoBtn.Disabled() {
 		t.Fatal("Undo Scan should be disabled without a session")
 	}
-	if !a.value2Entry.Disabled() {
+	if !tab.value2Entry.Disabled() {
 		t.Fatal("the upper bound should be disabled for exact scans")
 	}
-	if a.compareSelect.Disabled() {
+	if tab.compareSelect.Disabled() {
 		t.Fatal("Compare should be enabled for exact scans")
 	}
 
-	if a.value2Entry.Visible() {
+	if tab.value2Entry.Visible() {
 		t.Fatal("the upper bound should be hidden for exact scans")
 	}
-	if a.andLabel.Visible() {
+	if tab.andLabel.Visible() {
 		t.Fatal("the 'and' label should be hidden for exact scans")
 	}
 
-	a.scanType.SetSelected("Value between")
-	if a.value2Entry.Disabled() {
+	tab.scanType.SetSelected("Value between")
+	if tab.value2Entry.Disabled() {
 		t.Fatal("the upper bound should be enabled for between scans")
 	}
-	if !a.value2Entry.Visible() || !a.andLabel.Visible() {
+	if !tab.value2Entry.Visible() || !tab.andLabel.Visible() {
 		t.Fatal("the upper bound and 'and' label should be shown for between scans")
 	}
-	if !a.compareSelect.Disabled() {
+	if !tab.compareSelect.Disabled() {
 		t.Fatal("Compare should be disabled for between scans")
 	}
 
-	a.scanType.SetSelected("Unknown initial value")
-	if !a.valueEntry.Disabled() {
+	tab.scanType.SetSelected("Unknown initial value")
+	if !tab.valueEntry.Disabled() {
 		t.Fatal("the scan value should be disabled for an unknown scan")
 	}
-	if a.value2Entry.Visible() {
+	if tab.value2Entry.Visible() {
 		t.Fatal("the upper bound should be hidden for unknown scans")
 	}
 }
@@ -104,11 +104,11 @@ func TestValuePlaceholder(t *testing.T) {
 }
 
 func TestScanOptionsRejectsOutOfRangeValue(t *testing.T) {
-	a := newTestApp(t)
-	a.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
-	a.valueType.SetSelected(ceValueTypeLabel(scan.TypeDword))
-	a.valueEntry.SetText("4 * (10 ^ 12)")
-	if _, err := a.scanOptions(); err == nil {
+	tab := newTestApp(t).tab()
+	tab.scanType.SetSelected(scanTypeLabel(scan.ModeExact))
+	tab.valueType.SetSelected(ceValueTypeLabel(scan.TypeDword))
+	tab.valueEntry.SetText("4 * (10 ^ 12)")
+	if _, err := tab.scanOptions(); err == nil {
 		t.Fatal("expected an out-of-range error from scanOptions")
 	}
 }

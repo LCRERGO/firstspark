@@ -13,22 +13,23 @@ import (
 
 func TestFoundMultiSelect(t *testing.T) {
 	a := newTestApp(t)
-	a.results = []scan.Result{{Addr: 0x1}, {Addr: 0x2}, {Addr: 0x3}}
+	tab := a.tab()
+	tab.results = []scan.Result{{Addr: 0x1}, {Addr: 0x2}, {Addr: 0x3}}
 
-	a.selectFoundRow(0, 0)
-	if got := a.selectedFoundIndices(); len(got) != 1 || got[0] != 0 {
+	tab.selectFoundRow(0, 0)
+	if got := tab.selectedFoundIndices(); len(got) != 1 || got[0] != 0 {
 		t.Fatalf("plain select = %v", got)
 	}
-	a.selectFoundRow(2, fyne.KeyModifierShift)
-	if got := a.selectedFoundIndices(); len(got) != 3 {
+	tab.selectFoundRow(2, fyne.KeyModifierShift)
+	if got := tab.selectedFoundIndices(); len(got) != 3 {
 		t.Fatalf("shift select = %v", got)
 	}
-	a.selectFoundRow(1, fyne.KeyModifierControl)
-	if got := a.selectedFoundIndices(); len(got) != 2 {
+	tab.selectFoundRow(1, fyne.KeyModifierControl)
+	if got := tab.selectedFoundIndices(); len(got) != 2 {
 		t.Fatalf("ctrl toggle = %v", got)
 	}
-	a.selectFoundRow(1, 0)
-	if got := a.selectedFoundIndices(); len(got) != 1 || got[0] != 1 {
+	tab.selectFoundRow(1, 0)
+	if got := tab.selectedFoundIndices(); len(got) != 1 || got[0] != 1 {
 		t.Fatalf("plain reselect = %v", got)
 	}
 }
