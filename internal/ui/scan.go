@@ -566,7 +566,7 @@ func (a *App) setSpeedhack(on bool) {
 	}
 }
 
-// installSpeedhack attaches, hooks the time functions and detaches.
+// installSpeedhack hooks the target's time functions through the manager.
 func (a *App) installSpeedhack() error {
 	if a.proc == nil {
 		return fmt.Errorf("%s", i18n.T("error.no_process"))
@@ -577,55 +577,28 @@ func (a *App) installSpeedhack() error {
 			scale = f
 		}
 	}
-	be, err := debugger.NewPtrace(a.proc.PID)
-	if err != nil {
+	if a.speedMgr == nil {
+		a.speedMgr = speedhack.NewManager()
+	}
+	if err := a.speedMgr.Install(a.proc.PID, scale); err != nil {
 		return err
 	}
-	defer be.Close()
-	if err := be.Attach(); err != nil {
-		return err
+	for _, w := range a.speedMgr.Warnings() {
+		log.Warn("speedhack symbol skipped", "err", w)
 	}
-	defer be.Detach()
-	for _, sym := range speedhack.DefaultSymbols {
-		h, err := speedhack.Hook(be, a.proc.PID, sym, scale)
-		if err != nil {
-			a.removeSpeedhack()
-			return fmt.Errorf("speedhack: %s: %w", sym, err)
-		}
-		a.speedHooks = append(a.speedHooks, h)
-	}
-	log.Info("speedhack installed", "pid", a.proc.PID, "scale", scale, "hooks", len(a.speedHooks))
+	log.Info("speedhack installed", "pid", a.proc.PID, "scale", scale)
 	return nil
 }
 
-// removeSpeedhack restores the hooked prologues.
+// removeSpeedhack restores the hooked prologues and releases the code caves.
 func (a *App) removeSpeedhack() {
-	if len(a.speedHooks) == 0 {
+	if a.speedMgr == nil || !a.speedMgr.Running() {
 		return
 	}
-	pid := 0
-	if a.proc != nil {
-		pid = a.proc.PID
-		if be, err := debugger.NewPtrace(a.proc.PID); err == nil {
-			if err := be.Attach(); err == nil {
-				for _, h := range a.speedHooks {
-					if err := h.Remove(); err != nil {
-						log.Warn("speedhack hook removal failed", "pid", pid, "err", err)
-					}
-				}
-				if err := be.Detach(); err != nil {
-					log.Debug("speedhack detach failed", "pid", pid, "err", err)
-				}
-			} else {
-				log.Warn("speedhack cleanup re-attach failed", "pid", pid, "err", err)
-			}
-			_ = be.Close()
-		} else {
-			log.Warn("speedhack cleanup skipped, target gone", "pid", pid, "err", err)
-		}
+	if err := a.speedMgr.Remove(); err != nil {
+		log.Warn("speedhack removal failed", "err", err)
 	}
-	log.Info("speedhack removed", "pid", pid)
-	a.speedHooks = nil
+	log.Info("speedhack removed")
 }
 
 // setUnrandomizer installs or removes the constant-return RNG hooks.

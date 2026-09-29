@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 
 	"github.com/LCRERGO/firstspark/internal/i18n"
@@ -18,7 +20,9 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/customtype"
 	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
+	"github.com/LCRERGO/firstspark/pkg/plugin"
 	"github.com/LCRERGO/firstspark/pkg/scan"
+	"github.com/LCRERGO/firstspark/pkg/speedhack"
 )
 
 // Version is the application version.
@@ -41,6 +45,9 @@ func Run(args []string) error {
 	start := fs.String("start", "", "scan range start address (hex)")
 	stop := fs.String("stop", "", "scan range stop address (hex)")
 	export := fs.String("export", "", "export results to a .CT, .json or .yaml file")
+	speedScale := fs.String("speedhack", "", "scale the target's time and sleeps by this factor, then wait")
+	listPlugins := fs.Bool("list-plugins", false, "list plugins and exit")
+	pluginDir := fs.String("plugin-dir", "", "override the plugin directory")
 	logLevel := fs.String("log-level", "", "log level (debug|info|warn|error)")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
@@ -67,7 +74,7 @@ func Run(args []string) error {
 	if logPath == "" {
 		logPath = config.LogPath()
 	}
-	headless := *showList || *pid > 0
+	headless := *showList || *listPlugins || *pid > 0
 	if err := log.Setup(level, logPath, headless || os.Getenv("DISPLAY") == ""); err != nil {
 		fmt.Fprintln(os.Stderr, "firstspark: log:", err)
 	}
@@ -77,8 +84,37 @@ func Run(args []string) error {
 	if *showList {
 		return listProcesses()
 	}
+	if *listPlugins {
+		return listPluginsCmd(cfg, *pluginDir)
+	}
 	if _, err := customtype.LoadAndRegister(config.CustomTypesPath()); err != nil {
 		return err
+	}
+	var proc *mem.Process
+	if *pid > 0 {
+		proc, _ = mem.Find(*pid)
+	}
+	api := plugin.API{Log: func(s string) { log.Info("plugin", "msg", s) }}
+	if proc != nil {
+		api.PID = func() int { return proc.PID }
+		api.Read = proc.Read
+		api.Write = proc.Write
+	}
+	mgr := plugin.NewManager(resolvePluginDir(cfg, *pluginDir), api)
+	mgr.Load(cfg.Plugins.Enabled, false)
+	defer mgr.Close()
+	if *pid > 0 {
+		mgr.Attach(*pid)
+	}
+	if *speedScale != "" {
+		if *pid <= 0 {
+			return fmt.Errorf("--speedhack requires --pid")
+		}
+		scale, err := strconv.ParseFloat(strings.TrimSpace(*speedScale), 64)
+		if err != nil || scale <= 0 {
+			return fmt.Errorf("invalid speedhack scale %q", *speedScale)
+		}
+		return headlessSpeedhack(*pid, scale)
 	}
 	if *pid > 0 {
 		return headlessScan(cfg, *pid, scanFlags{
@@ -104,6 +140,74 @@ func listProcesses() error {
 		fmt.Fprintf(w, "%d\t%d\t%s\t%s\n", p.PID, p.UID, p.Name, cmd)
 	}
 	return w.Flush()
+}
+
+// resolvePluginDir picks the configured plugin directory, then the default.
+func resolvePluginDir(cfg config.Config, override string) string {
+	if override != "" {
+		return override
+	}
+	if cfg.Plugins.Dir != "" {
+		return cfg.Plugins.Dir
+	}
+	return config.PluginsDir()
+}
+
+// listPluginsCmd prints the discovered plugins and whether each is enabled.
+func listPluginsCmd(cfg config.Config, override string) error {
+	dir := resolvePluginDir(cfg, override)
+	dirs, err := plugin.Discover(dir)
+	if err != nil {
+		return err
+	}
+	if len(dirs) == 0 {
+		fmt.Println(i18n.Tf("cli.no_plugins", map[string]any{"Dir": dir}))
+		return nil
+	}
+	enabled := map[string]bool{}
+	for _, id := range cfg.Plugins.Enabled {
+		enabled[id] = true
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tVERSION\tAPI\tENABLED\tPERMISSIONS\tNAME")
+	for _, d := range dirs {
+		m, err := plugin.LoadManifest(d)
+		if err != nil {
+			fmt.Fprintf(w, "?\t\t\t\t\t%s\n", err)
+			continue
+		}
+		perms := make([]string, len(m.Permissions))
+		for i, p := range m.Permissions {
+			perms[i] = string(p)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%v\t%s\t%s\n",
+			m.ID, m.Version, m.API, enabled[m.ID], strings.Join(perms, ","), m.Name)
+	}
+	return w.Flush()
+}
+
+// headlessSpeedhack installs the time-scale hooks on pid and blocks until
+// interrupted, then restores the target.
+func headlessSpeedhack(pid int, scale float64) error {
+	mgr := speedhack.NewManager()
+	if err := mgr.Install(pid, scale); err != nil {
+		return err
+	}
+	for _, w := range mgr.Warnings() {
+		log.Warn("speedhack symbol skipped", "err", w)
+	}
+	log.Info("speedhack installed", "pid", pid, "scale", scale)
+	fmt.Println(i18n.Tf("cli.speedhack_active", map[string]any{"Scale": scale, "PID": pid}))
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	<-sig
+
+	if err := mgr.Remove(); err != nil {
+		log.Warn("speedhack removal failed", "err", err)
+	}
+	fmt.Println(i18n.T("cli.speedhack_removed"))
+	return nil
 }
 
 // scanFlags carries the headless scan command line options.

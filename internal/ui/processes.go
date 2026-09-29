@@ -509,6 +509,9 @@ func (a *App) selectProcessObj(p mem.Process) {
 	a.mu.Unlock()
 	a.watchProcess(p.PID)
 	log.Info("process selected", "pid", p.PID, "name", p.Name)
+	if a.plugins != nil {
+		a.plugins.Attach(p.PID)
+	}
 	if a.speedhack != nil && a.speedhack.Checked {
 		a.setSpeedhack(true)
 	}
@@ -671,6 +674,9 @@ func (a *App) processGone(pid int) {
 	a.mu.Lock()
 	a.proc = nil
 	a.mu.Unlock()
+	if a.plugins != nil {
+		a.plugins.Detach(pid)
+	}
 	if a.dbgSession != nil {
 		if err := a.dbgSession.Detach(); err != nil {
 			log.Debug("detach after process exit failed", "pid", pid, "err", err)

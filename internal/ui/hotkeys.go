@@ -141,14 +141,10 @@ func (a *App) adjustSpeedhack(dir int) {
 	if a.speedScale != nil {
 		a.speedScale.SetText(strconv.FormatFloat(scale, 'g', -1, 64))
 	}
-	if a.speedApplied {
-		a.removeSpeedhack()
-		a.speedApplied = false
-		if err := a.installSpeedhack(); err != nil {
-			log.Warn("speedhack re-install failed", "err", err)
+	if a.speedApplied && a.speedMgr != nil {
+		if err := a.speedMgr.UpdateScale(scale); err != nil {
+			log.Warn("speedhack scale update failed", "err", err)
 			a.fail(err)
-		} else {
-			a.speedApplied = true
 		}
 	}
 	a.setStatusText(i18n.Tf("status.speedhack_scale", map[string]any{"Scale": scale}))

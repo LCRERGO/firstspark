@@ -35,7 +35,9 @@ import (
 	"github.com/LCRERGO/firstspark/pkg/inject"
 	"github.com/LCRERGO/firstspark/pkg/log"
 	"github.com/LCRERGO/firstspark/pkg/mem"
+	"github.com/LCRERGO/firstspark/pkg/plugin"
 	"github.com/LCRERGO/firstspark/pkg/scan"
+	"github.com/LCRERGO/firstspark/pkg/speedhack"
 )
 
 // tableEntry is one row of the cheat table. Entries form a tree: a group holds
@@ -131,8 +133,9 @@ type App struct {
 
 	speedhack    *ttwidget.Check
 	speedScale   *toolTipEntry
-	speedHooks   []*inject.Hook
+	speedMgr     *speedhack.Manager
 	speedApplied bool
+	plugins      *plugin.Manager
 	unrandom     *ttwidget.Check
 	unrandomVal  *toolTipEntry
 	unrandomHook []*inject.Hook
@@ -292,6 +295,14 @@ func Run(cfg config.Config) error {
 		_, err := customtype.LoadAndRegister(config.CustomTypesPath())
 		return err
 	}()
+	a.plugins = plugin.NewManager(resolvePluginDir(cfg), plugin.API{
+		PID:   func() int { return a.targetPID() },
+		Read:  func(addr uint64, size int) ([]byte, error) { return a.pluginRead(addr, size) },
+		Write: func(addr uint64, data []byte) error { return a.pluginWrite(addr, data) },
+		Show:  func(s string) { a.pluginNotify(s) },
+		Log:   func(s string) { log.Info("plugin", "msg", s) },
+	})
+	a.plugins.Load(cfg.Plugins.Enabled, true)
 	a.build()
 	if loadErr != nil {
 		a.fail(loadErr)
@@ -602,7 +613,20 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	autoasmItem := fyne.NewMenuItem(i18n.T("menu.tools.auto_assemble"), a.openAutoAssemble)
 	autoasmItem.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	luaItem := fyne.NewMenuItem(i18n.T("menu.tools.lua"), a.openLuaConsole)
-	tools := fyne.NewMenu(i18n.T("menu.tools"), debuggerItem, dissectItem, autoasmItem, luaItem, speed, hotkeysItem)
+	managePluginsItem := fyne.NewMenuItem(i18n.T("menu.tools.plugins"), a.showPlugins)
+	toolsItems := []*fyne.MenuItem{debuggerItem, dissectItem, autoasmItem, luaItem, speed, hotkeysItem,
+		fyne.NewMenuItemSeparator(), managePluginsItem}
+	if contribs := a.pluginMenuContribs(); len(contribs) > 0 {
+		var actions []*fyne.MenuItem
+		for _, c := range contribs {
+			c := c
+			actions = append(actions, fyne.NewMenuItem(c.Item.Label, func() { a.runPluginAction(c.PluginID, c.Item.Action) }))
+		}
+		sub := fyne.NewMenuItem(i18n.T("menu.tools.plugin_actions"), nil)
+		sub.ChildMenu = fyne.NewMenu("", actions...)
+		toolsItems = append(toolsItems, sub)
+	}
+	tools := fyne.NewMenu(i18n.T("menu.tools"), toolsItems...)
 
 	about := fyne.NewMenuItem(i18n.T("menu.help.about"), a.showAbout)
 	help := fyne.NewMenu(i18n.T("menu.help"), about)
@@ -716,6 +740,8 @@ func (a *App) syncFreezeTargets() {
 // shutdown releases everything bound to the target and stops the background
 // loops when the application quits.
 func (a *App) shutdown() {
+	a.removeSpeedhack()
+	a.speedApplied = false
 	a.stopProcessWatch()
 	if a.stop != nil {
 		close(a.stop)
@@ -735,6 +761,10 @@ func (a *App) shutdown() {
 	if a.hotkeys != nil {
 		a.hotkeys.Close()
 		a.hotkeys = nil
+	}
+	if a.plugins != nil {
+		a.plugins.Close()
+		a.plugins = nil
 	}
 	log.Info("firstspark stopped")
 }
@@ -805,6 +835,9 @@ func (a *App) refreshUI() {
 	}
 	a.syncFreezeTargets()
 	a.runLuaTimers()
+	if a.plugins != nil {
+		a.plugins.Tick(int64(a.cfg.UI.RefreshMS))
+	}
 	if changed && a.table != nil {
 		a.table.Refresh()
 	}
