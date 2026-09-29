@@ -67,6 +67,70 @@ func TestCEExtrasRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCETableMetadataRoundTrip(t *testing.T) {
+	data := []byte(`<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="46">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"hp"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>1000</Address>
+      <Comments>keep me</Comments>
+      <DontSaveValue>1</DontSaveValue>
+    </CheatEntry>
+  </CheatEntries>
+  <UserdefinedSymbols>
+    <SymbolEntry name="pBase" address="1234"/>
+  </UserdefinedSymbols>
+  <LuaScript>print("hi")</LuaScript>
+  <Comments>table note</Comments>
+</CheatTable>`)
+	tbl, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if tbl.LuaScript != `print("hi")` {
+		t.Errorf("LuaScript = %q", tbl.LuaScript)
+	}
+	if tbl.Comments != "table note" {
+		t.Errorf("Comments = %q", tbl.Comments)
+	}
+	if len(tbl.ExtraElements) != 1 || tbl.ExtraElements[0].Name != "UserdefinedSymbols" {
+		t.Fatalf("top-level extras = %+v", tbl.ExtraElements)
+	}
+	if !strings.Contains(tbl.ExtraElements[0].Inner, "SymbolEntry") {
+		t.Errorf("nested markup not preserved: %q", tbl.ExtraElements[0].Inner)
+	}
+	if e := tbl.Entries[0]; e.Comments != "keep me" || !e.DontSaveValue {
+		t.Errorf("entry = %+v", e)
+	}
+
+	out, err := tbl.MarshalCE()
+	if err != nil {
+		t.Fatalf("MarshalCE: %v", err)
+	}
+	for _, want := range []string{"UserdefinedSymbols", "SymbolEntry", "LuaScript", "hi", "table note", "keep me", "DontSaveValue"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("export missing %q:\n%s", want, out)
+		}
+	}
+
+	back, err := Parse(out)
+	if err != nil {
+		t.Fatalf("re-Parse: %v", err)
+	}
+	if back.LuaScript != `print("hi")` || back.Comments != "table note" {
+		t.Errorf("re-import table = %+v", back)
+	}
+	if len(back.ExtraElements) != 1 || !strings.Contains(back.ExtraElements[0].Inner, "SymbolEntry") {
+		t.Errorf("re-import extras = %+v", back.ExtraElements)
+	}
+	if e := back.Entries[0]; e.Comments != "keep me" || !e.DontSaveValue {
+		t.Errorf("re-import entry = %+v", e)
+	}
+}
+
 func TestCECustomTypeFlags(t *testing.T) {
 	body := `
 TypeName:

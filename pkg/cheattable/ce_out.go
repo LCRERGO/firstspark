@@ -3,6 +3,7 @@ package cheattable
 import (
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -14,8 +15,47 @@ const ceSchemaVersion = 45
 // ceOutTable is the .CT document written by MarshalCE.
 type ceOutTable struct {
 	XMLName                 xml.Name `xml:"CheatTable"`
-	CheatEngineTableVersion int      `xml:"CheatEngineTableVersion,attr"`
-	CheatEntries            []ceOut  `xml:"CheatEntries>CheatEntry"`
+	CheatEngineTableVersion int
+	CheatEntries            []ceOut
+	LuaScript               string
+	Comments                string
+	Extras                  []RawElement
+}
+
+// MarshalXML writes the table's top-level elements, keeping unmodelled ones.
+func (d ceOutTable) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
+	start := xml.StartElement{Name: xml.Name{Local: "CheatTable"}}
+	start.Attr = append(start.Attr, xml.Attr{
+		Name:  xml.Name{Local: "CheatEngineTableVersion"},
+		Value: strconv.Itoa(d.CheatEngineTableVersion),
+	})
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	wrap := xml.StartElement{Name: xml.Name{Local: "CheatEntries"}}
+	if err := enc.EncodeToken(wrap); err != nil {
+		return err
+	}
+	for _, e := range d.CheatEntries {
+		if err := enc.Encode(e); err != nil {
+			return err
+		}
+	}
+	if err := enc.EncodeToken(wrap.End()); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "Comments", d.Comments); err != nil {
+		return err
+	}
+	if err := ceElem(enc, "LuaScript", d.LuaScript); err != nil {
+		return err
+	}
+	for _, ex := range d.Extras {
+		if err := ceRawElem(enc, ex.Name, ex.Inner, ex.Text); err != nil {
+			return err
+		}
+	}
+	return enc.EncodeToken(start.End())
 }
 
 // ceOut is one record written by MarshalCE. It marshals itself so
@@ -26,6 +66,7 @@ type ceOut struct {
 	Description     string
 	GroupHeader     int
 	ShowAsHex       int
+	ShowAsBinary    int
 	ShowAsSigned    int
 	Color           string
 	VariableType    string
@@ -36,6 +77,8 @@ type ceOut struct {
 	ByteLength      int
 	CustomType      string
 	AssemblerScript string
+	Comments        string
+	DontSaveValue   int
 	LastState       *ceOutLastState
 	Hotkeys         []ceOutHotkey
 	Extras          []RawElement
@@ -93,6 +136,9 @@ func (o ceOut) encodeChildren(enc *xml.Encoder) error {
 	if err := ceElemInt(enc, "ShowAsHex", o.ShowAsHex); err != nil {
 		return err
 	}
+	if err := ceElemInt(enc, "ShowAsBinary", o.ShowAsBinary); err != nil {
+		return err
+	}
 	if o.ShowAsSigned == 1 {
 		if err := ceElem(enc, "ShowAsSigned", "1"); err != nil {
 			return err
@@ -122,13 +168,19 @@ func (o ceOut) encodeChildren(enc *xml.Encoder) error {
 	if err := ceElem(enc, "AssemblerScript", o.AssemblerScript); err != nil {
 		return err
 	}
+	if err := ceElem(enc, "Comments", o.Comments); err != nil {
+		return err
+	}
+	if err := ceElemInt(enc, "DontSaveValue", o.DontSaveValue); err != nil {
+		return err
+	}
 	if len(o.Hotkeys) > 0 {
 		if err := encodeHotkeys(enc, o.Hotkeys); err != nil {
 			return err
 		}
 	}
 	for _, ex := range o.Extras {
-		if err := ceElem(enc, ex.Name, ex.Text); err != nil {
+		if err := ceRawElem(enc, ex.Name, ex.Inner, ex.Text); err != nil {
 			return err
 		}
 	}
@@ -210,6 +262,36 @@ func encodeHotkeys(enc *xml.Encoder, hks []ceOutHotkey) error {
 	return enc.EncodeToken(wrap.End())
 }
 
+// ceRawElem writes an element Firstspark does not model. When inner is set it
+// is re-parsed and copied through so nested markup survives; otherwise text is
+// written as-is.
+func ceRawElem(enc *xml.Encoder, name, inner, text string) error {
+	start := xml.StartElement{Name: xml.Name{Local: name}}
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+	if inner != "" {
+		dec := xml.NewDecoder(strings.NewReader(inner))
+		for {
+			tok, err := dec.Token()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if err := enc.EncodeToken(tok); err != nil {
+				return err
+			}
+		}
+	} else if text != "" {
+		if err := enc.EncodeToken(xml.CharData(text)); err != nil {
+			return err
+		}
+	}
+	return enc.EncodeToken(start.End())
+}
+
 // ceElem writes <name>text</name> when text is non-empty.
 func ceElem(enc *xml.Encoder, name, text string) error {
 	if text == "" {
@@ -262,6 +344,9 @@ func entryToCE(e *Entry) ceOut {
 	if e.Display == "hex" {
 		out.ShowAsHex = 1
 	}
+	if e.Display == "binary" {
+		out.ShowAsBinary = 1
+	}
 	if e.ShowAsSigned {
 		out.ShowAsSigned = 1
 	}
@@ -285,6 +370,12 @@ func entryToCE(e *Entry) ceOut {
 			out.LastState.RealAddress = strings.TrimPrefix(e.Address, "0x")
 		}
 		out.LastState.Activated = true
+	}
+	if e.Comments != "" {
+		out.Comments = e.Comments
+	}
+	if e.DontSaveValue {
+		out.DontSaveValue = 1
 	}
 	out.Hotkeys = ceHotkeysFromEntry(e)
 	out.Extras = e.ExtraElements
@@ -332,7 +423,12 @@ func parseKeyList(s string) []int {
 
 // MarshalCE renders the table as a .CT document.
 func (t *Table) MarshalCE() ([]byte, error) {
-	doc := ceOutTable{CheatEngineTableVersion: ceSchemaVersion}
+	doc := ceOutTable{
+		CheatEngineTableVersion: ceSchemaVersion,
+		LuaScript:               t.LuaScript,
+		Comments:                t.Comments,
+		Extras:                  t.ExtraElements,
+	}
 	for i := range t.Entries {
 		doc.CheatEntries = append(doc.CheatEntries, entryToCE(&t.Entries[i]))
 	}

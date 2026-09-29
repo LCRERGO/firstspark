@@ -1,6 +1,7 @@
 package cheattable
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"strconv"
@@ -9,8 +10,12 @@ import (
 
 // ceTable mirrors the element-based schema of a .CT file.
 type ceTable struct {
-	XMLName xml.Name  `xml:"CheatTable"`
-	Entries []ceEntry `xml:"CheatEntries>CheatEntry"`
+	XMLName   xml.Name  `xml:"CheatTable"`
+	Version   int       `xml:"CheatEngineTableVersion,attr"`
+	Entries   []ceEntry `xml:"CheatEntries>CheatEntry"`
+	LuaScript string    `xml:"LuaScript"`
+	Comments  string    `xml:"Comments"`
+	Extra     []ceExtra `xml:",any"`
 }
 
 // ceEntry is one record. the format nests children under parents and
@@ -23,6 +28,7 @@ type ceEntry struct {
 	Offsets       []string     `xml:"Offsets>Offset"`
 	GroupHeader   bool         `xml:"GroupHeader"`
 	ShowAsHex     bool         `xml:"ShowAsHex"`
+	ShowAsBinary  bool         `xml:"ShowAsBinary"`
 	ShowAsSigned  bool         `xml:"ShowAsSigned"`
 	Length        int          `xml:"Length"`
 	Unicode       bool         `xml:"Unicode"`
@@ -32,6 +38,8 @@ type ceEntry struct {
 	CustomType    string       `xml:"CustomType"`
 	Script        string       `xml:"AssemblerScript"`
 	Color         string       `xml:"Color"`
+	Comments      string       `xml:"Comments"`
+	DontSaveValue bool         `xml:"DontSaveValue"`
 	LastState     *ceLastState `xml:"LastState"`
 	Hotkeys       []ceHotkey   `xml:"Hotkeys>Hotkey"`
 	Extra         []ceExtra    `xml:",any"`
@@ -56,10 +64,48 @@ type ceHotkey struct {
 	ID            string `xml:"ID"`
 }
 
-// ceExtra captures an unmodelled child element.
+// ceExtra captures an unmodelled child element, keeping its direct text and
+// its inner XML so nested markup survives a round-trip.
 type ceExtra struct {
-	XMLName xml.Name
-	Text    string `xml:",chardata"`
+	Name  string
+	Text  string
+	Inner string
+}
+
+// UnmarshalXML records the element's name, direct text and re-serialized inner
+// XML.
+func (e *ceExtra) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	e.Name = start.Name.Local
+	var buf bytes.Buffer
+	enc := xml.NewEncoder(&buf)
+	depth := 0
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			return err
+		}
+		if end, ok := tok.(xml.EndElement); ok && depth == 0 && end.Name == start.Name {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			if depth == 0 {
+				e.Text += string(t)
+			}
+		}
+		if err := enc.EncodeToken(tok); err != nil {
+			return err
+		}
+	}
+	if err := enc.Flush(); err != nil {
+		return err
+	}
+	e.Inner = buf.String()
+	return nil
 }
 
 // parseCE converts a .CT document into Firstspark's model, preserving
@@ -74,6 +120,9 @@ func parseCE(data []byte) (*Table, error) {
 	t := &Table{Version: SchemaVersion, Stats: ImportStats{Reasons: map[string]int{}}}
 	t.Entries = convertCE(raw.Entries, &t.Stats)
 	t.CustomTypes = extractCustomTypes(raw.Entries)
+	t.LuaScript = raw.LuaScript
+	t.Comments = strings.TrimSpace(raw.Comments)
+	t.ExtraElements = convertExtras(raw.Extra)
 	return t, nil
 }
 
@@ -286,8 +335,11 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 		}
 		leaf := Entry{Description: ceDescription(e.Description), Type: typeName, Children: children}
 		leaf.ShowAsSigned = e.ShowAsSigned
-		if e.ShowAsHex {
+		switch {
+		case e.ShowAsHex:
 			leaf.Display = "hex"
+		case e.ShowAsBinary:
+			leaf.Display = "binary"
 		}
 		applyCEExtras(&leaf, e)
 		switch applyCEAddress(&leaf, e) {
@@ -306,6 +358,8 @@ func convertCE(entries []ceEntry, stats *ImportStats) []Entry {
 // colour, cached last state, hotkeys and unmodelled elements.
 func applyCEExtras(entry *Entry, e *ceEntry) {
 	entry.Color = strings.TrimSpace(e.Color)
+	entry.Comments = strings.TrimSpace(e.Comments)
+	entry.DontSaveValue = e.DontSaveValue
 	if e.LastState != nil {
 		entry.LastAddress = strings.TrimSpace(e.LastState.RealAddress)
 		entry.LastValue = e.LastState.Value
@@ -344,7 +398,11 @@ func convertHotkeys(hks []ceHotkey) []CEHotkey {
 func convertExtras(extras []ceExtra) []RawElement {
 	var out []RawElement
 	for _, e := range extras {
-		out = append(out, RawElement{Name: e.XMLName.Local, Text: strings.TrimSpace(e.Text)})
+		out = append(out, RawElement{
+			Name:  e.Name,
+			Text:  strings.TrimSpace(e.Text),
+			Inner: strings.TrimSpace(e.Inner),
+		})
 	}
 	return out
 }

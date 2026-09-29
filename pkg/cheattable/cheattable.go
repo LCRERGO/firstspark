@@ -60,8 +60,12 @@ type Entry struct {
 	// CEHotkeys preserves hotkeys that have no Firstspark
 	// equivalent, for faithful re-export.
 	CEHotkeys []CEHotkey `xml:"CEHotkeys>CEHotkey,omitempty" json:"ce_hotkeys,omitempty" yaml:"ce_hotkeys,omitempty"`
-	// ExtraElements preserves unmodelled child elements (name and
-	// text), so a re-export keeps them.
+	// Comments is the reference tool's per-entry comment.
+	Comments string `xml:"Comments,attr,omitempty" json:"comments,omitempty" yaml:"comments,omitempty"`
+	// DontSaveValue marks an entry whose value is not written back on export.
+	DontSaveValue bool `xml:"DontSaveValue,attr,omitempty" json:"dont_save_value,omitempty" yaml:"dont_save_value,omitempty"`
+	// ExtraElements preserves unmodelled child elements (name, text and inner
+	// XML), so a re-export keeps them, including nested markup.
 	ExtraElements []RawElement `xml:"ExtraElements>RawElement,omitempty" json:"extra_elements,omitempty" yaml:"extra_elements,omitempty"`
 	// Children are the nested records of a group or script.
 	Children []Entry `xml:"CheatEntries>CheatEntry,omitempty" json:"children,omitempty" yaml:"children,omitempty"`
@@ -78,10 +82,13 @@ type CEHotkey struct {
 	OnlyWhileDown bool   `xml:"OnlyWhileDown,attr,omitempty" json:"only_while_down,omitempty" yaml:"only_while_down,omitempty"`
 }
 
-// RawElement is a child element Firstspark does not model.
+// RawElement is a child element Firstspark does not model. Text holds a
+// text-only element; Inner holds the re-serialized inner XML for elements with
+// nested markup.
 type RawElement struct {
-	Name string `xml:"Name,attr,omitempty" json:"name,omitempty" yaml:"name,omitempty"`
-	Text string `xml:"Text,attr,omitempty" json:"text,omitempty" yaml:"text,omitempty"`
+	Name  string `xml:"Name,attr,omitempty" json:"name,omitempty" yaml:"name,omitempty"`
+	Text  string `xml:"Text,attr,omitempty" json:"text,omitempty" yaml:"text,omitempty"`
+	Inner string `xml:"Inner,attr,omitempty" json:"inner,omitempty" yaml:"inner,omitempty"`
 }
 
 // MarshalXML writes an entry without emitting an empty <CheatEntries> wrapper.
@@ -124,6 +131,8 @@ func (e Entry) MarshalXML(enc *xml.Encoder, _ xml.StartElement) error {
 	set("LastValue", e.LastValue)
 	set("LastAddress", e.LastAddress)
 	boolean("Activated", e.Activated)
+	set("Comments", e.Comments)
+	boolean("DontSaveValue", e.DontSaveValue)
 
 	if err := enc.EncodeToken(start); err != nil {
 		return err
@@ -195,6 +204,13 @@ type Table struct {
 	XMLName xml.Name `xml:"CheatTable" json:"-" yaml:"-"`
 	Version string   `xml:"Version,attr,omitempty" json:"version,omitempty" yaml:"version,omitempty"`
 	Entries []Entry  `xml:"CheatEntries>CheatEntry" json:"entries" yaml:"entries"`
+	// LuaScript is the reference tool's table-wide Lua script.
+	LuaScript string `xml:"LuaScript,omitempty" json:"lua_script,omitempty" yaml:"lua_script,omitempty"`
+	// Comments is the reference tool's table-level comment.
+	Comments string `xml:"Comments,omitempty" json:"comments,omitempty" yaml:"comments,omitempty"`
+	// ExtraElements preserves unmodelled top-level elements (user-defined
+	// symbols, forms, structures and anything else).
+	ExtraElements []RawElement `xml:"ExtraElements>RawElement,omitempty" json:"extra_elements,omitempty" yaml:"extra_elements,omitempty"`
 	// Stats summarises a conversion. It is not serialized.
 	Stats ImportStats `xml:"-" json:"-" yaml:"-"`
 	// CustomTypes lists custom type definitions found in the
