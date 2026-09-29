@@ -70,6 +70,25 @@ func newHintButton(text, key string, tapped func()) *ttwidget.Button {
 	return b
 }
 
+// hintToolbarAction is an icon-only toolbar item that carries a hover hint.
+// It mirrors widget.ToolbarAction's enable/disable API so the toolbar controls
+// the same way.
+type hintToolbarAction struct {
+	button *ttwidget.Button
+}
+
+func newHintToolbarAction(icon fyne.Resource, key string, tapped func()) *hintToolbarAction {
+	b := ttwidget.NewButtonWithIcon("", icon, tapped)
+	b.Importance = widget.LowImportance
+	b.SetToolTip(i18n.T(key))
+	return &hintToolbarAction{button: b}
+}
+
+func (t *hintToolbarAction) ToolbarObject() fyne.CanvasObject { return t.button }
+func (t *hintToolbarAction) Enable()                          { t.button.Enable() }
+func (t *hintToolbarAction) Disable()                         { t.button.Disable() }
+func (t *hintToolbarAction) Disabled() bool                   { return t.button.Disabled() }
+
 // newHintCheck builds a checkbox whose hint is the translated key.
 func newHintCheck(text, key string, changed func(bool)) *ttwidget.Check {
 	c := ttwidget.NewCheck(text, changed)

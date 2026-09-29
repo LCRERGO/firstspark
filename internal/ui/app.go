@@ -141,14 +141,14 @@ type App struct {
 	unrandomHook []*inject.Hook
 	unrandomOn   bool
 
-	openProcAction *widget.ToolbarAction
-	loadAction     *widget.ToolbarAction
-	saveAction     *widget.ToolbarAction
-	saveAsAction   *widget.ToolbarAction
-	memViewAction  *widget.ToolbarAction
-	addAddrAction  *widget.ToolbarAction
-	clearAction    *widget.ToolbarAction
-	settingsAction *widget.ToolbarAction
+	openProcAction *hintToolbarAction
+	loadAction     *hintToolbarAction
+	saveAction     *hintToolbarAction
+	saveAsAction   *hintToolbarAction
+	memViewAction  *hintToolbarAction
+	addAddrAction  *hintToolbarAction
+	clearAction    *hintToolbarAction
+	settingsAction *hintToolbarAction
 
 	dbgWin         fyne.Window
 	dbgSession     *debugger.Session
@@ -411,13 +411,13 @@ func (a *App) updateScanTypeOptions() {
 }
 
 func (a *App) toolbar() *widget.Toolbar {
-	a.openProcAction = widget.NewToolbarAction(theme.ComputerIcon(), a.openProcessList)
-	a.loadAction = widget.NewToolbarAction(theme.FolderOpenIcon(), a.loadTable)
-	a.saveAction = widget.NewToolbarAction(theme.DocumentSaveIcon(), a.saveTable)
-	a.memViewAction = widget.NewToolbarAction(theme.StorageIcon(), a.openMemoryViewer)
-	a.addAddrAction = widget.NewToolbarAction(theme.ContentAddIcon(), a.addAddressDialog)
-	a.clearAction = widget.NewToolbarAction(theme.DeleteIcon(), a.clearTable)
-	a.settingsAction = widget.NewToolbarAction(theme.SettingsIcon(), a.showSettings)
+	a.openProcAction = newHintToolbarAction(theme.ComputerIcon(), "toolbar.hint.open_process", a.openProcessList)
+	a.loadAction = newHintToolbarAction(theme.FolderOpenIcon(), "toolbar.hint.load_table", a.loadTable)
+	a.saveAction = newHintToolbarAction(theme.DocumentSaveIcon(), "toolbar.hint.save_table", a.saveTable)
+	a.memViewAction = newHintToolbarAction(theme.StorageIcon(), "toolbar.hint.memory_viewer", a.openMemoryViewer)
+	a.addAddrAction = newHintToolbarAction(theme.ContentAddIcon(), "toolbar.hint.add_address", a.addAddressDialog)
+	a.clearAction = newHintToolbarAction(theme.DeleteIcon(), "toolbar.hint.clear_table", a.clearTable)
+	a.settingsAction = newHintToolbarAction(theme.SettingsIcon(), "toolbar.hint.settings", a.showSettings)
 	return widget.NewToolbar(
 		a.openProcAction,
 		a.loadAction,
@@ -533,7 +533,7 @@ func setEnabled(w disableable, enabled bool) {
 	}
 }
 
-func setActionEnabled(action *widget.ToolbarAction, enabled bool) {
+func setActionEnabled(action *hintToolbarAction, enabled bool) {
 	if action == nil {
 		return
 	}
