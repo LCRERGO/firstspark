@@ -31,6 +31,9 @@ drifted from it or were unintuitive:
 - **Grouped scan settings** — the value/scan-type/value-type/compare controls
   and the memory-scan options (writable, alignment, region scope, executable,
   copy-on-write, range) sit in one titled card.
+- **Speedhack strip placement** — the shared Speedhack/Unrandomizer controls
+  move from the top of the workspace to the bottom of the scan area, just above
+  the cheat table, like the reference tool.
 - **Cheat-table actions** — Add Address, Change Value, Delete and Clear are
   buttons under the table, in addition to the context menu.
 - **Toolbar grouping** — separators group the process, table-file and tool

@@ -388,15 +388,17 @@ func (a *App) defaultValueType() scan.ValueType {
 }
 
 func (a *App) content() fyne.CanvasObject {
-	workspace := container.NewBorder(a.processStrip(), nil, nil, nil, a.tabsWidget)
+	// The speedhack strip sits at the bottom of the scan area, just above the
+	// cheat table, like the reference tool.
+	workspace := container.NewBorder(nil, a.speedStrip(), nil, nil, a.tabsWidget)
 	body := container.NewVSplit(workspace, a.cheatPanel())
 	body.SetOffset(0.74)
 	bar := container.NewBorder(nil, nil, a.processLabel, a.status, a.progress)
 	return container.NewBorder(a.toolbar(), bar, nil, nil, body)
 }
 
-// processStrip holds the process-wide toggles shared by every scan tab.
-func (a *App) processStrip() fyne.CanvasObject {
+// speedStrip holds the process-wide time-hook toggles shared by every scan tab.
+func (a *App) speedStrip() fyne.CanvasObject {
 	return container.NewHBox(
 		a.speedhack,
 		widget.NewLabel(i18n.T("scan.speedhack_scale")),

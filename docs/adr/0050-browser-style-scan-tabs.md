@@ -19,9 +19,10 @@ way to keep two scans alive at once.
 - **A *scan tab* owns its Found list, its full set of scan controls and one
   `scan.Session`** (options, results, undo history). The cheat table is
   **shared** across tabs: *Add to Table* always appends to the one address list.
-- **Placement.** Tabs sit in the main window's upper region, below a thin
-  shared **process strip** (Speedhack and Unrandomizer, which hook the process,
-  not a scan). The cheat table and status bar stay global. The tab container is
+- **Placement.** Tabs sit in the main window's upper region, above a thin shared
+  **speed strip** (Speedhack and Unrandomizer, which hook the process, not a
+  scan) that sits at the bottom of that region, just above the cheat table, like
+  the reference tool. The cheat table and status bar stay global. The tab container is
   the custom `tabView` of ADR 0053 (Fyne's `DocTabs` exposes no tab-button
   hook).
 - **Lifecycle (browser semantics).** `+` adds a tab, `×` closes one, `Ctrl+T`
