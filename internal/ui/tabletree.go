@@ -172,4 +172,5 @@ func (a *App) resetTree() {
 	a.entryRoots = nil
 	a.entries = nil
 	a.tableSel = -1
+	a.meta = tableMeta{}
 }
