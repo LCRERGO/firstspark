@@ -27,25 +27,36 @@ func TestRatio(t *testing.T) {
 	}
 }
 
-func TestBuildHandler(t *testing.T) {
-	h, err := BuildHandler("clock_gettime", 2.0)
-	if err != nil {
-		t.Fatalf("BuildHandler: %v", err)
-	}
-	if h.TrampSlot <= 0 || h.TrampSlot+8 > len(h.Code) {
-		t.Fatalf("bad trampoline slot %d for %d bytes", h.TrampSlot, len(h.Code))
-	}
-	ins := asm.Disassemble(h.Code, 0)
-	if len(ins) < 10 {
-		t.Fatalf("handler too short: %d instructions", len(ins))
-	}
-	if ins[len(ins)-1].Text != "ret" {
-		t.Errorf("handler does not end in ret: %q", ins[len(ins)-1].Text)
+func TestBuildHandlerEverySymbol(t *testing.T) {
+	symbols := append(append([]string{}, DefaultSymbols...), "usleep", "sleep")
+	for _, sym := range symbols {
+		h, err := BuildHandler(sym, 2.0)
+		if err != nil {
+			t.Fatalf("BuildHandler(%q): %v", sym, err)
+		}
+		if h.TrampSlot <= 0 || h.TrampSlot+8 > len(h.Code) {
+			t.Fatalf("%s: bad trampoline slot %d for %d bytes", sym, h.TrampSlot, len(h.Code))
+		}
+		ins := asm.Disassemble(h.Code, 0)
+		if len(ins) < 6 {
+			t.Fatalf("%s: handler too short: %d instructions", sym, len(ins))
+		}
+		if ins[len(ins)-1].Text != "ret" {
+			t.Errorf("%s: handler does not end in ret: %q", sym, ins[len(ins)-1].Text)
+		}
 	}
 }
 
 func TestBuildHandlerUnknownSymbol(t *testing.T) {
-	if _, err := BuildHandler("time", 2.0); err == nil {
+	if _, err := BuildHandler("frobnicate_time", 2.0); err == nil {
 		t.Error("expected error for unsupported symbol")
+	}
+}
+
+func TestBuildHandlerInvalidScale(t *testing.T) {
+	for _, scale := range []float64{0, -1, 1e-12} {
+		if _, err := BuildHandler("clock_gettime", scale); err == nil {
+			t.Errorf("expected error for scale %v", scale)
+		}
 	}
 }

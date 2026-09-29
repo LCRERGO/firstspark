@@ -66,9 +66,15 @@ func lookupDynSym(f *elf.File, name string) (uint64, bool) {
 		return 0, false
 	}
 	for _, s := range syms {
-		if s.Name == name && s.Section != elf.SHN_UNDEF {
-			return s.Value, true
+		if s.Name != name || s.Section == elf.SHN_UNDEF {
+			continue
 		}
+		// An IFUNC's .dynsym value is its resolver, not the implementation;
+		// those symbols must be reached through the vDSO instead.
+		if elf.ST_TYPE(s.Info) == elf.STT_GNU_IFUNC {
+			continue
+		}
+		return s.Value, true
 	}
 	return 0, false
 }
