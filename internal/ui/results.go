@@ -718,15 +718,14 @@ func (a *App) buildCheatTable() {
 }
 
 func (a *App) cheatPanel() fyne.CanvasObject {
-	head := container.NewBorder(
-		nil, nil,
-		a.th.heading(i18n.T("results.cheat_table"), a.th.size+2, a.pal().primary),
-		container.NewHBox(
-			newHintButton(i18n.T("results.add_address_manually"), "results.hint.add_address", a.addAddressDialog),
-			newHintButton(i18n.T("results.clear_list"), "results.hint.clear", a.clearTable),
-		),
+	head := a.th.heading(i18n.T("results.cheat_table"), a.th.size+2, a.pal().primary)
+	actions := container.NewHBox(
+		newHintButton(i18n.T("results.add_address_manually"), "results.hint.add_address", a.addAddressDialog),
+		newHintButton(i18n.T("menu.change_value"), "results.hint.change_value", a.changeValueSelected),
+		newHintButton(i18n.T("menu.delete"), "results.hint.delete", func() { a.deleteRow(a.tableSel) }),
+		newHintButton(i18n.T("results.clear_list"), "results.hint.clear", a.clearTable),
 	)
-	return container.NewBorder(head, nil, nil, nil, a.table)
+	return container.NewBorder(head, actions, nil, nil, a.table)
 }
 
 func (a *App) newDataCell() *dataCell {

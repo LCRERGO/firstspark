@@ -114,10 +114,11 @@ func (a *App) newScanTab(name string) *scanTab {
 	return t
 }
 
-// workspace is the tab content: the Found list beside the scan panel.
+// workspace is the tab content: the scan panel beside the Found list, matching
+// the reference tool (scan controls on the left, results on the right).
 func (t *scanTab) workspace() fyne.CanvasObject {
-	top := container.NewHSplit(t.foundPanel(), t.scanPanel())
-	top.SetOffset(0.46)
+	top := container.NewHSplit(t.scanPanel(), t.foundPanel())
+	top.SetOffset(0.35)
 	return top
 }
 

@@ -123,6 +123,8 @@ type App struct {
 	themeSystemItem *fyne.MenuItem
 
 	status *widget.Label
+	// progress is the shared scan progress shown in the bottom status bar.
+	progress *progressLine
 
 	tabs       []*scanTab
 	activeTab  int
@@ -344,6 +346,7 @@ func (a *App) build() {
 func (a *App) buildWidgets() {
 	a.processLabel = newTapLabel(i18n.T("app.no_process"), a.openProcessList)
 	a.status = widget.NewLabel("")
+	a.progress = newProgressLine()
 
 	a.speedhack = newHintCheck(i18n.T("app.enable_speedhack"), "scan.hint.speedhack", func(on bool) { a.setSpeedhack(on) })
 	a.speedhack.SetChecked(a.cfg.Speedhack.Enabled)
@@ -388,7 +391,7 @@ func (a *App) content() fyne.CanvasObject {
 	workspace := container.NewBorder(a.processStrip(), nil, nil, nil, a.tabsWidget)
 	body := container.NewVSplit(workspace, a.cheatPanel())
 	body.SetOffset(0.74)
-	bar := container.NewBorder(nil, nil, a.processLabel, a.status)
+	bar := container.NewBorder(nil, nil, a.processLabel, a.status, a.progress)
 	return container.NewBorder(a.toolbar(), bar, nil, nil, body)
 }
 
@@ -431,6 +434,7 @@ func (a *App) toolbar() *widget.Toolbar {
 	a.settingsAction = newHintToolbarAction(theme.SettingsIcon(), "toolbar.hint.settings", a.showSettings)
 	return widget.NewToolbar(
 		a.openProcAction,
+		widget.NewToolbarSeparator(),
 		a.loadAction,
 		a.saveAction,
 		widget.NewToolbarSeparator(),

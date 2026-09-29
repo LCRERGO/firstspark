@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Accepted. The workspace split (scan controls vs Found list sides), progress
+placement and cheat-table action buttons are refined by ADR 0053.
 
 ## Context
 

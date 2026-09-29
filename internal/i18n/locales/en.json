@@ -269,6 +269,8 @@
   "results.clear_list": "Clear List",
   "results.hint.add_to_table": "Add the selected scan result to the cheat table.",
   "results.hint.add_address": "Add an address manually, optionally with pointer offsets.",
+  "results.hint.change_value": "Change the selected record's value.",
+  "results.hint.delete": "Delete the selected record.",
   "results.hint.clear": "Remove every entry from the cheat table.",
   "group.default": "Group",
   "menu.change_value": "Change Value...",

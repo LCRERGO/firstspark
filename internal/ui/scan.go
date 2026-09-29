@@ -173,7 +173,7 @@ func (a *scanTab) scanPanel() fyne.CanvasObject {
 	a.stopBtn = newHintButton(i18n.T("scan.stop"), "scan.hint.stop", a.stopScan)
 	buttons := container.NewHBox(a.scanBtn, a.nextBtn, a.undoBtn, a.stopBtn)
 
-	a.scanProgress = newProgressLine()
+	a.scanProgress = a.App.progress
 	a.scanStatus = widget.NewLabel("")
 
 	// the reference tool keeps both value boxes on one row for "Value between".
@@ -185,17 +185,13 @@ func (a *scanTab) scanPanel() fyne.CanvasObject {
 	a.scopeSelect = newHintSelect(scopeLabels(), "scan.hint.scope", nil)
 	a.scopeSelect.SetSelected(scopeLabel(scan.ScopeAllWritable))
 
-	body := container.NewVBox(
-		a.th.heading(i18n.T("scan.heading"), a.th.size+2, a.pal().primary),
-		buttons,
-		a.scanProgress,
-		a.scanStatus,
+	settings := container.NewVBox(
 		valueRow,
 		scanRow(i18n.T("scan.type_label"), a.scanType),
 		scanRow(i18n.T("scan.value_type_label"), container.NewBorder(nil, nil, nil, newHintButton("…", "scan.hint.custom_types", a.showCustomTypes), a.valueType)),
 		scanRow(i18n.T("scan.compare_label"), a.compareSelect),
-		widget.NewSeparator(),
-		a.th.heading(i18n.T("scan.options_heading"), a.th.size, a.pal().primary),
+	)
+	options := container.NewVBox(
 		a.writable,
 		scanRow(i18n.T("scan.alignment_label"), a.alignEntry),
 		scanRow(i18n.T("scan.region_scope_label"),
@@ -204,6 +200,14 @@ func (a *scanTab) scanPanel() fyne.CanvasObject {
 		a.cowCheck,
 		scanRow(i18n.T("scan.range_label"),
 			container.New(flexRow{weights: []float32{1, 0, 1}}, a.startEntry, widget.NewLabel(i18n.T("scan.range_to")), a.stopEntry)),
+	)
+	card := widget.NewCard(i18n.T("scan.options_heading"), "",
+		container.NewVBox(settings, widget.NewSeparator(), options))
+	body := container.NewVBox(
+		a.th.heading(i18n.T("scan.heading"), a.th.size+2, a.pal().primary),
+		buttons,
+		a.scanStatus,
+		card,
 	)
 	return container.NewVScroll(container.NewPadded(body))
 }

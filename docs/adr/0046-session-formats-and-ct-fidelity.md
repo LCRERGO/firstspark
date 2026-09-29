@@ -41,6 +41,10 @@ also no YAML form, even though YAML is the project's configuration language.
   elements; imported `LastState` gives values for entries that have no `<Value>`.
 - Imported colours are rendered in the cheat table's Description column, and a
   frozen Firstspark record exports as an activated reference-tool `LastState`.
-- Preserved unknown elements keep only their text content; nested markup is
-  flattened because `encoding/xml` cannot re-emit raw markup safely.
+- Preserved unknown elements now keep their text and their re-serialized inner
+  XML (`RawElement.Inner`), so nested markup survives a round-trip instead of
+  being flattened. Table-level metadata (`<LuaScript>`, `<Comments>`, and
+  unknown top-level elements such as `<UserdefinedSymbols>`/`<Forms>`) and the
+  per-entry `<Comments>`/`<ShowAsBinary>`/`<DontSaveValue>` fields round-trip
+  too.
 - Custom-type assembly conversions are preserved but not applied yet.

@@ -97,6 +97,9 @@ Terms used across the codebase, ADRs and UI.
   declarative menu/hotkey contributions (ADR 0052).
 - **Memory Regions browser** — the Memory Viewer window that lists the process
   memory map and jumps to a region (ADR 0043).
+- **Memory Scan Options** — the titled scan-panel card grouping the value,
+  scan-type, value-type and compare controls with the memory filters (writable,
+  alignment, region scope, executable, copy-on-write, range) (ADR 0053).
 - **MI (Machine Interface)** — GDB's machine-readable protocol; the `gdbmi`
   debugger backend drives a gdb child process over it (ADR 0047).
 - **Module** — a file-backed region mapped at offset 0; the debugger lists these
@@ -144,6 +147,8 @@ Terms used across the codebase, ADRs and UI.
 - **Static address** — an address inside a file-backed module region, shown as
   `module+0xoffset` and coloured green in the Found list; any other address is
   dynamic (ADR 0040).
+- **Status bar** — the persistent bottom bar of the main window showing the
+  target process, the shared scan progress and the status text (ADR 0053).
 - **Stop-the-world patch** — pausing every thread of the target for the brief
   window in which a hook prologue is written, so no thread observes a torn
   instruction (ADR 0051).
