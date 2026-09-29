@@ -25,7 +25,7 @@ import (
 type scanTab struct {
 	*App
 
-	item *container.TabItem
+	item *tabItem
 
 	session   *scan.Session
 	regionSel []mem.Region
@@ -110,15 +110,16 @@ func (a *App) newScanTab(name string) *scanTab {
 	t.buildFoundList()
 	t.applyHints()
 
-	t.item = container.NewTabItem(name, t.workspace())
+	t.item = &tabItem{Text: name, Content: t.workspace()}
 	return t
 }
 
-// workspace is the tab content: the scan panel beside the Found list, matching
-// the reference tool (scan controls on the left, results on the right).
+// workspace is the tab content: the Found list beside the memory scan options,
+// matching the reference tool (scanned addresses on the left, scan options on
+// the right).
 func (t *scanTab) workspace() fyne.CanvasObject {
-	top := container.NewHSplit(t.scanPanel(), t.foundPanel())
-	top.SetOffset(0.35)
+	top := container.NewHSplit(t.foundPanel(), t.scanPanel())
+	top.SetOffset(0.65)
 	return top
 }
 
@@ -144,9 +145,9 @@ func (t *scanTab) clearResults() {
 	t.updateScanControls()
 }
 
-// createTab registers a new tab and returns its TabItem. It backs DocTabs'
-// CreateTab hook.
-func (a *App) createTab() *container.TabItem {
+// createTab registers a new tab and returns its item. It backs the tab view's
+// create button.
+func (a *App) createTab() *tabItem {
 	t := a.newScanTab(i18n.Tf("tabs.default_name", map[string]any{"N": a.tabSeq}))
 	a.tabSeq++
 	a.tabs = append(a.tabs, t)
@@ -183,14 +184,12 @@ func (a *App) addScanTab() {
 	if a.tabsWidget == nil {
 		return
 	}
-	item := a.createTab()
-	a.tabsWidget.Append(item)
-	a.tabsWidget.SelectIndex(len(a.tabsWidget.Items) - 1)
+	a.tabsWidget.Append(a.createTab())
 }
 
-// closeScanTab backs DocTabs' CloseIntercept. The last tab is cleared rather
-// than removed, and a tab with results asks for confirmation.
-func (a *App) closeScanTab(item *container.TabItem) {
+// closeScanTab backs the tab view's close button. The last tab is cleared
+// rather than removed, and a tab with results asks for confirmation.
+func (a *App) closeScanTab(item *tabItem) {
 	idx := a.tabIndex(item)
 	if idx < 0 {
 		return
@@ -230,8 +229,8 @@ func (a *App) removeTabAt(idx int) {
 	a.syncActiveTab()
 }
 
-// tabIndex maps a TabItem to its position in the model.
-func (a *App) tabIndex(item *container.TabItem) int {
+// tabIndex maps a tab item to its position in the model.
+func (a *App) tabIndex(item *tabItem) int {
 	for i, t := range a.tabs {
 		if t.item == item {
 			return i
@@ -241,7 +240,7 @@ func (a *App) tabIndex(item *container.TabItem) int {
 }
 
 // onTabSelected makes the clicked tab active and refreshes its live values.
-func (a *App) onTabSelected(item *container.TabItem) {
+func (a *App) onTabSelected(item *tabItem) {
 	idx := a.tabIndex(item)
 	if idx < 0 {
 		return
@@ -271,14 +270,21 @@ func (a *App) cycleTab(dir int) {
 	a.tabsWidget.SelectIndex(((a.activeTab+dir)%n + n) % n)
 }
 
-// renameScanTab prompts for a new tab name.
+// renameScanTab prompts for a new name for the active tab.
 func (a *App) renameScanTab() {
-	t := a.tab()
-	if t == nil {
+	if t := a.tab(); t != nil {
+		a.promptTabName(t.item)
+	}
+}
+
+// promptTabName asks for a new tab name and applies it. It backs both the Scan
+// menu item and a double-click on the tab, like the reference tool.
+func (a *App) promptTabName(item *tabItem) {
+	if item == nil {
 		return
 	}
 	entry := widget.NewEntry()
-	entry.SetText(t.item.Text)
+	entry.SetText(item.Text)
 	d := dialog.NewForm(i18n.T("tabs.rename_title"), i18n.T("action.apply"), i18n.T("action.cancel"),
 		[]*widget.FormItem{widget.NewFormItem(i18n.T("tabs.name"), entry)},
 		func(ok bool) {
@@ -286,7 +292,7 @@ func (a *App) renameScanTab() {
 			if !ok || name == "" {
 				return
 			}
-			t.item.Text = name
+			item.Text = name
 			if a.tabsWidget != nil {
 				a.tabsWidget.Refresh()
 			}
@@ -309,9 +315,7 @@ func (a *App) resetTabs() {
 		return
 	}
 	a.tabsWidget.SetItems(nil)
-	item := a.createTab()
-	a.tabsWidget.Append(item)
-	a.tabsWidget.SelectIndex(0)
+	a.tabsWidget.Append(a.createTab())
 	a.syncActiveTab()
 }
 
@@ -418,7 +422,6 @@ func (a *App) runCompare(active, other *scanTab, op scan.SetOp) {
 	tab.session = scan.NewSessionFromResults(a.proc, active.session.Options(), merged)
 	tab.setResults(merged)
 	a.tabsWidget.Append(item)
-	a.tabsWidget.SelectIndex(len(a.tabs) - 1)
 	a.tabsWidget.Refresh()
 	a.setStatusText(i18n.Tf("status.compare_done", map[string]any{"Count": len(merged)}))
 }

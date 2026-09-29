@@ -129,7 +129,7 @@ type App struct {
 	tabs       []*scanTab
 	activeTab  int
 	tabSeq     int
-	tabsWidget *container.DocTabs
+	tabsWidget *tabView
 
 	entries         []*tableEntry
 	entryRoots      []*tableEntry
@@ -362,14 +362,14 @@ func (a *App) buildWidgets() {
 
 // buildTabs creates the document-tab container and its first scan tab.
 func (a *App) buildTabs() {
-	a.tabsWidget = container.NewDocTabs()
-	a.tabsWidget.CreateTab = func() *container.TabItem { return a.createTab() }
-	a.tabsWidget.CloseIntercept = func(item *container.TabItem) { a.closeScanTab(item) }
-	a.tabsWidget.OnSelected = func(item *container.TabItem) { a.onTabSelected(item) }
+	a.tabsWidget = newTabView()
+	a.tabsWidget.onSelected = a.onTabSelected
+	a.tabsWidget.onClosed = a.closeScanTab
+	a.tabsWidget.onRename = a.promptTabName
+	a.tabsWidget.onCreate = a.addScanTab
 	a.tabSeq = 1
 	first := a.createTab()
 	a.tabsWidget.Append(first)
-	a.tabsWidget.SelectIndex(0)
 }
 
 // tab returns the active scan tab, or nil before the UI is built.
@@ -657,6 +657,7 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	})
 	closeTab.Shortcut = ctrl(fyne.KeyW)
 	renameTab := fyne.NewMenuItem(i18n.T("menu.scan.rename_tab"), a.renameScanTab)
+	renameTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyF2}
 	nextTab := fyne.NewMenuItem(i18n.T("menu.scan.next_tab"), func() { a.cycleTab(1) })
 	nextTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyTab, Modifier: fyne.KeyModifierControl}
 	prevTab := fyne.NewMenuItem(i18n.T("menu.scan.previous_tab"), func() { a.cycleTab(-1) })

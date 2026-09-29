@@ -39,6 +39,7 @@ func (a *App) appShortcuts() []shortcutBinding {
 				a.closeScanTab(o)
 			}
 		}},
+		{fyne.KeyF2, 0, a.renameScanTab},
 		{fyne.KeyTab, fyne.KeyModifierControl, func() { a.cycleTab(1) }},
 		{fyne.KeyTab, fyne.KeyModifierControl | fyne.KeyModifierShift, func() { a.cycleTab(-1) }},
 		{fyne.KeyM, fyne.KeyModifierControl, a.openMemoryViewer},

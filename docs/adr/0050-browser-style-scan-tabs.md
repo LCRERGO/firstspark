@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Accepted. The tab container is a custom `tabView` as of ADR 0053, which adds
+double-click rename; the lifecycle and semantics below are unchanged.
 
 ## Context
 
@@ -21,11 +22,11 @@ way to keep two scans alive at once.
 - **Placement.** Tabs sit in the main window's upper region, below a thin
   shared **process strip** (Speedhack and Unrandomizer, which hook the process,
   not a scan). The cheat table and status bar stay global. The tab container is
-  `container.DocTabs`, whose native `CreateTab`/close/`CloseIntercept` hooks
-  match the lifecycle below.
+  the custom `tabView` of ADR 0053 (Fyne's `DocTabs` exposes no tab-button
+  hook).
 - **Lifecycle (browser semantics).** `+` adds a tab, `×` closes one, `Ctrl+T`
-  opens, `Ctrl+W` closes, `Ctrl+Tab`/`Ctrl+Shift+Tab` cycle; tabs are renamed
-  from the Scan menu (Fyne's `DocTabs` exposes no per-tab double-click hook);
+  opens, `Ctrl+W` closes, `Ctrl+Tab`/`Ctrl+Shift+Tab` cycle; tabs are renamed by
+  double-clicking the tab (or `F2`, or Scan ▸ Rename Tab);
   tabs auto-name `Scan 1`, `Scan 2`, …; there is always at least one tab;
   closing a tab that holds results asks for confirmation.
 - **Per-tab scan state.** Value, value type, scan type, compare, hex,
@@ -58,8 +59,7 @@ way to keep two scans alive at once.
 - ADR 0009 reserved `Ctrl+T` for "add scan tab"; it is now bound. `Ctrl+W` and
   `Ctrl+Tab` are browser-style additions with no reference-tool equivalent.
 - A tab can originate from a scan or from a scan-tab compare.
-- Renaming is a Scan-menu action rather than tab double-click, because Fyne's
-  `DocTabs` does not expose per-tab pointer events; a custom tab bar would be
-  needed to change that.
+- Renaming is available from the tab itself (double-click), `F2` and the Scan
+  menu, via the custom `tabView` (ADR 0053).
 - `pkg/scan` gains a compare helper and a results-seeding constructor; the scan
   hot path is unchanged.
