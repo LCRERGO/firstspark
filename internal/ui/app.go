@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -146,6 +147,9 @@ type App struct {
 
 	speedhack    *ttwidget.Check
 	speedScale   *toolTipEntry
+	speedSlider  *ttwidget.Slider
+	speedApply   *ttwidget.Button
+	speedBox     *fyne.Container
 	speedMgr     *speedhack.Manager
 	speedApplied bool
 	plugins      *plugin.Manager
@@ -351,7 +355,23 @@ func (a *App) buildWidgets() {
 	a.speedhack = newHintCheck(i18n.T("app.enable_speedhack"), "scan.hint.speedhack", func(on bool) { a.setSpeedhack(on) })
 	a.speedhack.SetChecked(a.cfg.Speedhack.Enabled)
 	a.speedScale = newHintEntry("scan.hint.speedhack_scale")
-	a.speedScale.SetText(strconv.FormatFloat(a.cfg.Speedhack.Scale, 'g', -1, 64))
+	a.speedScale.SetText(formatSpeed(a.cfg.Speedhack.Scale))
+	a.speedSlider = newHintSlider()
+	a.speedSlider.Value = float64(nearestSpeedStep(a.cfg.Speedhack.Scale))
+	a.speedSlider.OnChanged = func(v float64) {
+		a.speedScale.SetText(formatSpeed(speedStep(int(v + 0.5))))
+	}
+	a.speedSlider.OnChangeEnded = func(float64) { a.applySpeedScale() }
+	a.speedApply = newHintButton(i18n.T("scan.apply"), "scan.hint.speedhack_apply", a.applySpeedScale)
+	a.speedBox = container.NewVBox(
+		widget.NewLabel(i18n.T("scan.speed_label")),
+		a.speedScale,
+		a.speedSlider,
+		a.speedApply,
+	)
+	if !a.cfg.Speedhack.Enabled {
+		a.speedBox.Hide()
+	}
 	a.unrandom = newHintCheck(i18n.T("scan.unrandomizer"), "scan.hint.unrandomizer", func(on bool) { a.setUnrandomizer(on) })
 	a.unrandomVal = newHintEntry("scan.hint.unrandomizer_value")
 	a.unrandomVal.SetText("0")
@@ -388,25 +408,24 @@ func (a *App) defaultValueType() scan.ValueType {
 }
 
 func (a *App) content() fyne.CanvasObject {
-	// The speedhack strip sits at the bottom of the scan area, just above the
-	// cheat table, like the reference tool.
-	workspace := container.NewBorder(nil, a.speedStrip(), nil, nil, a.tabsWidget)
+	// The process-wide time hooks sit in a right-hand column under the scan
+	// options, like the reference tool.
+	speed := container.NewHBox(layout.NewSpacer(), a.speedhackControls())
+	workspace := container.NewBorder(nil, speed, nil, nil, a.tabsWidget)
 	body := container.NewVSplit(workspace, a.cheatPanel())
 	body.SetOffset(0.74)
 	bar := container.NewBorder(nil, nil, a.processLabel, a.status, a.progress)
 	return container.NewBorder(a.toolbar(), bar, nil, nil, body)
 }
 
-// speedStrip holds the process-wide time-hook toggles shared by every scan tab.
-func (a *App) speedStrip() fyne.CanvasObject {
-	return container.NewHBox(
+// speedhackControls mirrors the reference tool's right-column controls:
+// the Unrandomizer toggle, the Enable Speedhack checkbox and, under it, the
+// speed box (value, slider and Apply).
+func (a *App) speedhackControls() fyne.CanvasObject {
+	return container.NewVBox(
+		container.NewBorder(nil, nil, a.unrandom, container.NewGridWrap(fyne.NewSize(80, 34), a.unrandomVal), nil),
 		a.speedhack,
-		widget.NewLabel(i18n.T("scan.speedhack_scale")),
-		container.NewGridWrap(fyne.NewSize(70, 34), a.speedScale),
-		widget.NewSeparator(),
-		a.unrandom,
-		widget.NewLabel(i18n.T("scan.unrandomizer_value")),
-		container.NewGridWrap(fyne.NewSize(90, 34), a.unrandomVal),
+		a.speedBox,
 	)
 }
 

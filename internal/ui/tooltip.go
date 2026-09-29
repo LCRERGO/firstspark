@@ -70,6 +70,13 @@ func newHintButton(text, key string, tapped func()) *ttwidget.Button {
 	return b
 }
 
+// newHintSlider builds the speedhack speed slider, a tooltip-enabled trackbar.
+func newHintSlider() *ttwidget.Slider {
+	s := ttwidget.NewSlider(0, float64(len(speedSteps)-1))
+	s.SetToolTip(i18n.T("scan.hint.speedhack_slider"))
+	return s
+}
+
 // hintToolbarAction is an icon-only toolbar item that carries a hover hint.
 // It mirrors widget.ToolbarAction's enable/disable API so the toolbar controls
 // the same way.

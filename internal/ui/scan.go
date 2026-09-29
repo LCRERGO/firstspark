@@ -543,6 +543,13 @@ func (a *App) toggleSpeedhack() {
 // setSpeedhack installs or removes the time-scaling hooks on the selected
 // process. It is driven by the checkbox and the Tools menu.
 func (a *App) setSpeedhack(on bool) {
+	if a.speedBox != nil {
+		if on {
+			a.speedBox.Show()
+		} else {
+			a.speedBox.Hide()
+		}
+	}
 	if on == a.speedApplied {
 		return
 	}
@@ -565,6 +572,74 @@ func (a *App) setSpeedhack(on bool) {
 			a.cfg.Speedhack.Scale = f
 		}
 	}
+	if err := a.cfg.Save(config.DefaultPath()); err != nil {
+		log.Warn("saving speedhack config failed", "err", err)
+	}
+}
+
+// speedSteps are the reference tool's slider positions for the speedhack, from
+// pause to 500x.
+var speedSteps = []float64{0, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500}
+
+func speedStep(pos int) float64 {
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(speedSteps) {
+		pos = len(speedSteps) - 1
+	}
+	return speedSteps[pos]
+}
+
+// nearestSpeedStep returns the slider position closest to scale.
+func nearestSpeedStep(scale float64) int {
+	best, bestDiff := 3, 0.0
+	for i, s := range speedSteps {
+		if s <= 0 {
+			continue
+		}
+		d := s - scale
+		if d < 0 {
+			d = -d
+		}
+		if bestDiff == 0 || d < bestDiff {
+			bestDiff, best = d, i
+		}
+	}
+	return best
+}
+
+// formatSpeed renders a speed the way the reference tool's Speed box does.
+func formatSpeed(scale float64) string {
+	if scale >= 1 {
+		return strconv.FormatFloat(scale, 'f', 0, 64)
+	}
+	return strconv.FormatFloat(scale, 'f', 2, 64)
+}
+
+// applySpeedScale reads the Speed box and updates the hooks in place when the
+// speedhack is active. It backs the slider release and the Apply button.
+func (a *App) applySpeedScale() {
+	if a.speedScale == nil {
+		return
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(a.speedScale.Text), 64)
+	if err != nil || f <= 0 {
+		a.fail(fmt.Errorf("%s", i18n.T("error.invalid_speed")))
+		return
+	}
+	a.cfg.Speedhack.Scale = f
+	if a.speedSlider != nil {
+		a.speedSlider.Value = float64(nearestSpeedStep(f))
+		a.speedSlider.Refresh()
+	}
+	if a.speedApplied && a.speedMgr != nil {
+		if uerr := a.speedMgr.UpdateScale(f); uerr != nil {
+			log.Warn("speedhack scale update failed", "err", uerr)
+			a.fail(uerr)
+		}
+	}
+	a.setStatusText(i18n.Tf("status.speedhack_scale", map[string]any{"Scale": f}))
 	if err := a.cfg.Save(config.DefaultPath()); err != nil {
 		log.Warn("saving speedhack config failed", "err", err)
 	}

@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -139,7 +138,11 @@ func (a *App) adjustSpeedhack(dir int) {
 	}
 	a.cfg.Speedhack.Scale = scale
 	if a.speedScale != nil {
-		a.speedScale.SetText(strconv.FormatFloat(scale, 'g', -1, 64))
+		a.speedScale.SetText(formatSpeed(scale))
+	}
+	if a.speedSlider != nil {
+		a.speedSlider.Value = float64(nearestSpeedStep(scale))
+		a.speedSlider.Refresh()
 	}
 	if a.speedApplied && a.speedMgr != nil {
 		if err := a.speedMgr.UpdateScale(scale); err != nil {
