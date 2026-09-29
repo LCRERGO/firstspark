@@ -23,6 +23,9 @@ Terms used across the codebase, ADRs and UI.
   writes it and Shift-click extends a selection (ADR 0043).
 - **Call stack** — the best-effort frame-pointer unwind shown in the debugger,
   with each return address disassembled (ADR 0044).
+- **Capability** — a named group of host functions a plugin must be granted
+  before use: `memory_read`, `memory_write`, `hooking`, `scan` or `ui`. Enabling
+  a plugin grants the capabilities its manifest requests (ADR 0052).
 - **Reference-tool core Lua API** — the bounded subset of the reference tool's Lua table-object
   model Firstspark implements for scripts (`AddressList`, `MemoryRecord`,
   `Memscan`, `Process`, memory helpers, timers); GUI and OS-integration units
@@ -56,6 +59,9 @@ Terms used across the codebase, ADRs and UI.
   appended as a new root; created from the context menu (ADR 0042).
 - **Executable filter** — the scan option that keeps only executable regions,
   only non-executable regions, or any (ADR 0041).
+- **Extension point** — an engine seam a plugin or feature can register into:
+  the value-type registry, the hook-symbol registry and the UI action/menu
+  registry (ADR 0052).
 - **First value** — the value an address held during the initial scan, kept on
   the result so *Same as first scan* can compare against it (ADR 0041).
 - **Follow pointer** — reading a qword at the Memory Viewer cursor and jumping to
@@ -74,6 +80,9 @@ Terms used across the codebase, ADRs and UI.
   values, written `4:75 4:* 4:100`, where `*` is a wildcard (ADR 0041).
 - **Hardware watchpoint** — a data breakpoint implemented with the x86 debug
   registers DR0–DR3 (`pkg/debugger/hardware.go`).
+- **Hook symbol** — a libc or vDSO function a plugin or the speedhack asks the
+  engine to inline-hook through the safe patcher, rather than installing the hook
+  itself (`pkg/inject`; ADR 0051, ADR 0052).
 - **Inline hook** — overwriting a function prologue with a jump into a code cave
   (`pkg/inject`).
 - **Instruction trace** — a bounded single-step log of RIP and registers in the
@@ -83,6 +92,9 @@ Terms used across the codebase, ADRs and UI.
   row is re-read on the 500 ms UI tick, as are the Found results (ADR 0040).
 - **Lua Engine** — the console window that evaluates Lua chunks against the
   shared `pkg/celua` runtime; `print` writes to its output log (ADR 0045).
+- **Manifest** — the `plugin.yaml` file describing a plugin's id, version,
+  plugin-API version, entry file, requested capabilities, lifecycle hooks and
+  declarative menu/hotkey contributions (ADR 0052).
 - **Memory Regions browser** — the Memory Viewer window that lists the process
   memory map and jumps to a region (ADR 0043).
 - **MI (Machine Interface)** — GDB's machine-readable protocol; the `gdbmi`
@@ -94,6 +106,15 @@ Terms used across the codebase, ADRs and UI.
 - **Pointer scan** — searching for a chain of pointers, starting at a module or
   static address, that resolves to a target address.
 - **PIE** — position-independent executable; its load base moves with ASLR.
+- **Plugin** — a sandboxed Lua bundle loaded from the plugins directory, with a
+  manifest and optional lifecycle callbacks; it can extend scanning, value types
+  and hooking but has no filesystem, network or subprocess access (ADR 0052).
+- **Plugin API (`firstspark.*`)** — the versioned Lua surface a plugin uses to
+  read and write target memory, drive scans, register value types, install hooks
+  and log, gated by the plugin's granted capabilities (ADR 0052).
+- **Plugin lifecycle callback** — an optional function in a plugin's entry file
+  invoked by the host: `on_load`, `on_unload`, `on_attach`, `on_detach`,
+  `on_tick` or `on_scan` (ADR 0052).
 - **Previous value** — the value a Found-list address held in the scan before
   the latest one; empty after a first scan (ADR 0040).
 - **Record type** — the value type of a cheat-table entry; it can be changed in
@@ -114,11 +135,18 @@ Terms used across the codebase, ADRs and UI.
 - **Signed/unsigned display** — whether an integer cheat-table entry is
   formatted as signed; toggled per record and persisted in `.CT`/JSON
   (ADR 0042).
-- **Speedhack** — scaling a process's perceived time by hooking the libc time
-  functions (`pkg/speedhack`).
+- **Speedhack** — scaling a process's perceived time and sleeps, primarily by
+  hooking the per-process vDSO time getters with libc `.dynsym` as fallback
+  (`pkg/speedhack`; ADR 0051).
+- **Speedhack manager** — the `pkg/speedhack` component that owns installing,
+  updating and removing time hooks for the current target; used by the CLI, the
+  GUI and plugins (ADR 0051).
 - **Static address** — an address inside a file-backed module region, shown as
   `module+0xoffset` and coloured green in the Found list; any other address is
   dynamic (ADR 0040).
+- **Stop-the-world patch** — pausing every thread of the target for the brief
+  window in which a hook prologue is written, so no thread observes a torn
+  instruction (ADR 0051).
 - **Symbol** — a named address registered by an Auto Assembler/Lua script (for
   example `pSelectedCharacter`); cheat-table address expressions resolve against
   the symbol table (ADR 0037).
@@ -128,4 +156,8 @@ Terms used across the codebase, ADRs and UI.
   `Ctrl+Z` restores it and moves the frozen value when the entry is frozen.
 - **Unrandomizer** — hooking libc `rand`/`random`/`rand_r` to return a constant
   so randomised values become predictable (ADR 0045).
+- **vDSO hook** — an inline hook installed in the target's per-process `[vdso]`
+  mapping; the speedhack's primary interception point for `clock_gettime`,
+  `gettimeofday` and `time`, since it also covers static and musl targets
+  (ADR 0051).
 - **Watchpoint** — see *Hardware watchpoint*.

@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Accepted. The speedhack's symbol-interception strategy is superseded by
+ADR 0051.
 
 ## Context
 

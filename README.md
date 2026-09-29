@@ -32,9 +32,10 @@ or GDB runtime dependency.
 | Disassembler (pure Go, `x86asm`) | implemented |
 | Assembler (pure-Go Intel syntax, common subset) | implemented |
 | Inline trampoline hooking + remote `mmap`/`mprotect` | implemented |
-| Speedhack (`clock_gettime`, `gettimeofday`), wired to the UI | implemented (experimental) |
+| Speedhack (vDSO-first clock and sleep scaling), UI and CLI | implemented |
 | Unrandomizer (constant `rand`/`random`/`rand_r` hooks) | implemented |
 | Lua Engine console (`pkg/celua`) | implemented |
+| Plugin system (sandboxed Lua, manifests, capabilities) | implemented (engine, CLI, GUI manager) |
 | Remote function calls (int/float/double arguments) | implemented |
 | Internationalization (go-i18n catalogs, `ui.language`) | implemented |
 | Auto-attach to a process by name | implemented |
@@ -179,8 +180,14 @@ See [`docs/architecture.md`](docs/architecture.md) for details.
 
 ## Notes and limitations
 
-- **vDSO**: `clock_gettime`/`gettimeofday` may be served by the vDSO; the
-  speedhack hooks the libc symbols, so direct vDSO calls bypass it.
+- **Speedhack**: hooks the vDSO time getters first (covering static and musl
+  targets), falling back to libc `.dynsym`, and scales sleeps through
+  `clock_nanosleep` (relative and absolute deadlines; glibc's `nanosleep`,
+  `usleep` and `sleep` all funnel through it). Prologues with RIP-relative
+  operands or relative branches are relocated into the trampoline, widening
+  rel8 branches. Raw `syscall(SYS_clock_gettime)` callers and `poll`/`select`
+  timeouts are out of scope. Patching freezes every thread of the target for
+  the brief window.
 - **Assembler**: the pure-Go encoder covers the instruction subset needed for
   patching and trampolines. Unsupported mnemonics return an error; the raw byte
   path is always available.
