@@ -85,7 +85,7 @@ staged/packaged installs, e.g. `make install PREFIX=$HOME/.local` or
 ### GUI
 
 ```sh
-bin/firstspark
+firstspark
 ```
 
 The window follows the reference-tool layout: browser-style **scan tabs** at the
@@ -120,12 +120,12 @@ top, a **cheat table** below a splitter, and separate **Memory Viewer** and
 ### Headless
 
 ```sh
-bin/firstspark --list                       # list processes
-bin/firstspark --pid 1234 --type dword --mode exact --value 1000
-bin/firstspark --pid 1234 --type dword --mode unknown --next increased
-bin/firstspark --pid 1234 --type dword --mode between --value 0 --value2 100
-bin/firstspark --pid 1234 --type grouped --value "4:75 4:* 4:100"
-bin/firstspark --pid 1234 --type dword --mode exact --value 42 --export run.CT
+firstspark --list                       # list processes
+firstspark --pid 1234 --type dword --mode exact --value 1000
+firstspark --pid 1234 --type dword --mode unknown --next increased
+firstspark --pid 1234 --type dword --mode between --value 0 --value2 100
+firstspark --pid 1234 --type grouped --value "4:75 4:* 4:100"
+firstspark --pid 1234 --type dword --mode exact --value 42 --export run.CT
 ```
 
 ### Configuration
