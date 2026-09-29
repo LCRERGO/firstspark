@@ -23,6 +23,7 @@ type settingsWidgets struct {
 	snapshot, epsilon          *widget.Entry
 	gdbPath, autoAttach        *widget.Entry
 	writable, icons, autoRegex *widget.Check
+	runScripts                 *widget.Check
 }
 
 // newSettingsWidgets builds and seeds the Settings controls.
@@ -51,6 +52,7 @@ func (a *App) newSettingsWidgets() *settingsWidgets {
 		icons:      widget.NewCheck(i18n.T("settings.show_process_icons"), nil),
 		autoAttach: widget.NewEntry(),
 		autoRegex:  widget.NewCheck(i18n.T("settings.auto_attach_regex"), nil),
+		runScripts: widget.NewCheck(i18n.T("settings.run_scripts_on_import"), nil),
 	}
 	s.famSel.SetSelected(familyLabel(parseFamily(a.cfg.UI.Theme)))
 	s.varSel.SetSelected(variantLabel(parseVariant(a.cfg.UI.ThemeVariant)))
@@ -75,6 +77,7 @@ func (a *App) newSettingsWidgets() *settingsWidgets {
 	s.autoAttach.SetText(a.cfg.Process.AutoAttach)
 	s.autoAttach.SetPlaceHolder(i18n.T("settings.auto_attach_placeholder"))
 	s.autoRegex.SetChecked(a.cfg.Process.AutoAttachRegex)
+	s.runScripts.SetChecked(a.cfg.Scan.RunScriptsOnImport)
 	return s
 }
 
@@ -99,6 +102,7 @@ func (s *settingsWidgets) form() *widget.Form {
 		widget.NewFormItem(i18n.T("settings.process_list"), s.icons),
 		widget.NewFormItem(i18n.T("settings.auto_attach"), s.autoAttach),
 		widget.NewFormItem(i18n.T("settings.auto_attach_regex"), s.autoRegex),
+		widget.NewFormItem(i18n.T("settings.run_scripts_on_import"), s.runScripts),
 	)
 }
 
@@ -160,6 +164,7 @@ func (a *App) applySettings(s *settingsWidgets) bool {
 	a.showIcons = s.icons.Checked
 	a.cfg.Process.AutoAttach = strings.TrimSpace(s.autoAttach.Text)
 	a.cfg.Process.AutoAttachRegex = s.autoRegex.Checked
+	a.cfg.Scan.RunScriptsOnImport = s.runScripts.Checked
 	a.setAutoAttach(a.cfg.Process.AutoAttach, a.cfg.Process.AutoAttachRegex)
 	a.applyTheme()
 	a.updateThemeChecks()

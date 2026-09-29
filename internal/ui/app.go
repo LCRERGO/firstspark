@@ -69,8 +69,18 @@ type tableEntry struct {
 	scriptExec  *autoasm.Executor
 	scriptBE    debugger.Backend
 	color       string
+	comments    string
+	dontSave    bool
 	ceHotkeys   []cheattable.CEHotkey
 	extra       []cheattable.RawElement
+}
+
+// tableMeta holds the cheat table's table-level metadata that is preserved
+// across load/save but not shown in the tree.
+type tableMeta struct {
+	luaScript string
+	comments  string
+	extra     []cheattable.RawElement
 }
 
 // activePanel identifies which result list the focused shortcuts act on.
@@ -121,6 +131,7 @@ type App struct {
 
 	entries         []*tableEntry
 	entryRoots      []*tableEntry
+	meta            tableMeta
 	table           *cheatTable
 	tableSel        int
 	tableMulti      map[*tableEntry]bool
@@ -556,6 +567,8 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	saveAs := fyne.NewMenuItem(i18n.T("menu.file.save_as"), a.saveTableAs)
 	saveAs.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	saveCE := fyne.NewMenuItem(i18n.T("menu.file.save_ce"), a.saveTableAsCE)
+	saveSel := fyne.NewMenuItem(i18n.T("menu.file.save_selection"), a.exportSelected)
+	merge := fyne.NewMenuItem(i18n.T("menu.file.merge"), a.mergeTable)
 	saveRes := fyne.NewMenuItem(i18n.T("menu.file.save_scan_results"), a.saveScanResults)
 	saveRes.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyS, Modifier: fyne.KeyModifierAlt | fyne.KeyModifierShift}
 	quit := fyne.NewMenuItem(i18n.T("menu.file.quit"), a.fapp.Quit)
@@ -563,7 +576,7 @@ func (a *App) mainMenu() *fyne.MainMenu {
 		openProc,
 		newTable,
 		fyne.NewMenuItemSeparator(),
-		load, save, saveAs, saveCE,
+		load, save, saveAs, saveCE, saveSel, merge,
 		fyne.NewMenuItemSeparator(),
 		saveRes,
 		fyne.NewMenuItemSeparator(),

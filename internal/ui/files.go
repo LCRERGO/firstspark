@@ -56,27 +56,107 @@ func (a *App) loadTable() {
 			}
 		}
 		a.applyTable(tbl)
+		if a.cfg.Scan.RunScriptsOnImport && a.proc != nil {
+			a.runImportedScripts()
+		}
 		a.reportCEImport(tbl.Stats)
 	}, a.win)
 	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json", ".yaml", ".yml"}))
 	d.Show()
 }
 
+// runImportedScripts enables every Auto Assembler record after an import.
+func (a *App) runImportedScripts() {
+	var scripts []*tableEntry
+	a.walkEntries(func(e *tableEntry) {
+		if e.script != "" {
+			scripts = append(scripts, e)
+		}
+	})
+	for _, e := range scripts {
+		a.applyEntryScript(e)
+	}
+}
+
+// mergeTable loads a table and appends its entries to the current one.
+func (a *App) mergeTable() {
+	d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
+		if err != nil {
+			a.fail(err)
+			return
+		}
+		if r == nil {
+			return
+		}
+		path := r.URI().Path()
+		_ = r.Close()
+		tbl, perr := cheattable.LoadAny(path)
+		if perr != nil {
+			a.fail(perr)
+			return
+		}
+		for i := range tbl.Entries {
+			node := a.entryFromStored(&tbl.Entries[i])
+			node.parent = nil
+			a.entryRoots = append(a.entryRoots, node)
+		}
+		a.rebuildVisible()
+		a.syncFreezeTargets()
+		a.table.Refresh()
+		a.updateScanControls()
+		a.reportCEImport(tbl.Stats)
+	}, a.win)
+	d.SetFilter(storage.NewExtensionFileFilter([]string{".ct", ".json", ".yaml", ".yml"}))
+	d.Show()
+}
+
+// exportSelected saves only the selected cheat-table entries and their
+// subtrees.
+func (a *App) exportSelected() {
+	sel := a.selectedTableEntries()
+	if len(sel) == 0 {
+		a.setStatusText(i18n.T("status.nothing_to_save"))
+		return
+	}
+	t := &cheattable.Table{Version: cheattable.SchemaVersion}
+	for _, e := range sel {
+		t.Entries = append(t.Entries, *entryToStored(e))
+	}
+	a.saveTableDialog("selection.ct", t)
+}
+
 // reportCEImport surfaces entries that a conversion could not
 // represent, so an unsupported table is never imported silently.
 func (a *App) reportCEImport(stats cheattable.ImportStats) {
+	a.setStatusText(i18n.Tf("status.ce_imported", map[string]any{"Imported": stats.Imported, "Skipped": stats.Skipped}))
 	if stats.Skipped == 0 {
 		return
 	}
-	a.setStatusText(i18n.Tf("status.ce_imported", map[string]any{"Imported": stats.Imported, "Skipped": stats.Skipped}))
-	if stats.Imported == 0 {
-		dialog.ShowInformation(i18n.T("dialog.ce_import_title"),
-			i18n.Tf("dialog.ce_import_body", map[string]any{"Skipped": stats.Skipped}), a.win)
+	var reasons []string
+	if n := stats.Reasons["type"]; n > 0 {
+		reasons = append(reasons, i18n.Tf("dialog.ce_import_reason", map[string]any{
+			"Reason": i18n.T("dialog.ce_import_reason_type"), "Count": n,
+		}))
 	}
+	if n := stats.Reasons["address"]; n > 0 {
+		reasons = append(reasons, i18n.Tf("dialog.ce_import_reason", map[string]any{
+			"Reason": i18n.T("dialog.ce_import_reason_address"), "Count": n,
+		}))
+	}
+	dialog.ShowInformation(i18n.T("dialog.ce_import_title"), i18n.Tf("dialog.ce_import_body", map[string]any{
+		"Imported": stats.Imported,
+		"Skipped":  stats.Skipped,
+		"Reasons":  strings.Join(reasons, ", "),
+	}), a.win)
 }
 
 func (a *App) applyTable(tbl *cheattable.Table) {
 	a.resetTree()
+	a.meta = tableMeta{
+		luaScript: tbl.LuaScript,
+		comments:  tbl.Comments,
+		extra:     append([]cheattable.RawElement(nil), tbl.ExtraElements...),
+	}
 	for i := range tbl.Entries {
 		a.entryRoots = append(a.entryRoots, a.entryFromStored(&tbl.Entries[i]))
 	}
@@ -99,6 +179,8 @@ func (a *App) entryFromStored(e *cheattable.Entry) *tableEntry {
 		display:   parseDisplay(e.Display),
 		unsigned:  !e.ShowAsSigned,
 		color:     e.Color,
+		comments:  e.Comments,
+		dontSave:  e.DontSaveValue,
 		ceHotkeys: append([]cheattable.CEHotkey(nil), e.CEHotkeys...),
 		extra:     append([]cheattable.RawElement(nil), e.ExtraElements...),
 	}
@@ -276,7 +358,12 @@ func (a *App) saveTableDialog(name string, tbl *cheattable.Table) {
 }
 
 func (a *App) tableFromEntries() *cheattable.Table {
-	t := &cheattable.Table{Version: cheattable.SchemaVersion}
+	t := &cheattable.Table{
+		Version:       cheattable.SchemaVersion,
+		LuaScript:     a.meta.luaScript,
+		Comments:      a.meta.comments,
+		ExtraElements: a.meta.extra,
+	}
 	for _, root := range a.entryRoots {
 		t.Entries = append(t.Entries, *entryToStored(root))
 	}
@@ -291,6 +378,8 @@ func entryToStored(e *tableEntry) *cheattable.Entry {
 		Expr:          e.expr,
 		Script:        e.script,
 		Color:         e.color,
+		Comments:      e.comments,
+		DontSaveValue: e.dontSave,
 		CEHotkeys:     e.ceHotkeys,
 		ExtraElements: e.extra,
 	}

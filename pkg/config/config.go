@@ -40,6 +40,9 @@ type ScanConfig struct {
 	Alignment     int     `yaml:"alignment"`
 	SnapshotLimit int64   `yaml:"snapshot_limit"`
 	FloatEpsilon  float64 `yaml:"float_epsilon"`
+	// RunScriptsOnImport enables a table's Auto Assembler scripts right after
+	// import, so symbol-rooted addresses resolve without a manual run.
+	RunScriptsOnImport bool `yaml:"run_scripts_on_import"`
 }
 
 // DebuggerConfig selects the debugging backend.
