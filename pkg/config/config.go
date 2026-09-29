@@ -19,6 +19,7 @@ type Config struct {
 	Process   ProcessConfig   `yaml:"process"`
 	UI        UIConfig        `yaml:"ui"`
 	Log       LogConfig       `yaml:"log"`
+	Plugins   PluginsConfig   `yaml:"plugins"`
 	// Hotkeys maps an action id (for example "speedhack.toggle") to a combo
 	// such as "Ctrl+Alt+S" or "F5". Unassigned actions are absent.
 	Hotkeys map[string]string `yaml:"hotkeys"`
@@ -53,6 +54,16 @@ type SpeedhackConfig struct {
 	Scale   float64 `yaml:"scale"`
 	// Delta is how much the speedhack +/- hotkeys change the scale.
 	Delta float64 `yaml:"delta"`
+}
+
+// PluginsConfig controls which sandboxed Lua plugins are loaded. A plugin is
+// only loaded when its id is listed in Enabled; an updated manifest that
+// requests more capabilities re-prompts in the GUI.
+type PluginsConfig struct {
+	// Enabled lists the plugin ids to load.
+	Enabled []string `yaml:"enabled"`
+	// Dir overrides the plugin directory when non-empty.
+	Dir string `yaml:"dir"`
 }
 
 // ProcessConfig controls automatic target selection. Auto-attach:
@@ -224,6 +235,10 @@ func DataDir() string {
 	}
 	return filepath.Join(base, "firstspark")
 }
+
+// PluginsDir returns the default plugin directory
+// ($XDG_DATA_HOME/firstspark/plugins).
+func PluginsDir() string { return filepath.Join(DataDir(), "plugins") }
 
 // homeDir returns the invoking user's home directory, resolving sudo's
 // SUDO_USER when running as root so configuration stays the user's.
