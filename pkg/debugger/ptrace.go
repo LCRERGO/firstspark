@@ -252,6 +252,9 @@ func (b *ptraceBackend) writeText(addr uint64, data []byte) error {
 	if err := b.proc.Write(addr, data); err == nil {
 		return nil
 	}
+	if err := b.PokeText(addr, data); err == nil {
+		return nil
+	}
 	page := addr &^ 0xFFF
 	if err := b.mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_WRITE|unix.PROT_EXEC); err != nil {
 		return fmt.Errorf("debugger: make page writable: %w", err)
@@ -260,6 +263,31 @@ func (b *ptraceBackend) writeText(addr uint64, data []byte) error {
 		return err
 	}
 	return b.mprotect(page, 0x1000, unix.PROT_READ|unix.PROT_EXEC)
+}
+
+// PokeText writes to read-only or special mappings (such as the vDSO) with
+// PTRACE_POKEDATA, which the kernel permits where mprotect does not.
+func (b *ptraceBackend) PokeText(addr uint64, data []byte) error {
+	var err error
+	b.do(func() { err = b.pokeText(addr, data) })
+	return err
+}
+
+func (b *ptraceBackend) pokeText(addr uint64, data []byte) error {
+	if !b.attached {
+		return ErrNotAttached
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	n, err := unix.PtracePokeData(b.pid, uintptr(addr), data)
+	if err != nil {
+		return fmt.Errorf("debugger: poke %#x: %w", addr, err)
+	}
+	if n != len(data) {
+		return fmt.Errorf("debugger: poke %#x: short write %d/%d", addr, n, len(data))
+	}
+	return nil
 }
 
 func (b *ptraceBackend) Step() error {
@@ -407,6 +435,12 @@ func (b *ptraceBackend) mmap(length uint64, prot, flags int) (uint64, error) {
 		return 0, err
 	}
 	return addr, nil
+}
+
+// Munmap releases a mapping in the traced process.
+func (b *ptraceBackend) Munmap(addr, length uint64) error {
+	_, err := b.RemoteSyscall(unix.SYS_MUNMAP, [6]uint64{addr, length, 0, 0, 0, 0})
+	return err
 }
 
 func (b *ptraceBackend) findSyscallGadget() (uint64, error) {
