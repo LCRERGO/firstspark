@@ -509,10 +509,15 @@ func encodeIncDec(mnem string, ext int, ops []operand) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if size == 1 {
-		return emit(size, e, []byte{0xF6}, nil)
+	// inc/dec use the FE/FF group; not/neg/mul/div/idiv use the F6/F7 group.
+	singleByte := byte(0xFF)
+	if mnem != "inc" && mnem != "dec" {
+		singleByte = 0xF7
 	}
-	return emit(size, e, []byte{0xFF}, nil)
+	if size == 1 {
+		return emit(size, e, []byte{singleByte & 0xFE}, nil)
+	}
+	return emit(size, e, []byte{singleByte}, nil)
 }
 
 func encodeShift(mnem string, ext int, ops []operand) ([]byte, error) {
