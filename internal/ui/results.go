@@ -141,11 +141,14 @@ func foundHeaders() []string {
 
 func (a *scanTab) buildFoundList() {
 	headers := foundHeaders()
-	a.foundList = widget.NewTable(
-		func() (int, int) { return len(a.results), len(headers) },
-		func() fyne.CanvasObject { return a.newFoundCell() },
-		func(id widget.TableCellID, o fyne.CanvasObject) { a.updateFoundCell(id, o) },
-	)
+	a.foundList = &foundTable{
+		tab: a,
+		Table: widget.NewTable(
+			func() (int, int) { return a.foundLen(), len(headers) },
+			func() fyne.CanvasObject { return a.newFoundCell() },
+			func(id widget.TableCellID, o fyne.CanvasObject) { a.updateFoundCell(id, o) },
+		),
+	}
 	a.foundList.ShowHeaderRow = true
 	a.foundList.CreateHeader = func() fyne.CanvasObject { return a.newFoundHeader() }
 	a.foundList.UpdateHeader = func(id widget.TableCellID, o fyne.CanvasObject) {
@@ -162,6 +165,44 @@ func (a *scanTab) buildFoundList() {
 	a.foundList.SetColumnWidth(0, 170)
 	a.foundList.SetColumnWidth(1, 130)
 	a.foundList.SetColumnWidth(2, 130)
+}
+
+// foundTable wraps the Found list table so it can handle the reference tool's
+// bare-key bindings (Delete, Enter), which Fyne routes to the focused widget
+// rather than the shortcut system.
+type foundTable struct {
+	*widget.Table
+	tab *scanTab
+}
+
+func (t *foundTable) TypedKey(ev *fyne.KeyEvent) {
+	switch ev.Name {
+	case fyne.KeyDelete:
+		t.tab.deleteSelectedFound()
+		return
+	case fyne.KeyReturn, fyne.KeyEnter:
+		t.tab.addFoundToTable()
+		return
+	}
+	t.Table.TypedKey(ev)
+}
+
+// foundLimit returns the display cap (0 = unlimited).
+func (a *scanTab) foundLimit() int {
+	if a.cfg.UI.ResultLimit > 0 {
+		return a.cfg.UI.ResultLimit
+	}
+	return 0
+}
+
+// foundLen is the number of rows the Found list displays: the collected results
+// capped by ui.result_limit.
+func (a *scanTab) foundLen() int {
+	n := len(a.results)
+	if lim := a.foundLimit(); lim > 0 && n > lim {
+		return lim
+	}
+	return n
 }
 
 func (a *scanTab) updateFoundCell(id widget.TableCellID, o fyne.CanvasObject) {
@@ -308,8 +349,33 @@ func (a *scanTab) sortFound(col int) {
 	default:
 		a.foundSortCol = -1
 	}
+	// Sorting by the live Value column compares every collected result, so it
+	// needs a one-time full read rather than the displayed-only refresh.
+	if a.foundSortCol == 1 {
+		a.readAllFoundValues()
+	}
 	a.applyFoundSort()
 	a.refreshFound()
+}
+
+// readAllFoundValues snapshots every result's live value for a Value sort.
+func (a *scanTab) readAllFoundValues() {
+	if a.proc == nil || len(a.results) == 0 {
+		a.sortLive = nil
+		return
+	}
+	live := make(map[int]scan.Value, len(a.results))
+	for i := range a.results {
+		r := a.results[i]
+		w := len(r.Value.Raw)
+		if w == 0 {
+			continue
+		}
+		if raw, err := a.proc.Read(r.Addr, w); err == nil && len(raw) == w {
+			live[i] = scan.NewValue(r.Value.Type, raw)
+		}
+	}
+	a.sortLive = live
 }
 
 // applyFoundSort rebuilds foundOrder from the active sort column.
@@ -335,17 +401,22 @@ func (a *scanTab) foundLess(i, j, col int) bool {
 	case 0:
 		return a.results[i].Addr < a.results[j].Addr
 	case 1:
-		vi, vj := a.results[i].Value, a.results[j].Value
-		if v, ok := a.foundLive[i]; ok {
-			vi = v
-		}
-		if v, ok := a.foundLive[j]; ok {
-			vj = v
-		}
-		return valueLess(vi, vj)
+		return valueLess(a.sortValue(i), a.sortValue(j))
 	default:
 		return valueLess(a.results[i].Previous, a.results[j].Previous)
 	}
+}
+
+// sortValue returns the freshest known value for a result: the full read taken
+// for a Value sort, the displayed-row refresh, or the stored scan value.
+func (a *scanTab) sortValue(i int) scan.Value {
+	if v, ok := a.sortLive[i]; ok {
+		return v
+	}
+	if v, ok := a.foundLive[i]; ok {
+		return v
+	}
+	return a.results[i].Value
 }
 
 // valueLess orders two values numerically when both are numeric and textually
@@ -575,19 +646,106 @@ func (a *scanTab) deleteFoundResults() {
 	}
 	a.applyFoundSort()
 	a.foundLive = nil
+	a.sortLive = nil
 	a.foundSel = -1
 	a.foundMulti = nil
-	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))
+	a.updateFoundCount()
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}
 	a.updateScanControls()
 }
 
+// deleteSelectedFound removes the selected Found results. It backs Delete on
+// the focused list and Ctrl+Delete when the Found panel is active.
+func (a *App) deleteSelectedFound() {
+	if t := a.tab(); t != nil {
+		t.deleteFoundResults()
+	}
+}
+
+// addFoundToTable adds the selected Found results to the cheat table (Enter),
+// mirroring the list's double-click.
+func (t *scanTab) addFoundToTable() {
+	if t.foundSel < 0 && len(t.selectedFoundIndices()) == 0 {
+		return
+	}
+	t.addResultToTable(t.foundSel)
+}
+
+// browseSelected routes Ctrl+B by the active panel.
+func (a *App) browseSelected() {
+	if a.activePanel == panelFound {
+		if t := a.tab(); t != nil && t.foundSel >= 0 && t.foundSel < len(t.results) {
+			a.browseFoundAddr(t.results[t.foundSel].Addr)
+		}
+		return
+	}
+	a.browseRow(a.tableSel)
+}
+
+// disassembleSelected routes Ctrl+D by the active panel.
+func (a *App) disassembleSelected() {
+	if a.activePanel == panelFound {
+		if t := a.tab(); t != nil && t.foundSel >= 0 && t.foundSel < len(t.results) {
+			a.browseFoundAddr(t.results[t.foundSel].Addr)
+		}
+		return
+	}
+	a.disassembleRow(a.tableSel)
+}
+
+// findWritesSelected routes Ctrl+F5 / Ctrl+F6 by the active panel.
+func (a *App) findWritesSelected(writeOnly bool) {
+	if a.activePanel == panelFound {
+		if t := a.tab(); t != nil && t.foundSel >= 0 && t.foundSel < len(t.results) {
+			a.findWhatWritesAddr(t.results[t.foundSel].Addr, writeOnly)
+		}
+		return
+	}
+	a.findWhatWrites(a.tableSel, writeOnly)
+}
+
+// setHexSelected routes Ctrl+Alt+H by the active panel.
+func (a *App) setHexSelected() {
+	if a.activePanel == panelFound {
+		if t := a.tab(); t != nil {
+			t.setFoundDisplay(displayHex)
+		}
+		return
+	}
+	a.setDisplay(a.tableSel, displayHex)
+}
+
+// selectAll selects every row of the active panel.
+func (a *App) selectAll() {
+	if a.activePanel == panelFound {
+		if t := a.tab(); t != nil {
+			t.selectAllFound()
+		}
+	}
+}
+
+// selectAllFound selects every displayed Found row (Ctrl+A on the list).
+func (a *scanTab) selectAllFound() {
+	n := a.foundLen()
+	if n == 0 {
+		return
+	}
+	a.activePanel = panelFound
+	a.foundMulti = make(map[int]bool, n)
+	for row := 0; row < n; row++ {
+		if idx := a.foundResult(row); idx >= 0 {
+			a.foundMulti[idx] = true
+		}
+	}
+	a.refreshFound()
+}
+
 // foundResult maps a display row to a result index. Sorting can reorder
 // foundOrder without touching a.results or the scan session.
 func (a *scanTab) foundResult(row int) int {
-	if row < 0 || row >= len(a.results) {
+	if row < 0 || row >= a.foundLen() {
 		return -1
 	}
 	if row < len(a.foundOrder) {
@@ -605,8 +763,10 @@ func identityOrder(n int) []int {
 	return o
 }
 
-// refreshFoundValues re-reads every result's live value and refreshes the
-// module map used to colour static addresses.
+// refreshFoundValues re-reads the displayed rows' live values on a background
+// goroutine and refreshes the module map used to colour static addresses. Only
+// the displayed set (capped by ui.result_limit) is read, never every collected
+// result, so the cost stays bounded regardless of how many matches were found.
 func (a *scanTab) refreshFoundValues() {
 	if a.proc == nil || len(a.results) == 0 {
 		a.foundLive = nil
@@ -614,20 +774,50 @@ func (a *scanTab) refreshFoundValues() {
 		return
 	}
 	a.foundRegions, _ = mem.Regions(a.proc.PID)
-	live := make(map[int]scan.Value, len(a.results))
-	for i := range a.results {
+	n := a.foundLen()
+	type pending struct {
+		idx  int
+		addr uint64
+		typ  scan.ValueType
+		w    int
+	}
+	rows := make([]pending, 0, n)
+	for row := 0; row < n; row++ {
+		i := a.foundResult(row)
+		if i < 0 {
+			continue
+		}
 		r := a.results[i]
 		w := len(r.Value.Raw)
 		if w == 0 {
 			continue
 		}
-		raw, err := a.proc.Read(r.Addr, w)
-		if err != nil || len(raw) != w {
-			continue
-		}
-		live[i] = scan.NewValue(r.Value.Type, raw)
+		rows = append(rows, pending{i, r.Addr, r.Value.Type, w})
 	}
-	a.foundLive = live
+	if len(rows) == 0 {
+		a.foundLive = nil
+		return
+	}
+	proc := a.proc
+	a.foundSeq++
+	seq := a.foundSeq
+	go func() {
+		live := make(map[int]scan.Value, len(rows))
+		for _, r := range rows {
+			raw, err := proc.Read(r.addr, r.w)
+			if err != nil || len(raw) != r.w {
+				continue
+			}
+			live[r.idx] = scan.NewValue(r.typ, raw)
+		}
+		fyne.Do(func() {
+			if a.proc != proc || a.foundSeq != seq {
+				return
+			}
+			a.foundLive = live
+			a.refreshFound()
+		})
+	}()
 }
 
 // staticInfo reports whether addr belongs to a file-backed module and, if so,
@@ -675,18 +865,30 @@ func (a *scanTab) selectFound(id int) {
 }
 
 func (a *scanTab) setResults(r []scan.Result) {
-	if limit := a.cfg.UI.ResultLimit; limit > 0 && len(r) > limit {
-		r = r[:limit]
-	}
 	a.results = append([]scan.Result(nil), r...)
 	a.foundLive = nil
+	a.sortLive = nil
 	a.applyFoundSort()
 	a.foundSel = -1
 	a.foundMulti = nil
-	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": len(a.results)}))
+	a.updateFoundCount()
 	if a.foundList != nil {
 		a.foundList.Refresh()
 	}
+}
+
+// updateFoundCount paints the Found-list label, distinguishing the collected
+// count from the number of rows actually shown when the display is capped.
+func (a *scanTab) updateFoundCount() {
+	if a.foundCount == nil {
+		return
+	}
+	total := len(a.results)
+	if lim := a.foundLimit(); lim > 0 && total > lim {
+		a.foundCount.SetText(i18n.Tf("app.found_count_limited", map[string]any{"Shown": lim, "Total": total}))
+		return
+	}
+	a.foundCount.SetText(i18n.Tf("app.found_count", map[string]any{"Count": total}))
 }
 
 // buildCheatTable creates the five-column cheat table.

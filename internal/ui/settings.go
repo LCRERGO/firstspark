@@ -19,7 +19,8 @@ type settingsWidgets struct {
 	famSel, varSel, langSel    *widget.Select
 	vt, logLevel, backend      *widget.Select
 	scale, font                *widget.Entry
-	align, limit, refresh      *widget.Entry
+	align, limit, collect      *widget.Entry
+	refresh                    *widget.Entry
 	snapshot, epsilon          *widget.Entry
 	gdbPath, autoAttach        *widget.Entry
 	writable, icons, autoRegex *widget.Check
@@ -43,6 +44,7 @@ func (a *App) newSettingsWidgets() *settingsWidgets {
 		writable:   widget.NewCheck(i18n.T("settings.writable_only"), nil),
 		align:      widget.NewEntry(),
 		limit:      widget.NewEntry(),
+		collect:    widget.NewEntry(),
 		refresh:    widget.NewEntry(),
 		snapshot:   widget.NewEntry(),
 		epsilon:    widget.NewEntry(),
@@ -63,6 +65,7 @@ func (a *App) newSettingsWidgets() *settingsWidgets {
 	s.writable.SetChecked(a.cfg.Scan.WritableOnly)
 	s.align.SetText(strconv.Itoa(a.cfg.Scan.Alignment))
 	s.limit.SetText(strconv.Itoa(a.cfg.UI.ResultLimit))
+	s.collect.SetText(strconv.Itoa(a.cfg.Scan.CollectLimit))
 	s.refresh.SetText(strconv.Itoa(a.cfg.UI.RefreshMS))
 	s.snapshot.SetText(strconv.FormatInt(a.cfg.Scan.SnapshotLimit, 10))
 	s.epsilon.SetText(strconv.FormatFloat(a.cfg.Scan.FloatEpsilon, 'g', -1, 64))
@@ -93,6 +96,7 @@ func (s *settingsWidgets) form() *widget.Form {
 		widget.NewFormItem(i18n.T("settings.writable_only"), s.writable),
 		widget.NewFormItem(i18n.T("settings.alignment"), s.align),
 		widget.NewFormItem(i18n.T("settings.result_limit"), s.limit),
+		widget.NewFormItem(i18n.T("settings.collect_limit"), s.collect),
 		widget.NewFormItem(i18n.T("settings.refresh_ms"), s.refresh),
 		widget.NewFormItem(i18n.T("settings.snapshot_limit"), s.snapshot),
 		widget.NewFormItem(i18n.T("settings.float_epsilon"), s.epsilon),
@@ -143,6 +147,9 @@ func (a *App) applySettings(s *settingsWidgets) bool {
 	}
 	if n, ok := parseSettingInt(s.limit.Text, 0); ok {
 		a.cfg.UI.ResultLimit = n
+	}
+	if n, ok := parseSettingInt(s.collect.Text, 0); ok {
+		a.cfg.Scan.CollectLimit = n
 	}
 	if n, ok := parseSettingInt(s.refresh.Text, 50); ok {
 		a.cfg.UI.RefreshMS = n

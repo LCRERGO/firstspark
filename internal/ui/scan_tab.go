@@ -31,7 +31,7 @@ type scanTab struct {
 	regionSel []mem.Region
 	results   []scan.Result
 
-	foundList    *widget.Table
+	foundList    *foundTable
 	foundOrder   []int
 	foundLive    map[int]scan.Value
 	foundRegions []mem.Region
@@ -41,6 +41,10 @@ type scanTab struct {
 	foundDisplay displayFormat
 	foundSortCol int
 	foundSortAsc bool
+	// sortLive caches a full read of every result, computed on demand when the
+	// user sorts by the live Value column; foundLive only covers displayed rows.
+	sortLive map[int]scan.Value
+	foundSeq uint64
 
 	scanType      *ttwidget.Select
 	valueType     *ttwidget.Select
@@ -134,6 +138,7 @@ func (t *scanTab) clearResults() {
 	t.results = nil
 	t.foundOrder = nil
 	t.foundLive = nil
+	t.sortLive = nil
 	t.foundRegions = nil
 	t.foundSel = -1
 	t.foundMulti = nil
