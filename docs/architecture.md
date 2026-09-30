@@ -69,8 +69,10 @@ Theming and window structure are recorded in ADRs 0006-0010.
 An exact first scan reads each selected region in 1 MiB chunks with an overlap
 equal to the value width, so values spanning a chunk boundary are still found.
 Unknown-value scans snapshot every aligned address in the writable regions,
-bounded by `scan.snapshot_limit`. Subsequent scans re-read the live values and
-apply the mode predicate, discarding addresses that no longer match.
+bounded by `scan.snapshot_limit`. A scan stops once it has collected
+`scan.collect_limit` matches. Subsequent scans re-read the live values of every
+collected result and apply the mode predicate, discarding addresses that no
+longer match; the Found list only displays `ui.result_limit` of them (ADR 0054).
 
 Regions larger than 32 MiB are tiled into sub-regions so the worker pool
 parallelises within a single large mapping. A next scan visits its results in

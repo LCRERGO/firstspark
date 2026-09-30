@@ -48,7 +48,9 @@ costs that dominated large scans:
   removed; a next scan issues one syscall per window instead of one per result.
 - A first scan's result order over split regions is interleaved by worker (it
   was already per-region); a next scan preserves the input order.
-- Capping to `MaxResults` in a first scan is now checked per chunk, so the
+- Capping to `MaxCollected` in a first scan is now checked per chunk, so the
   intermediate result set can overshoot the cap slightly before it is truncated.
+  (ADR 0054 later renamed this from `MaxResults` and separated it from the
+  display cap.)
 - The specialized loop covers builtin integer types only; custom, grouped,
   string, AOB and floating-point types use the general path.

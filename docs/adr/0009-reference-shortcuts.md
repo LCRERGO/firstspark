@@ -39,6 +39,20 @@ and leave shortcuts for unimplemented features unbound:
 | `Delete` / `Enter` / `Space` | Delete / change value / freeze the selected record |
 | `F5` / `F6` | Find out what accesses / writes the selected address |
 | `F9` / `F7` / `F8` / `F5` | Debugger run / step / step over / toggle breakpoint |
+| `Ctrl+Delete` | Delete the selected Found result |
+| `Ctrl+F5` / `Ctrl+F6` | Find out what accesses / writes the selected Found address |
+| `Ctrl+B` / `Ctrl+D` | Browse / disassemble the selected address (either panel) |
+| `Ctrl+A` | Select every displayed Found result |
+| `Enter` | Add the selected Found result to the cheat table |
+
+The Found list carries the reference tool's bindings for its own selection in
+addition to the cheat table's: `Ctrl+Delete` removes displayed results,
+`Ctrl+F5`/`Ctrl+F6` watch an address, `Ctrl+B`/`Ctrl+D` browse or disassemble it,
+`Ctrl+A` selects the displayed rows and `Ctrl+E` changes the selected value.
+`Ctrl+B`/`Ctrl+D` and `Ctrl+Alt+H` act on whichever panel is focused.
+
+Tab rename is bound to `Ctrl+Alt+R` rather than `F2`, because `F2` cycles
+bookmarks in the code editor (ADR 0021) and would otherwise be shadowed.
 
 The shortcuts are registered in one place (`internal/ui/shortcuts.go`). Fyne
 delivers modified keys to the focused widget, so the list also drives a

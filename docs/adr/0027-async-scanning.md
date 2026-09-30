@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Accepted. The result cap is split into a collection limit and a display limit by
+ADR 0054.
 
 ## Context
 

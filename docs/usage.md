@@ -76,6 +76,7 @@ scan:
   writable_only: true
   alignment: 4
   snapshot_limit: 2147483648
+  collect_limit: 1000000
   float_epsilon: 0.000001
 debugger:
   backend: ptrace
@@ -102,6 +103,11 @@ change applies on the next launch. `ui.theme` is the palette family
 `light`, `dark` or `system`. Both are also switchable from View ▸ Theme ▸
 \<Family\> and from Edit ▸ Settings. An old `ui.theme: light|dark|system` is
 migrated to the cyberpunk family with that variant.
+
+`scan.collect_limit` caps how many matches a scan collects (0 disables the cap);
+`ui.result_limit` caps how many of them the Found list shows at once (0 shows
+all). The two are independent: a next scan always filters every collected
+result, even the ones the list is not currently showing.
 
 ## Global hotkeys
 
