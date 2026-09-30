@@ -35,11 +35,15 @@ type LogConfig struct {
 
 // ScanConfig holds memory scanning defaults.
 type ScanConfig struct {
-	ValueType     string  `yaml:"value_type"`
-	WritableOnly  bool    `yaml:"writable_only"`
-	Alignment     int     `yaml:"alignment"`
-	SnapshotLimit int64   `yaml:"snapshot_limit"`
-	FloatEpsilon  float64 `yaml:"float_epsilon"`
+	ValueType     string `yaml:"value_type"`
+	WritableOnly  bool   `yaml:"writable_only"`
+	Alignment     int    `yaml:"alignment"`
+	SnapshotLimit int64  `yaml:"snapshot_limit"`
+	// CollectLimit caps how many matches a scan collects. The Found list only
+	// displays ui.result_limit of them; the rest stay available to Next Scan.
+	// Zero means unlimited.
+	CollectLimit int     `yaml:"collect_limit"`
+	FloatEpsilon float64 `yaml:"float_epsilon"`
 	// RunScriptsOnImport enables a table's Auto Assembler scripts right after
 	// import, so symbol-rooted addresses resolve without a manual run.
 	RunScriptsOnImport bool `yaml:"run_scripts_on_import"`
@@ -105,6 +109,7 @@ func Default() Config {
 			WritableOnly:  true,
 			Alignment:     4,
 			SnapshotLimit: 2 << 30,
+			CollectLimit:  1000000,
 			FloatEpsilon:  1e-6,
 		},
 		Debugger:  DebuggerConfig{Backend: "ptrace", GDBPath: "gdb"},

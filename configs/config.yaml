@@ -11,6 +11,9 @@ scan:
   alignment: 4
   # Maximum bytes captured by an "unknown initial value" snapshot (bytes).
   snapshot_limit: 2147483648 # 2 GiB
+  # Maximum matches a scan collects (0 disables the cap). The Found list shows
+  # at most ui.result_limit of them; the rest remain available to Next Scan.
+  collect_limit: 1000000
   # Absolute tolerance used when comparing floating point values.
   float_epsilon: 0.000001
 
@@ -39,7 +42,8 @@ process:
 
 # User interface.
 ui:
-  # Number of scan results shown at once.
+  # Number of scan results shown in the Found list at once. The scan still
+  # collects up to scan.collect_limit matches for Next Scan to filter.
   result_limit: 1000
   # Cheat-table and Found-list refresh interval in milliseconds (minimum 50).
   refresh_ms: 500

@@ -10,7 +10,7 @@ import (
 )
 
 func TestCapped(t *testing.T) {
-	s := &Session{opts: Options{MaxResults: 2}}
+	s := &Session{opts: Options{MaxCollected: 2}}
 	var m int64
 	if s.capped(&m) {
 		t.Fatal("should not cap at zero matches")
@@ -179,7 +179,7 @@ func TestExactIntProbe(t *testing.T) {
 
 func TestScanBytesIntMatchesAndCaps(t *testing.T) {
 	s := NewSession(nil, Options{Type: TypeDword, Mode: ModeExact, Alignment: 4,
-		Value: NewValue(TypeDword, encodeInteger(TypeDword, 0x2a)), MaxResults: 2})
+		Value: NewValue(TypeDword, encodeInteger(TypeDword, 0x2a)), MaxCollected: 2})
 	data := make([]byte, 16)
 	binary.LittleEndian.PutUint32(data[0:], 0x2a)
 	binary.LittleEndian.PutUint32(data[8:], 0x2a)

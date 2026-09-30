@@ -419,7 +419,7 @@ func (a *scanTab) scanOptions() (scan.Options, error) {
 		opts.Alignment = n
 	}
 	opts.SnapshotLimit = a.cfg.Scan.SnapshotLimit
-	opts.MaxResults = a.cfg.UI.ResultLimit
+	opts.MaxCollected = a.cfg.Scan.CollectLimit
 	opts.Scope = parseScope(a.scopeSelect.Selected)
 	if len(a.regionSel) > 0 {
 		opts.Regions = a.regionSel

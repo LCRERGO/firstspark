@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/LCRERGO/firstspark/pkg/mem"
 )
@@ -43,6 +44,11 @@ type Progress struct {
 
 // maxHistory bounds the number of undoable scan steps.
 const maxHistory = 16
+
+// historyBudget bounds the struct memory retained for undo. Each snapshot is a
+// shallow copy of the result slice, so this counts Result headers (the Raw
+// backing arrays are shared with the live results and with older snapshots).
+const historyBudget = 256 << 20
 
 // Session holds the state of a scan against one process.
 type Session struct {
@@ -345,7 +351,7 @@ func (s *Session) scanRegions(ctx context.Context, regions []mem.Region, onProgr
 	for _, c := range chunks {
 		out = append(out, c...)
 	}
-	if max := s.opts.MaxResults; max > 0 && len(out) > max {
+	if max := s.opts.MaxCollected; max > 0 && len(out) > max {
 		out = out[:max]
 	}
 	return out, nil
@@ -420,7 +426,7 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 			out = append(out, s.results[i])
 		}
 	}
-	if max := s.opts.MaxResults; max > 0 && len(out) > max {
+	if max := s.opts.MaxCollected; max > 0 && len(out) > max {
 		out = out[:max]
 	}
 	return out, nil
@@ -429,7 +435,7 @@ func (s *Session) filterResults(ctx context.Context, onProgress func(Progress)) 
 // filterWindow re-reads and filters a run of result indices sorted by address,
 // reading a shared window per contiguous batch.
 func (s *Session) filterWindow(ctx context.Context, idx []int, width func(Result) int, keep []bool, scanned, matches *int64) error {
-	max := int64(s.opts.MaxResults)
+	max := int64(s.opts.MaxCollected)
 	var buf []byte
 	var bufStart uint64
 	for _, i := range idx {
@@ -616,7 +622,7 @@ func (s *Session) scanBytes(ctx context.Context, addr uint64, data []byte, limit
 	if limit > len(data) {
 		limit = len(data)
 	}
-	max := int64(s.opts.MaxResults)
+	max := int64(s.opts.MaxCollected)
 	var base int64
 	if max > 0 {
 		base = atomic.LoadInt64(matches)
@@ -679,7 +685,7 @@ func (s *Session) scanBytesInt(addr uint64, data []byte, limit int, out *[]Resul
 	if limit > len(data) {
 		limit = len(data)
 	}
-	max := int64(s.opts.MaxResults)
+	max := int64(s.opts.MaxCollected)
 	var base int64
 	if max > 0 {
 		base = atomic.LoadInt64(matches)
@@ -749,7 +755,7 @@ func (s *Session) consider(addr uint64, raw []byte, out *[]Result) int {
 
 // capped reports whether the result cap has been reached.
 func (s *Session) capped(matches *int64) bool {
-	return s.opts.MaxResults > 0 && atomic.LoadInt64(matches) >= int64(s.opts.MaxResults)
+	return s.opts.MaxCollected > 0 && atomic.LoadInt64(matches) >= int64(s.opts.MaxCollected)
 }
 
 func (s *Session) matchExact(raw []byte) bool {
@@ -859,13 +865,27 @@ func (s *Session) matchBetween(raw []byte) bool {
 }
 
 // pushHistory snapshots the current results so the last step can be undone.
+// Older snapshots are dropped once the retained struct memory passes
+// historyBudget or maxHistory steps are held.
 func (s *Session) pushHistory() {
 	snapshot := make([]Result, len(s.results))
 	copy(snapshot, s.results)
 	s.history = append(s.history, snapshot)
-	if len(s.history) > maxHistory {
-		s.history = s.history[len(s.history)-maxHistory:]
+	s.history = trimHistory(s.history)
+}
+
+// trimHistory drops the oldest snapshots until the history is within both the
+// step count and the byte budget.
+func trimHistory(history [][]Result) [][]Result {
+	var bytes int
+	for _, snap := range history {
+		bytes += len(snap) * int(unsafe.Sizeof(Result{}))
 	}
+	for len(history) > maxHistory || (len(history) > 0 && bytes > historyBudget) {
+		bytes -= len(history[0]) * int(unsafe.Sizeof(Result{}))
+		history = history[1:]
+	}
+	return history
 }
 
 // Undo restores the result set from before the last scan step.

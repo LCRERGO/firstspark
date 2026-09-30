@@ -242,9 +242,6 @@ func headlessScan(cfg config.Config, pid int, f scanFlags) error {
 	}
 
 	results := session.Results()
-	if limit := cfg.UI.ResultLimit; limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
 	printResults(results)
 	if f.export != "" {
 		return exportResults(results, f.export)
@@ -260,7 +257,7 @@ func headlessOptions(cfg config.Config, f scanFlags) (scan.Options, scan.ValueTy
 	opts.SnapshotLimit = cfg.Scan.SnapshotLimit
 	opts.Epsilon = cfg.Scan.FloatEpsilon
 	opts.WritableOnly = cfg.Scan.WritableOnly
-	opts.MaxResults = cfg.UI.ResultLimit
+	opts.MaxCollected = cfg.Scan.CollectLimit
 
 	if f.typ == "" {
 		f.typ = cfg.Scan.ValueType

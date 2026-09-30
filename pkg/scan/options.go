@@ -201,7 +201,7 @@ type Options struct {
 	WritableOnly  bool
 	Alignment     int
 	SnapshotLimit int64 // maximum bytes captured by an unknown-value snapshot
-	MaxResults    int   // stop after this many matches (0 = unlimited)
+	MaxCollected  int   // stop after this many collected matches (0 = unlimited)
 	Scope         RegionScope
 	Epsilon       float64
 	Regions       []mem.Region // optional explicit region set
