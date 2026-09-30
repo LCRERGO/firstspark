@@ -39,17 +39,17 @@ func (a *App) appShortcuts() []shortcutBinding {
 				a.closeScanTab(o)
 			}
 		}},
-		{fyne.KeyF2, 0, a.renameScanTab},
+		{fyne.KeyF2, fyne.KeyModifierControl | fyne.KeyModifierAlt, a.renameScanTab},
 		{fyne.KeyTab, fyne.KeyModifierControl, func() { a.cycleTab(1) }},
 		{fyne.KeyTab, fyne.KeyModifierControl | fyne.KeyModifierShift, func() { a.cycleTab(-1) }},
 		{fyne.KeyM, fyne.KeyModifierControl, a.openMemoryViewer},
-		{fyne.KeyB, fyne.KeyModifierControl, func() { a.browseRow(a.tableSel) }},
-		{fyne.KeyD, fyne.KeyModifierControl, func() { a.disassembleRow(a.tableSel) }},
+		{fyne.KeyB, fyne.KeyModifierControl, a.browseSelected},
+		{fyne.KeyD, fyne.KeyModifierControl, a.disassembleSelected},
 		{fyne.KeyE, fyne.KeyModifierControl, a.changeValueSelected},
 		{fyne.KeyZ, fyne.KeyModifierControl, func() { a.undoValue(a.tableSel) }},
 		{fyne.KeyE, fyne.KeyModifierControl | fyne.KeyModifierAlt, func() { a.changeValueBack(a.tableSel) }},
 		{fyne.KeyReturn, fyne.KeyModifierControl, func() { a.changeDescriptionDialog(a.tableSel) }},
-		{fyne.KeyH, fyne.KeyModifierControl | fyne.KeyModifierAlt, func() { a.setDisplay(a.tableSel, displayHex) }},
+		{fyne.KeyH, fyne.KeyModifierControl | fyne.KeyModifierAlt, a.setHexSelected},
 		{fyne.KeyH, fyne.KeyModifierControl, func() { a.assignHotkey(a.tableSel) }},
 		{fyne.KeyA, fyne.KeyModifierControl | fyne.KeyModifierAlt, a.openAutoAssemble},
 		{fyne.KeyD, fyne.KeyModifierControl | fyne.KeyModifierAlt, a.openDissect},
@@ -81,6 +81,20 @@ func (a *App) installShortcuts() {
 		func(fyne.Shortcut) { a.copySelection() })
 	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyV, Modifier: fyne.KeyModifierControl},
 		func(fyne.Shortcut) { a.pasteSelection() })
+	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyA, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.selectAll() })
+	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyF5, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.findWritesSelected(true) })
+	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyF6, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.findWritesSelected(false) })
+	canvas.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyDelete, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) {
+			if a.activePanel == panelFound {
+				a.deleteSelectedFound()
+				return
+			}
+			a.deleteRow(a.tableSel)
+		})
 }
 
 // cheatTable adds the .CT table key bindings. Fyne delivers bare keys

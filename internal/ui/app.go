@@ -678,7 +678,7 @@ func (a *App) mainMenu() *fyne.MainMenu {
 	})
 	closeTab.Shortcut = ctrl(fyne.KeyW)
 	renameTab := fyne.NewMenuItem(i18n.T("menu.scan.rename_tab"), a.renameScanTab)
-	renameTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyF2}
+	renameTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyR, Modifier: fyne.KeyModifierControl | fyne.KeyModifierAlt}
 	nextTab := fyne.NewMenuItem(i18n.T("menu.scan.next_tab"), func() { a.cycleTab(1) })
 	nextTab.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyTab, Modifier: fyne.KeyModifierControl}
 	prevTab := fyne.NewMenuItem(i18n.T("menu.scan.previous_tab"), func() { a.cycleTab(-1) })
